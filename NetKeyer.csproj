@@ -29,6 +29,9 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="managed-midi" Version="1.10.1" />
+    <PackageReference Include="OpenAL.Soft" Version="1.23.1">
+      <ExcludeAssets>native</ExcludeAssets>
+    </PackageReference>
     <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
     <PackageReference Include="System.IO.Ports" Version="9.0.10" />
     <PackageReference Include="Velopack" Version="*" />
@@ -37,4 +40,23 @@
   <ItemGroup>
     <ProjectReference Include="FlexLib\FlexLib.csproj" />
   </ItemGroup>
+
+  <!-- Copy OpenAL native DLLs to output directory -->
+  <Target Name="CopyOpenALNative" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <OpenALArch Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(PlatformTarget)' == 'x64' Or '$(Platform)' == 'x64'">win-x64</OpenALArch>
+      <OpenALArch Condition="'$(RuntimeIdentifier)' == 'win-x86' Or '$(PlatformTarget)' == 'x86' Or '$(Platform)' == 'x86'">win-x86</OpenALArch>
+      <OpenALArch Condition="'$(RuntimeIdentifier)' == 'win-arm64' Or '$(PlatformTarget)' == 'ARM64' Or '$(Platform)' == 'ARM64'">win-arm64</OpenALArch>
+      <OpenALArch Condition="'$(OpenALArch)' == ''">win-x64</OpenALArch>
+      <OpenALConfig Condition="'$(Configuration)' == 'Debug'">Debug</OpenALConfig>
+      <OpenALConfig Condition="'$(Configuration)' != 'Debug'">Release</OpenALConfig>
+      <!-- Use PublishDir if publishing, otherwise OutputPath -->
+      <OpenALDestination Condition="'$(PublishDir)' != ''">$(PublishDir)</OpenALDestination>
+      <OpenALDestination Condition="'$(PublishDir)' == ''">$(OutputPath)</OpenALDestination>
+    </PropertyGroup>
+    <ItemGroup>
+      <OpenALFiles Include="$(NuGetPackageRoot)openal.soft\1.23.1\runtimes\$(OpenALArch)\native\$(OpenALConfig)\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OpenALFiles)" DestinationFolder="$(OpenALDestination)" SkipUnchangedFiles="true" Condition="Exists('$(NuGetPackageRoot)openal.soft\1.23.1\runtimes\$(OpenALArch)\native\$(OpenALConfig)\')" />
+  </Target>
 </Project>
