@@ -170,42 +170,36 @@
                         <TextBlock Text="CW Settings" FontWeight="Bold" FontSize="16"/>
 
                         <!-- Speed -->
-                        <StackPanel Spacing="5">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="Speed (WPM):" Width="120"/>
-                                <TextBlock Text="{Binding CwSpeed}" Width="40"/>
-                            </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Speed (WPM):" Width="120" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CwSpeed}" Width="30" VerticalAlignment="Center"/>
                             <Slider Minimum="5" Maximum="60"
                                     Value="{Binding CwSpeed}"
                                     TickFrequency="5"
-                                    Width="400"
-                                    HorizontalAlignment="Left"/>
+                                    Width="300"
+                                    VerticalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- Sidetone Volume -->
-                        <StackPanel Spacing="5">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="Sidetone Volume:" Width="120"/>
-                                <TextBlock Text="{Binding SidetoneVolume}" Width="40"/>
-                            </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Sidetone Volume:" Width="120" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding SidetoneVolume}" Width="30" VerticalAlignment="Center"/>
                             <Slider Minimum="0" Maximum="100"
                                     Value="{Binding SidetoneVolume}"
                                     TickFrequency="10"
-                                    Width="400"
-                                    HorizontalAlignment="Left"/>
+                                    Width="300"
+                                    VerticalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- Pitch -->
-                        <StackPanel Spacing="5">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="Pitch (Hz):" Width="120"/>
-                                <TextBlock Text="{Binding CwPitch}" Width="40"/>
-                            </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Pitch (Hz):" Width="120" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CwPitch}" Width="30" VerticalAlignment="Center"/>
                             <Slider Minimum="300" Maximum="1000"
                                     Value="{Binding CwPitch}"
                                     TickFrequency="50"
-                                    Width="400"
-                                    HorizontalAlignment="Left"/>
+                                    Width="300"
+                                    VerticalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- Mode Selection -->
