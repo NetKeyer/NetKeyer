@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
+using NetKeyer.Midi;
 
 namespace NetKeyer.ViewModels;
 
@@ -50,6 +51,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private HaliKeyVersion CurrentHaliKeyVersion =>
         SelectedHaliKeyVersion == "HaliKey v2" ? HaliKeyVersion.V2 : HaliKeyVersion.V1;
+
+    [ObservableProperty]
+    private ObservableCollection<string> _midiDevices = new();
+
+    [ObservableProperty]
+    private string _selectedMidiDevice;
 
     [ObservableProperty]
     private string _radioStatus = "Disconnected";
@@ -98,6 +105,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private Radio _connectedRadio;
     private SerialPort _serialPort;
+    private MidiPaddleInput _midiInput;
     private bool _riState = false; // Track RI state for HaliKey v2
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
@@ -129,6 +137,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Initial discovery
         RefreshRadios();
         RefreshSerialPorts();
+        RefreshMidiDevices();
 
         // Set initial pin names
         UpdatePinNames();
@@ -294,6 +303,31 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void RefreshMidiDevices()
+    {
+        MidiDevices.Clear();
+
+        try
+        {
+            var devices = MidiPaddleInput.GetAvailableDevices();
+
+            foreach (var device in devices)
+            {
+                MidiDevices.Add(device);
+            }
+
+            if (MidiDevices.Count == 0)
+            {
+                MidiDevices.Add("No MIDI devices found");
+            }
+        }
+        catch (Exception ex)
+        {
+            MidiDevices.Add($"MIDI Error: {ex.Message}");
+        }
+    }
+
     partial void OnSelectedSerialPortChanged(string value)
     {
         // Close existing port if open
@@ -351,6 +385,92 @@ public partial class MainWindowViewModel : ViewModelBase
             LeftPaddleStateText = "LOW";
             RightPaddleStateText = "LOW";
         }
+    }
+
+    partial void OnSelectedMidiDeviceChanged(string value)
+    {
+        // Close existing MIDI device if open
+        CloseMidiDevice();
+
+        // Don't open if no valid device selected
+        if (string.IsNullOrEmpty(value) || value.Contains("No MIDI") || value.Contains("Error"))
+        {
+            return;
+        }
+
+        try
+        {
+            _midiInput = new MidiPaddleInput();
+            _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
+            _midiInput.Open(value);
+        }
+        catch (Exception ex)
+        {
+            RadioStatus = $"MIDI device error: {ex.Message}";
+            RadioStatusColor = Brushes.Orange;
+            _midiInput = null;
+        }
+    }
+
+    private void CloseMidiDevice()
+    {
+        if (_midiInput != null)
+        {
+            // Stop iambic keyer if running
+            StopIambicKeyer();
+
+            try
+            {
+                _midiInput.PaddleStateChanged -= MidiInput_PaddleStateChanged;
+                _midiInput.Close();
+                _midiInput.Dispose();
+            }
+            catch { }
+            _midiInput = null;
+
+            // Reset indicators and state
+            _previousLeftPaddleState = false;
+            _previousRightPaddleState = false;
+            LeftPaddleIndicatorColor = Brushes.Black;
+            RightPaddleIndicatorColor = Brushes.Black;
+            LeftPaddleStateText = "LOW";
+            RightPaddleStateText = "LOW";
+        }
+    }
+
+    private void MidiInput_PaddleStateChanged(object sender, PaddleStateChangedEventArgs e)
+    {
+        // Update indicators
+        Dispatcher.UIThread.Post(() =>
+        {
+            LeftPaddleIndicatorColor = e.LeftPaddle ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = e.LeftPaddle ? "ON" : "OFF";
+            RightPaddleIndicatorColor = e.RightPaddle ? Brushes.LimeGreen : Brushes.Black;
+            RightPaddleStateText = e.RightPaddle ? "ON" : "OFF";
+        });
+
+        // Handle keying based on mode
+        if (_connectedRadio != null && _boundGuiClientHandle != 0)
+        {
+            if (IsIambicMode)
+            {
+                // Iambic mode - call keyer logic
+                UpdateIambicKeyer(e.LeftPaddle, e.RightPaddle);
+            }
+            else
+            {
+                // Straight key mode - left paddle directly controls CW key
+                if (e.LeftPaddle != _previousLeftPaddleState)
+                {
+                    string timestamp = GetTimestamp();
+                    _connectedRadio.CWKey(e.LeftPaddle, timestamp, _boundGuiClientHandle);
+                }
+            }
+        }
+
+        // Update previous states
+        _previousLeftPaddleState = e.LeftPaddle;
+        _previousRightPaddleState = e.RightPaddle;
     }
 
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
@@ -542,6 +662,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         CloseSerialPort();
+        CloseMidiDevice();
 
         // Dispose sidetone generator
         _sidetoneGenerator?.Dispose();

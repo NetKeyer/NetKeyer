@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <NoWarn>$(NoWarn);CS0169;CS0649;CS0067;CS8618;CS8602;CS8603;CS8604</NoWarn>
+    <NoWarn>$(NoWarn);CS0169;CS0649;CS0067;CS8618;CS8602;CS8603;CS8604;CS0436</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +28,7 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <PackageReference Include="managed-midi" Version="1.10.1" />
     <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
     <PackageReference Include="System.IO.Ports" Version="9.0.10" />
   </ItemGroup>
