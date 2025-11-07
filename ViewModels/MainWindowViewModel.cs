@@ -438,16 +438,18 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 MidiDevices.Add("No MIDI devices found");
             }
-
-            // Restore previously selected MIDI device if available
-            if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
+            else
             {
-                _loadingSettings = true;
-                if (MidiDevices.Contains(_settings.SelectedMidiDevice))
+                // Restore previously selected MIDI device if available (only if we have real devices)
+                if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
                 {
-                    SelectedMidiDevice = _settings.SelectedMidiDevice;
+                    _loadingSettings = true;
+                    if (MidiDevices.Contains(_settings.SelectedMidiDevice))
+                    {
+                        SelectedMidiDevice = _settings.SelectedMidiDevice;
+                    }
+                    _loadingSettings = false;
                 }
-                _loadingSettings = false;
             }
         }
         catch (Exception ex)
