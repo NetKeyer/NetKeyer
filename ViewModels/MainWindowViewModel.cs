@@ -20,6 +20,18 @@ public enum HaliKeyVersion
     V2   // RI (left) + DCD (right)
 }
 
+public enum InputDeviceType
+{
+    Serial,
+    MIDI
+}
+
+public enum PageType
+{
+    Setup,
+    Operating
+}
+
 public class RadioClientSelection
 {
     public Radio Radio { get; set; }
@@ -31,6 +43,29 @@ public class RadioClientSelection
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSetupPage), nameof(IsOperatingPage))]
+    private PageType _currentPage = PageType.Setup;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSerialInput), nameof(IsMidiInput))]
+    private InputDeviceType _inputType = InputDeviceType.Serial;
+
+    public bool IsSetupPage => CurrentPage == PageType.Setup;
+    public bool IsOperatingPage => CurrentPage == PageType.Operating;
+
+    public bool IsSerialInput
+    {
+        get => InputType == InputDeviceType.Serial;
+        set { if (value) InputType = InputDeviceType.Serial; }
+    }
+
+    public bool IsMidiInput
+    {
+        get => InputType == InputDeviceType.MIDI;
+        set { if (value) InputType = InputDeviceType.MIDI; }
+    }
+
     [ObservableProperty]
     private ObservableCollection<RadioClientSelection> _radioClientSelections = new();
 
@@ -92,16 +127,10 @@ public partial class MainWindowViewModel : ViewModelBase
     private IBrush _rightPaddleIndicatorColor = Brushes.Black;
 
     [ObservableProperty]
-    private string _leftPaddleStateText = "LOW";
+    private string _leftPaddleStateText = "OFF";
 
     [ObservableProperty]
-    private string _rightPaddleStateText = "LOW";
-
-    [ObservableProperty]
-    private string _leftPaddlePinName = "CTS";
-
-    [ObservableProperty]
-    private string _rightPaddlePinName = "DCD";
+    private string _rightPaddleStateText = "OFF";
 
     private Radio _connectedRadio;
     private SerialPort _serialPort;
@@ -139,9 +168,6 @@ public partial class MainWindowViewModel : ViewModelBase
         RefreshSerialPorts();
         RefreshMidiDevices();
 
-        // Set initial pin names
-        UpdatePinNames();
-
         // Calculate initial dit length from CW speed
         UpdateDitLength();
 
@@ -160,8 +186,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedHaliKeyVersionChanged(string value)
     {
-        UpdatePinNames();
-
         // If a serial port is open, update the pin states
         if (_serialPort != null && _serialPort.IsOpen)
         {
@@ -185,20 +209,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 _connectedRadio.CWIambic = value;
             }
             catch { }
-        }
-    }
-
-    private void UpdatePinNames()
-    {
-        if (CurrentHaliKeyVersion == HaliKeyVersion.V1)
-        {
-            LeftPaddlePinName = "CTS";
-            RightPaddlePinName = "DCD";
-        }
-        else // V2
-        {
-            LeftPaddlePinName = "RI";
-            RightPaddlePinName = "DCD";
         }
     }
 
@@ -330,33 +340,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedSerialPortChanged(string value)
     {
-        // Close existing port if open
-        CloseSerialPort();
-
-        // Don't open if no valid port selected
-        if (string.IsNullOrEmpty(value) || value.Contains("No ports") || value.Contains("Error"))
-        {
-            return;
-        }
-
-        try
-        {
-            _serialPort = new SerialPort(value);
-            _serialPort.BaudRate = 9600; // Baud rate doesn't matter for control lines
-            _serialPort.DtrEnable = true; // Enable DTR for power
-            _serialPort.RtsEnable = true; // Enable RTS for power
-            _serialPort.PinChanged += SerialPort_PinChanged;
-            _serialPort.Open();
-
-            // Update initial state
-            UpdateSerialPinStates();
-        }
-        catch (Exception ex)
-        {
-            RadioStatus = $"Serial port error: {ex.Message}";
-            RadioStatusColor = Brushes.Orange;
-            _serialPort = null;
-        }
+        // Devices are now opened on connect, not on selection
     }
 
     private void CloseSerialPort()
@@ -382,34 +366,14 @@ public partial class MainWindowViewModel : ViewModelBase
             _previousRightPaddleState = false;
             LeftPaddleIndicatorColor = Brushes.Black;
             RightPaddleIndicatorColor = Brushes.Black;
-            LeftPaddleStateText = "LOW";
-            RightPaddleStateText = "LOW";
+            LeftPaddleStateText = "OFF";
+            RightPaddleStateText = "OFF";
         }
     }
 
     partial void OnSelectedMidiDeviceChanged(string value)
     {
-        // Close existing MIDI device if open
-        CloseMidiDevice();
-
-        // Don't open if no valid device selected
-        if (string.IsNullOrEmpty(value) || value.Contains("No MIDI") || value.Contains("Error"))
-        {
-            return;
-        }
-
-        try
-        {
-            _midiInput = new MidiPaddleInput();
-            _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
-            _midiInput.Open(value);
-        }
-        catch (Exception ex)
-        {
-            RadioStatus = $"MIDI device error: {ex.Message}";
-            RadioStatusColor = Brushes.Orange;
-            _midiInput = null;
-        }
+        // Devices are now opened on connect, not on selection
     }
 
     private void CloseMidiDevice()
@@ -433,8 +397,71 @@ public partial class MainWindowViewModel : ViewModelBase
             _previousRightPaddleState = false;
             LeftPaddleIndicatorColor = Brushes.Black;
             RightPaddleIndicatorColor = Brushes.Black;
-            LeftPaddleStateText = "LOW";
-            RightPaddleStateText = "LOW";
+            LeftPaddleStateText = "OFF";
+            RightPaddleStateText = "OFF";
+        }
+    }
+
+    private void OpenInputDevice()
+    {
+        if (InputType == InputDeviceType.Serial)
+        {
+            // Open serial port
+            if (string.IsNullOrEmpty(SelectedSerialPort) || SelectedSerialPort.Contains("No ports") || SelectedSerialPort.Contains("Error"))
+            {
+                RadioStatus = "No serial port selected";
+                RadioStatusColor = Brushes.Orange;
+                return;
+            }
+
+            try
+            {
+                _serialPort = new SerialPort(SelectedSerialPort);
+                _serialPort.BaudRate = 9600; // Baud rate doesn't matter for control lines
+                _serialPort.DtrEnable = true; // Enable DTR for power
+                _serialPort.RtsEnable = true; // Enable RTS for power
+                _serialPort.PinChanged += SerialPort_PinChanged;
+                _serialPort.Open();
+
+                // Initialize previous states without sending commands
+                InitializeSerialPinStates();
+
+                // Now update to show current state
+                UpdateSerialPinStates();
+            }
+            catch (Exception ex)
+            {
+                RadioStatus = $"Serial port error: {ex.Message}";
+                RadioStatusColor = Brushes.Orange;
+                _serialPort = null;
+            }
+        }
+        else // MIDI
+        {
+            // Open MIDI device
+            if (string.IsNullOrEmpty(SelectedMidiDevice) || SelectedMidiDevice.Contains("No MIDI") || SelectedMidiDevice.Contains("Error"))
+            {
+                RadioStatus = "No MIDI device selected";
+                RadioStatusColor = Brushes.Orange;
+                return;
+            }
+
+            try
+            {
+                _midiInput = new MidiPaddleInput();
+                _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
+                _midiInput.Open(SelectedMidiDevice);
+
+                // MIDI devices start with both paddles off, so initialize previous states
+                _previousLeftPaddleState = false;
+                _previousRightPaddleState = false;
+            }
+            catch (Exception ex)
+            {
+                RadioStatus = $"MIDI device error: {ex.Message}";
+                RadioStatusColor = Brushes.Orange;
+                _midiInput = null;
+            }
         }
     }
 
@@ -500,6 +527,28 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private void InitializeSerialPinStates()
+    {
+        if (_serialPort == null || !_serialPort.IsOpen)
+            return;
+
+        try
+        {
+            // Read initial pin states and store as "previous" without sending commands
+            if (CurrentHaliKeyVersion == HaliKeyVersion.V1)
+            {
+                _previousLeftPaddleState = _serialPort.CtsHolding;
+                _previousRightPaddleState = _serialPort.CDHolding;
+            }
+            else // V2
+            {
+                _previousLeftPaddleState = _riState;
+                _previousRightPaddleState = _serialPort.CDHolding;
+            }
+        }
+        catch { }
+    }
+
     private void UpdateSerialPinStates()
     {
         if (_serialPort == null || !_serialPort.IsOpen)
@@ -526,11 +575,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Update left paddle indicator
             LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = leftPaddleState ? "HIGH" : "LOW";
+            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
 
             // Update right paddle indicator
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            RightPaddleStateText = rightPaddleState ? "HIGH" : "LOW";
+            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
 
             // Handle keying based on mode
             if (_connectedRadio != null && _boundGuiClientHandle != 0)
@@ -629,6 +678,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Apply initial CW settings
             ApplyCwSettings();
+
+            // Open the selected input device
+            OpenInputDevice();
+
+            // Switch to operating page
+            CurrentPage = PageType.Operating;
         }
         else
         {
@@ -641,6 +696,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 _connectedRadio.PropertyChanged -= Radio_PropertyChanged;
             }
 
+            // Close input devices
+            CloseSerialPort();
+            CloseMidiDevice();
+
             _connectedRadio.Disconnect();
             _connectedRadio = null;
             _boundGuiClientHandle = 0;
@@ -650,6 +709,9 @@ public partial class MainWindowViewModel : ViewModelBase
             RadioStatus = "Disconnected";
             RadioStatusColor = Brushes.Red;
             ConnectButtonText = "Connect";
+
+            // Switch back to setup page
+            CurrentPage = PageType.Setup;
         }
     }
 
