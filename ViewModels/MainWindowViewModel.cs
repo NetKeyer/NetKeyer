@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
 using NetKeyer.Midi;
+using NetKeyer.Models;
 
 namespace NetKeyer.ViewModels;
 
@@ -140,6 +141,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _previousRightPaddleState = false;
     private uint _boundGuiClientHandle = 0;
     private bool _updatingFromRadio = false; // Prevent feedback loops
+    private UserSettings _settings;
+    private bool _loadingSettings = false; // Prevent saving while loading
 
     // Iambic keyer state
     private Timer _iambicTimer;
@@ -157,11 +160,26 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public MainWindowViewModel()
     {
+        // Load user settings
+        _settings = UserSettings.Load();
+
         // Initialize FlexLib API
         API.ProgramName = "NetKeyer";
         API.RadioAdded += OnRadioAdded;
         API.RadioRemoved += OnRadioRemoved;
         API.Init();
+
+        // Apply saved input type and HaliKey version
+        _loadingSettings = true;
+        if (_settings.InputType == "MIDI")
+        {
+            InputType = InputDeviceType.MIDI;
+        }
+        if (!string.IsNullOrEmpty(_settings.HaliKeyVersion))
+        {
+            SelectedHaliKeyVersion = _settings.HaliKeyVersion;
+        }
+        _loadingSettings = false;
 
         // Initial discovery
         RefreshRadios();
@@ -184,12 +202,68 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    partial void OnCurrentPageChanged(PageType value)
+    {
+        // When returning to setup page, restore saved selections
+        if (value == PageType.Setup && _settings != null)
+        {
+            // Refresh device lists to restore selections
+            RefreshRadios();
+            RefreshSerialPorts();
+            RefreshMidiDevices();
+        }
+    }
+
+    partial void OnInputTypeChanged(InputDeviceType value)
+    {
+        if (!_loadingSettings && _settings != null)
+        {
+            _settings.InputType = value == InputDeviceType.MIDI ? "MIDI" : "Serial";
+            _settings.Save();
+        }
+    }
+
     partial void OnSelectedHaliKeyVersionChanged(string value)
     {
         // If a serial port is open, update the pin states
         if (_serialPort != null && _serialPort.IsOpen)
         {
             UpdateSerialPinStates();
+        }
+
+        // Save setting
+        if (!_loadingSettings && _settings != null)
+        {
+            _settings.HaliKeyVersion = value;
+            _settings.Save();
+        }
+    }
+
+    partial void OnSelectedRadioClientChanged(RadioClientSelection value)
+    {
+        if (!_loadingSettings && _settings != null && value != null)
+        {
+            _settings.SelectedRadioSerial = value.Radio?.Serial;
+            _settings.SelectedGuiClientStation = value.GuiClient?.Station;
+            _settings.Save();
+        }
+    }
+
+    partial void OnSelectedSerialPortChanged(string value)
+    {
+        if (!_loadingSettings && _settings != null)
+        {
+            _settings.SelectedSerialPort = value;
+            _settings.Save();
+        }
+    }
+
+    partial void OnSelectedMidiDeviceChanged(string value)
+    {
+        if (!_loadingSettings && _settings != null)
+        {
+            _settings.SelectedMidiDevice = value;
+            _settings.Save();
         }
     }
 
@@ -260,6 +334,21 @@ public partial class MainWindowViewModel : ViewModelBase
                 DisplayName = "No radios found"
             });
         }
+
+        // Restore previously selected radio/client if available
+        if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedRadioSerial))
+        {
+            _loadingSettings = true;
+            var savedSelection = RadioClientSelections.FirstOrDefault(s =>
+                s.Radio?.Serial == _settings.SelectedRadioSerial &&
+                s.GuiClient?.Station == _settings.SelectedGuiClientStation);
+
+            if (savedSelection != null)
+            {
+                SelectedRadioClient = savedSelection;
+            }
+            _loadingSettings = false;
+        }
     }
 
     [RelayCommand]
@@ -306,6 +395,17 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 SerialPorts.Add("No ports found");
             }
+
+            // Restore previously selected serial port if available
+            if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedSerialPort))
+            {
+                _loadingSettings = true;
+                if (SerialPorts.Contains(_settings.SelectedSerialPort))
+                {
+                    SelectedSerialPort = _settings.SelectedSerialPort;
+                }
+                _loadingSettings = false;
+            }
         }
         catch (Exception ex)
         {
@@ -331,16 +431,22 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 MidiDevices.Add("No MIDI devices found");
             }
+
+            // Restore previously selected MIDI device if available
+            if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
+            {
+                _loadingSettings = true;
+                if (MidiDevices.Contains(_settings.SelectedMidiDevice))
+                {
+                    SelectedMidiDevice = _settings.SelectedMidiDevice;
+                }
+                _loadingSettings = false;
+            }
         }
         catch (Exception ex)
         {
             MidiDevices.Add($"MIDI Error: {ex.Message}");
         }
-    }
-
-    partial void OnSelectedSerialPortChanged(string value)
-    {
-        // Devices are now opened on connect, not on selection
     }
 
     private void CloseSerialPort()
@@ -369,11 +475,6 @@ public partial class MainWindowViewModel : ViewModelBase
             LeftPaddleStateText = "OFF";
             RightPaddleStateText = "OFF";
         }
-    }
-
-    partial void OnSelectedMidiDeviceChanged(string value)
-    {
-        // Devices are now opened on connect, not on selection
     }
 
     private void CloseMidiDevice()
