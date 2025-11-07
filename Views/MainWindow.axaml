@@ -188,7 +188,7 @@
 
                         <!-- Sidetone Volume -->
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Sidetone Volume:" Width="100" VerticalAlignment="Center"/>
+                            <TextBlock Text="Sidetone:" Width="100" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding SidetoneVolume}" Width="25" VerticalAlignment="Center"/>
                             <Slider Minimum="0" Maximum="100"
                                     Value="{Binding SidetoneVolume}"
