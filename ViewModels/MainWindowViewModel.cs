@@ -95,10 +95,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _selectedMidiDevice;
 
     [ObservableProperty]
-    private string _radioStatus = "Disconnected";
+    private string _radioStatus = "";
 
     [ObservableProperty]
     private IBrush _radioStatusColor = Brushes.Red;
+
+    [ObservableProperty]
+    private bool _hasRadioError = false;
 
     [ObservableProperty]
     private string _connectButtonText = "Connect";
@@ -318,7 +321,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     {
                         Radio = radio,
                         GuiClient = null,
-                        DisplayName = $"{radio.Nickname} ({radio.Model}) - No GUI Clients"
+                        DisplayName = $"{radio.Nickname} ({radio.Model}) - No Stations"
                     };
                     RadioClientSelections.Add(selection);
                 }
@@ -516,6 +519,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 RadioStatus = "No serial port selected";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 return;
             }
 
@@ -538,6 +542,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 RadioStatus = $"Serial port error: {ex.Message}";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 _serialPort = null;
             }
         }
@@ -548,6 +553,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 RadioStatus = "No MIDI device selected";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 return;
             }
 
@@ -565,6 +571,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 RadioStatus = $"MIDI device error: {ex.Message}";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 _midiInput = null;
             }
         }
@@ -730,13 +737,15 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 RadioStatus = "No radio/client selected";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 return;
             }
 
             if (SelectedRadioClient.GuiClient == null)
             {
-                RadioStatus = "No GUI client available";
+                RadioStatus = "No station available";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
                 return;
             }
 
@@ -756,8 +765,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (updatedGuiClient == null)
             {
-                RadioStatus = "Failed to find GUI client after connection";
+                RadioStatus = "Failed to find station after connection";
                 RadioStatusColor = Brushes.Red;
+                HasRadioError = true;
                 _connectedRadio.Disconnect();
                 _connectedRadio = null;
                 return;
@@ -766,16 +776,19 @@ public partial class MainWindowViewModel : ViewModelBase
             string clientId = updatedGuiClient.ClientID;
             if (string.IsNullOrEmpty(clientId))
             {
-                RadioStatus = "GUI client UUID not available - binding may fail";
+                RadioStatus = "Client UUID not available - binding may fail";
                 RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
+            }
+            else
+            {
+                // Clear any previous errors on successful connection
+                HasRadioError = false;
             }
 
-            // Bind to the selected GUI client using its UUID
+            // Bind to the selected station using its UUID
             _connectedRadio.BindGUIClient(clientId);
             _boundGuiClientHandle = targetClientHandle;
-            RadioStatus = $"Connected & Bound to {targetStation}";
-
-            RadioStatusColor = Brushes.Green;
             ConnectButtonText = "Disconnect";
 
             // Subscribe to radio property changes
@@ -811,8 +824,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
 
-            RadioStatus = "Disconnected";
-            RadioStatusColor = Brushes.Red;
+            // Clear any error status on manual disconnect
+            HasRadioError = false;
             ConnectButtonText = "Connect";
 
             // Switch back to setup page
@@ -862,6 +875,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             RadioStatus = $"Settings error: {ex.Message}";
             RadioStatusColor = Brushes.Orange;
+            HasRadioError = true;
         }
     }
 
@@ -967,6 +981,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _connectedRadio = null;
             RadioStatus = "Disconnected (radio removed)";
             RadioStatusColor = Brushes.Red;
+            HasRadioError = true;
             ConnectButtonText = "Connect";
         }
     }
