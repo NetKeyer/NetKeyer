@@ -31,6 +31,7 @@
     <PackageReference Include="managed-midi" Version="1.10.1" />
     <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
     <PackageReference Include="System.IO.Ports" Version="9.0.10" />
+    <PackageReference Include="Velopack" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
