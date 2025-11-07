@@ -357,6 +357,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RefreshSerialPorts()
     {
+        _loadingSettings = true;
         SerialPorts.Clear();
 
         try
@@ -406,23 +407,26 @@ public partial class MainWindowViewModel : ViewModelBase
             // Restore previously selected serial port if available
             if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedSerialPort))
             {
-                _loadingSettings = true;
                 if (SerialPorts.Contains(_settings.SelectedSerialPort))
                 {
                     SelectedSerialPort = _settings.SelectedSerialPort;
                 }
-                _loadingSettings = false;
             }
         }
         catch (Exception ex)
         {
             SerialPorts.Add($"Error: {ex.Message}");
         }
+        finally
+        {
+            _loadingSettings = false;
+        }
     }
 
     [RelayCommand]
     private void RefreshMidiDevices()
     {
+        _loadingSettings = true;
         MidiDevices.Clear();
 
         try
@@ -443,18 +447,20 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Restore previously selected MIDI device if available (only if we have real devices)
                 if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
                 {
-                    _loadingSettings = true;
                     if (MidiDevices.Contains(_settings.SelectedMidiDevice))
                     {
                         SelectedMidiDevice = _settings.SelectedMidiDevice;
                     }
-                    _loadingSettings = false;
                 }
             }
         }
         catch (Exception ex)
         {
             MidiDevices.Add($"MIDI Error: {ex.Message}");
+        }
+        finally
+        {
+            _loadingSettings = false;
         }
     }
 
