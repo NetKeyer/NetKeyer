@@ -359,7 +359,11 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             var ports = SerialPort.GetPortNames();
-            Array.Sort(ports, (a, b) =>
+
+            // Remove duplicates (SerialPort.GetPortNames() can return duplicates on some platforms)
+            var uniquePorts = ports.Distinct().ToArray();
+
+            Array.Sort(uniquePorts, (a, b) =>
             {
                 try
                 {
@@ -386,7 +390,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             });
 
-            foreach (var port in ports)
+            foreach (var port in uniquePorts)
             {
                 SerialPorts.Add(port);
             }
