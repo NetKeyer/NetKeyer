@@ -12,7 +12,7 @@ namespace NetKeyer.Midi
         private const byte NOTE_ON = 0x90;
         private const byte NOTE_OFF = 0x80;
 
-        private IMidiAccess2 _access;
+        private IMidiAccess _access;
         private IMidiInput _inputPort;
         private bool _leftPaddleState = false;
         private bool _rightPaddleState = false;
@@ -39,7 +39,7 @@ namespace NetKeyer.Midi
 
             try
             {
-                _access = (IMidiAccess2)MidiAccessManager.Default;
+                _access = MidiAccessManager.Default;
                 var device = _access.Inputs.FirstOrDefault(d => d.Name == deviceName);
 
                 if (device == null)
