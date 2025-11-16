@@ -2,13 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NetKeyer.Views.SmartLinkLoginDialog"
         Title="SmartLink Login"
-        Width="400" Height="250"
-        MinWidth="400" MinHeight="250"
-        MaxWidth="400" MaxHeight="250"
+        Width="400" Height="280"
+        MinWidth="400" MinHeight="280"
+        MaxWidth="400" MaxHeight="280"
         WindowStartupLocation="CenterOwner"
         CanResize="false">
 
-    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
 
         <!-- Title -->
         <TextBlock Grid.Row="0"
@@ -34,8 +34,14 @@
                      Padding="8,6"/>
         </StackPanel>
 
+        <!-- Remember Me -->
+        <CheckBox Grid.Row="3"
+                  Name="RememberMeCheckBox"
+                  Content="Remember me"
+                  Margin="0,0,0,10"/>
+
         <!-- Error message -->
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="4"
                    Name="ErrorTextBlock"
                    Foreground="Red"
                    TextWrapping="Wrap"
@@ -43,7 +49,7 @@
                    Margin="0,0,0,10"/>
 
         <!-- Status message -->
-        <TextBlock Grid.Row="4"
+        <TextBlock Grid.Row="5"
                    Name="StatusTextBlock"
                    Foreground="Gray"
                    FontSize="12"
@@ -51,10 +57,10 @@
                    Margin="0,0,0,10"/>
 
         <!-- Spacer -->
-        <Border Grid.Row="5"/>
+        <Border Grid.Row="6"/>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="6"
+        <StackPanel Grid.Row="7"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10">

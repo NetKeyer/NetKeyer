@@ -10,6 +10,7 @@ namespace NetKeyer.Views
     {
         private TextBox _usernameTextBox;
         private TextBox _passwordTextBox;
+        private CheckBox _rememberMeCheckBox;
         private TextBlock _errorTextBlock;
         private TextBlock _statusTextBlock;
         private Button _loginButton;
@@ -17,6 +18,7 @@ namespace NetKeyer.Views
 
         public string Username { get; private set; }
         public string Password { get; private set; }
+        public bool RememberMe { get; private set; }
         public bool LoginSucceeded { get; private set; }
 
         public SmartLinkLoginDialog()
@@ -31,6 +33,7 @@ namespace NetKeyer.Views
 
             _usernameTextBox = this.FindControl<TextBox>("UsernameTextBox");
             _passwordTextBox = this.FindControl<TextBox>("PasswordTextBox");
+            _rememberMeCheckBox = this.FindControl<CheckBox>("RememberMeCheckBox");
             _errorTextBlock = this.FindControl<TextBlock>("ErrorTextBlock");
             _statusTextBlock = this.FindControl<TextBlock>("StatusTextBlock");
             _loginButton = this.FindControl<Button>("LoginButton");
@@ -41,6 +44,14 @@ namespace NetKeyer.Views
         {
             // Focus username textbox when dialog opens
             _usernameTextBox?.Focus();
+        }
+
+        public void SetRememberMe(bool rememberMe)
+        {
+            if (_rememberMeCheckBox != null)
+            {
+                _rememberMeCheckBox.IsChecked = rememberMe;
+            }
         }
 
         private void LoginButton_Click(object sender, RoutedEventArgs e)
@@ -67,9 +78,10 @@ namespace NetKeyer.Views
                 return;
             }
 
-            // Store credentials and indicate success
+            // Store credentials, remember me state, and indicate success
             Username = username;
             Password = password;
+            RememberMe = _rememberMeCheckBox?.IsChecked ?? false;
             LoginSucceeded = true;
 
             Close();
