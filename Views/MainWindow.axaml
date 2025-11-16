@@ -17,12 +17,6 @@
     <ScrollViewer>
         <StackPanel Margin="10" Spacing="8">
 
-            <!-- Header -->
-            <TextBlock Text="FlexRadio CW Keyer"
-                       FontSize="18" FontWeight="Bold"
-                       HorizontalAlignment="Center"
-                       Margin="0,0,0,5"/>
-
             <!-- Setup Page -->
             <StackPanel Spacing="8" IsVisible="{Binding IsSetupPage}">
 
@@ -240,19 +234,25 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Disconnect Button -->
-                <Button Content="Disconnect"
-                        Command="{Binding ToggleConnectionCommand}"
-                        HorizontalAlignment="Center"
-                        HorizontalContentAlignment="Center"
-                        Width="120"
-                        Padding="6"
-                        Margin="0,5,0,0"/>
+                <!-- Disconnect and Exit Buttons -->
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
+                    <Button Content="Disconnect"
+                            Command="{Binding ToggleConnectionCommand}"
+                            HorizontalContentAlignment="Center"
+                            Width="120"
+                            Padding="6"/>
+                    <Button Content="Exit"
+                            Command="{Binding ExitCommand}"
+                            HorizontalContentAlignment="Center"
+                            Width="100"
+                            Padding="6"/>
+                </StackPanel>
             </StackPanel>
 
-            <!-- Exit Button (always visible) -->
+            <!-- Exit Button (Setup page only) -->
             <Button Content="Exit"
                     Command="{Binding ExitCommand}"
+                    IsVisible="{Binding IsSetupPage}"
                     HorizontalAlignment="Center"
                     HorizontalContentAlignment="Center"
                     Width="100"
