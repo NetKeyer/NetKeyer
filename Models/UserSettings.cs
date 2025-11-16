@@ -12,6 +12,10 @@ namespace NetKeyer.Models
         public string SelectedMidiDevice { get; set; }
         public string InputType { get; set; } = "Serial";
 
+        // SmartLink settings
+        public string SmartLinkClientId { get; set; }
+        public string SmartLinkRefreshToken { get; set; }
+
         private static string SettingsFilePath
         {
             get

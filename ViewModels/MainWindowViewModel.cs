@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,6 +13,7 @@ using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
 using NetKeyer.Midi;
 using NetKeyer.Models;
+using NetKeyer.SmartLink;
 
 namespace NetKeyer.ViewModels;
 
@@ -155,10 +157,30 @@ public partial class MainWindowViewModel : ViewModelBase
     // Sidetone generator
     private SidetoneGenerator _sidetoneGenerator;
 
+    // SmartLink support
+    private SmartLinkAuthService _smartLinkAuth;
+    private WanServer _wanServer;
+    private ManualResetEvent _wanConnectionReadyEvent = new ManualResetEvent(false);
+
+    [ObservableProperty]
+    private bool _smartLinkAvailable = false;
+
+    [ObservableProperty]
+    private bool _smartLinkAuthenticated = false;
+
+    [ObservableProperty]
+    private string _smartLinkStatus = "Not connected";
+
+    [ObservableProperty]
+    private string _smartLinkButtonText = "Login to SmartLink";
+
     public MainWindowViewModel()
     {
         // Load user settings
         _settings = UserSettings.Load();
+
+        // Initialize SmartLink support
+        InitializeSmartLink();
 
         // Initialize FlexLib API
         API.ProgramName = "NetKeyer";
@@ -269,7 +291,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Clear current list
         RadioClientSelections.Clear();
 
-        // Get discovered radios from FlexLib and their GUI clients
+        // Get discovered radios from FlexLib (local LAN radios)
         foreach (var radio in API.RadioList)
         {
             lock (radio.GuiClientsLockObj)
@@ -300,6 +322,13 @@ public partial class MainWindowViewModel : ViewModelBase
                     RadioClientSelections.Add(selection);
                 }
             }
+        }
+
+        // If SmartLink is connected, request updated radio list
+        if (_wanServer != null && _wanServer.IsConnected && _smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
+        {
+            // The WanRadioRadioListRecieved event handler will add SmartLink radios to the list
+            // Note: This happens automatically when WanServer is connected
         }
 
         if (RadioClientSelections.Count == 0)
@@ -721,7 +750,63 @@ public partial class MainWindowViewModel : ViewModelBase
             uint targetClientHandle = SelectedRadioClient.GuiClient.ClientHandle;
             string targetStation = SelectedRadioClient.GuiClient.Station;
 
-            _connectedRadio.Connect();
+            // For WAN radios, we need to request connection from WanServer first
+            if (_connectedRadio.IsWan)
+            {
+                if (_wanServer == null || !_wanServer.IsConnected)
+                {
+                    RadioStatus = "Not connected to SmartLink server";
+                    RadioStatusColor = Brushes.Red;
+                    HasRadioError = true;
+                    _connectedRadio = null;
+                    return;
+                }
+
+                // Reset the event and subscribe to connect_ready event
+                _wanConnectionReadyEvent.Reset();
+                _wanServer.WanRadioConnectReady += WanServer_RadioConnectReady;
+
+                // Request connection to this radio
+                RadioStatus = "Requesting SmartLink connection...";
+                _wanServer.SendConnectMessageToRadio(_connectedRadio.Serial, HolePunchPort: 0);
+
+                // Wait for connect_ready response (with timeout)
+                if (!_wanConnectionReadyEvent.WaitOne(10000))
+                {
+                    RadioStatus = "SmartLink connection request timed out";
+                    RadioStatusColor = Brushes.Red;
+                    HasRadioError = true;
+                    _wanServer.WanRadioConnectReady -= WanServer_RadioConnectReady;
+                    _connectedRadio = null;
+                    return;
+                }
+
+                // Unsubscribe from event
+                _wanServer.WanRadioConnectReady -= WanServer_RadioConnectReady;
+
+                if (string.IsNullOrEmpty(_connectedRadio.WANConnectionHandle))
+                {
+                    RadioStatus = "Failed to get SmartLink connection handle";
+                    RadioStatusColor = Brushes.Red;
+                    HasRadioError = true;
+                    _connectedRadio = null;
+                    return;
+                }
+
+                RadioStatus = "Connecting to radio via SmartLink...";
+            }
+
+            // Now connect to the radio (works for both LAN and WAN)
+            bool connectResult = _connectedRadio.Connect();
+
+            if (!connectResult)
+            {
+                RadioStatus = "Failed to connect to radio";
+                RadioStatusColor = Brushes.Red;
+                HasRadioError = true;
+                _connectedRadio = null;
+                return;
+            }
 
             // After Connect(), the radio sends "client connected" status messages that populate
             // the ClientID (UUID) field in the GUIClient objects. Wait a moment for these to arrive.
@@ -1319,4 +1404,279 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         });
     }
+
+    #region SmartLink Methods
+
+    private void InitializeSmartLink()
+    {
+        // Initialize SmartLink authentication service
+        var clientIdProvider = new ConfigFileClientIdProvider();
+        _smartLinkAuth = new SmartLinkAuthService(clientIdProvider);
+
+        SmartLinkAvailable = _smartLinkAuth.IsAvailable;
+
+        if (!SmartLinkAvailable)
+        {
+            SmartLinkStatus = "No client_id configured";
+            return;
+        }
+
+        _smartLinkAuth.AuthStateChanged += SmartLinkAuth_AuthStateChanged;
+        _smartLinkAuth.ErrorOccurred += SmartLinkAuth_ErrorOccurred;
+
+        // Try to restore session from saved refresh token
+        if (!string.IsNullOrEmpty(_settings.SmartLinkRefreshToken))
+        {
+            Task.Run(async () =>
+            {
+                var success = await _smartLinkAuth.RestoreSessionAsync(_settings.SmartLinkRefreshToken);
+                if (success)
+                {
+                    await ConnectToSmartLinkServerAsync();
+                }
+            });
+        }
+    }
+
+    private void SmartLinkAuth_AuthStateChanged(object sender, SmartLinkAuthState state)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            SmartLinkAuthenticated = (state == SmartLinkAuthState.Authenticated);
+
+            switch (state)
+            {
+                case SmartLinkAuthState.NotAuthenticated:
+                    SmartLinkStatus = "Not logged in";
+                    SmartLinkButtonText = "Login to SmartLink";
+                    break;
+                case SmartLinkAuthState.Authenticating:
+                    SmartLinkStatus = "Authenticating...";
+                    SmartLinkButtonText = "Authenticating...";
+                    break;
+                case SmartLinkAuthState.Authenticated:
+                    SmartLinkStatus = "Authenticated";
+                    SmartLinkButtonText = "Logout from SmartLink";
+
+                    // Save refresh token
+                    var refreshToken = _smartLinkAuth.GetRefreshToken();
+                    if (!string.IsNullOrEmpty(refreshToken))
+                    {
+                        _settings.SmartLinkRefreshToken = refreshToken;
+                        _settings.Save();
+                    }
+                    break;
+                case SmartLinkAuthState.Error:
+                    SmartLinkStatus = "Authentication error";
+                    SmartLinkButtonText = "Retry Login";
+                    break;
+            }
+        });
+    }
+
+    private void SmartLinkAuth_ErrorOccurred(object sender, string error)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            Console.WriteLine($"SmartLink error: {error}");
+            SmartLinkStatus = $"Error: {error}";
+        });
+    }
+
+    private Task ConnectToSmartLinkServerAsync()
+    {
+        if (_wanServer == null)
+        {
+            _wanServer = new WanServer();
+            WanServer.WanRadioRadioListRecieved += WanServer_WanRadioListReceived;
+            _wanServer.WanApplicationRegistrationInvalid += WanServer_RegistrationInvalid;
+        }
+
+        if (!_wanServer.IsConnected)
+        {
+            _wanServer.Connect();
+
+            if (_wanServer.IsConnected)
+            {
+                var token = _smartLinkAuth.GetIdToken();
+                var platform = Environment.OSVersion.Platform.ToString();
+                _wanServer.SendRegisterApplicationMessageToServer("NetKeyer", platform, token);
+
+                SmartLinkStatus = "Connected to SmartLink";
+            }
+            else
+            {
+                SmartLinkStatus = "Failed to connect to SmartLink server";
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void WanServer_WanRadioListReceived(System.Collections.Generic.List<Radio> radios)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            // Add SmartLink radios to the radio list
+            // They will be marked with IsWan = true
+            foreach (var radio in radios)
+            {
+                lock (radio.GuiClientsLockObj)
+                {
+                    if (radio.GuiClients != null && radio.GuiClients.Count > 0)
+                    {
+                        foreach (var guiClient in radio.GuiClients)
+                        {
+                            var selection = new RadioClientSelection
+                            {
+                                Radio = radio,
+                                GuiClient = guiClient,
+                                DisplayName = $"[SmartLink] {radio.Nickname} ({radio.Model}) - {guiClient.Station} [{guiClient.Program}]"
+                            };
+
+                            // Check if already in list
+                            // var existing = RadioClientSelections.FirstOrDefault(s =>
+                            //     s.Radio?.Serial == radio.Serial &&
+                            //     s.GuiClient?.Station == guiClient.Station);
+                            //
+                            // if (existing == null)
+                            // {
+                                RadioClientSelections.Add(selection);
+                            // }
+                        }
+                    }
+                    else
+                    {
+                        var selection = new RadioClientSelection
+                        {
+                            Radio = radio,
+                            GuiClient = null,
+                            DisplayName = $"[SmartLink] {radio.Nickname} ({radio.Model}) - No Stations"
+                        };
+
+                        var existing = RadioClientSelections.FirstOrDefault(s =>
+                            s.Radio?.Serial == radio.Serial && s.GuiClient == null);
+
+                        if (existing == null)
+                        {
+                            RadioClientSelections.Add(selection);
+                        }
+                    }
+                }
+            }
+
+            // Remove "No radios found" placeholder if we have radios now
+            if (RadioClientSelections.Any(r => r.Radio != null))
+            {
+                var placeholder = RadioClientSelections.FirstOrDefault(r => r.Radio == null);
+                if (placeholder != null)
+                {
+                    RadioClientSelections.Remove(placeholder);
+                }
+            }
+        });
+    }
+
+    private void WanServer_RegistrationInvalid()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            SmartLinkStatus = "Registration invalid - please log in again";
+            _smartLinkAuth?.Logout();
+
+            // Clear saved refresh token
+            _settings.SmartLinkRefreshToken = null;
+            _settings.Save();
+
+            // Disconnect from WAN server
+            _wanServer?.Disconnect();
+        });
+    }
+
+    private void WanServer_RadioConnectReady(string wan_connectionhandle, string serial)
+    {
+        // This is called when the SmartLink server responds with "radio connect_ready"
+        // Store the handle in the radio object
+        if (_connectedRadio != null && _connectedRadio.Serial == serial)
+        {
+            _connectedRadio.WANConnectionHandle = wan_connectionhandle;
+            _wanConnectionReadyEvent.Set(); // Signal that we're ready to connect
+        }
+    }
+
+    [RelayCommand]
+    private async Task ToggleSmartLink()
+    {
+        if (!SmartLinkAvailable)
+        {
+            SmartLinkStatus = "SmartLink not available - no client_id configured";
+            return;
+        }
+
+        if (SmartLinkAuthenticated)
+        {
+            // Logout
+            _smartLinkAuth?.Logout();
+            _wanServer?.Disconnect();
+
+            // Clear saved refresh token
+            _settings.SmartLinkRefreshToken = null;
+            _settings.Save();
+
+            // Clear SmartLink radios from list
+            var smartLinkRadios = RadioClientSelections.Where(s => s.Radio?.IsWan == true).ToList();
+            foreach (var radio in smartLinkRadios)
+            {
+                RadioClientSelections.Remove(radio);
+            }
+        }
+        else
+        {
+            // Show login dialog
+            await ShowSmartLinkLoginDialog();
+        }
+    }
+
+    private async Task ShowSmartLinkLoginDialog()
+    {
+        var loginDialog = new Views.SmartLinkLoginDialog();
+
+        // Get the main window
+        var mainWindow = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
+        if (mainWindow == null)
+        {
+            SmartLinkStatus = "Failed to show login dialog";
+            return;
+        }
+
+        await loginDialog.ShowDialog(mainWindow);
+
+        if (loginDialog.LoginSucceeded)
+        {
+            var username = loginDialog.Username;
+            var password = loginDialog.Password;
+
+            // Attempt login
+            SmartLinkStatus = "Authenticating...";
+            var success = await _smartLinkAuth.LoginAsync(username, password);
+
+            if (success)
+            {
+                // Connect to SmartLink server
+                await ConnectToSmartLinkServerAsync();
+            }
+            else
+            {
+                SmartLinkStatus = "Login failed - check credentials";
+            }
+        }
+        else
+        {
+            SmartLinkStatus = "Login cancelled";
+        }
+    }
+
+    #endregion
 }
+

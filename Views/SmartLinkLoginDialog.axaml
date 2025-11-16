@@ -1,0 +1,74 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="NetKeyer.Views.SmartLinkLoginDialog"
+        Title="SmartLink Login"
+        Width="400" Height="250"
+        MinWidth="400" MinHeight="250"
+        MaxWidth="400" MaxHeight="250"
+        WindowStartupLocation="CenterOwner"
+        CanResize="false">
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- Title -->
+        <TextBlock Grid.Row="0"
+                   Text="Sign in to SmartLink"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   Margin="0,0,0,15"/>
+
+        <!-- Username -->
+        <StackPanel Grid.Row="1" Spacing="5" Margin="0,0,0,10">
+            <TextBlock Text="Email or Username:"/>
+            <TextBox Name="UsernameTextBox"
+                     Watermark="Enter your email or username"
+                     Padding="8,6"/>
+        </StackPanel>
+
+        <!-- Password -->
+        <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,10">
+            <TextBlock Text="Password:"/>
+            <TextBox Name="PasswordTextBox"
+                     Watermark="Enter your password"
+                     PasswordChar="●"
+                     Padding="8,6"/>
+        </StackPanel>
+
+        <!-- Error message -->
+        <TextBlock Grid.Row="3"
+                   Name="ErrorTextBlock"
+                   Foreground="Red"
+                   TextWrapping="Wrap"
+                   IsVisible="False"
+                   Margin="0,0,0,10"/>
+
+        <!-- Status message -->
+        <TextBlock Grid.Row="4"
+                   Name="StatusTextBlock"
+                   Foreground="Gray"
+                   FontSize="12"
+                   IsVisible="False"
+                   Margin="0,0,0,10"/>
+
+        <!-- Spacer -->
+        <Border Grid.Row="5"/>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10">
+            <Button Name="CancelButton"
+                    Content="Cancel"
+                    Width="80"
+                    Padding="6"
+                    Click="CancelButton_Click"/>
+            <Button Name="LoginButton"
+                    Content="Login"
+                    Width="80"
+                    Padding="6"
+                    Click="LoginButton_Click"
+                    IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
