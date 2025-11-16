@@ -581,8 +581,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Straight key mode - left paddle directly controls CW key
                 if (leftPaddleState != _previousLeftPaddleState)
                 {
-                    string timestamp = GetTimestamp();
-                    _connectedRadio.CWKey(leftPaddleState, timestamp, _boundGuiClientHandle);
+                    SendCWKey(leftPaddleState);
                 }
             }
         }
@@ -654,8 +653,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     // Straight key mode - left paddle directly controls CW key
                     if (leftPaddleState != _previousLeftPaddleState)
                     {
-                        string timestamp = GetTimestamp();
-                        _connectedRadio.CWKey(leftPaddleState, timestamp, _boundGuiClientHandle);
+                        SendCWKey(leftPaddleState);
                     }
                 }
             }
