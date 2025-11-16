@@ -15,12 +15,6 @@ using NetKeyer.Models;
 
 namespace NetKeyer.ViewModels;
 
-public enum HaliKeyVersion
-{
-    V1,  // CTS (left) + DCD (right)
-    V2   // RI (left) + DCD (right)
-}
-
 public enum InputDeviceType
 {
     Serial,
@@ -80,15 +74,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _selectedSerialPort;
 
     [ObservableProperty]
-    private ObservableCollection<string> _haliKeyVersions = new() { "HaliKey v1", "HaliKey v2" };
-
-    [ObservableProperty]
-    private string _selectedHaliKeyVersion = "HaliKey v1";
-
-    private HaliKeyVersion CurrentHaliKeyVersion =>
-        SelectedHaliKeyVersion == "HaliKey v2" ? HaliKeyVersion.V2 : HaliKeyVersion.V1;
-
-    [ObservableProperty]
     private ObservableCollection<string> _midiDevices = new();
 
     [ObservableProperty]
@@ -139,7 +124,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private Radio _connectedRadio;
     private SerialPort _serialPort;
     private MidiPaddleInput _midiInput;
-    private bool _riState = false; // Track RI state for HaliKey v2
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
     private uint _boundGuiClientHandle = 0;
@@ -172,15 +156,11 @@ public partial class MainWindowViewModel : ViewModelBase
         API.RadioRemoved += OnRadioRemoved;
         API.Init();
 
-        // Apply saved input type and HaliKey version
+        // Apply saved input type
         _loadingSettings = true;
         if (_settings.InputType == "MIDI")
         {
             InputType = InputDeviceType.MIDI;
-        }
-        if (!string.IsNullOrEmpty(_settings.HaliKeyVersion))
-        {
-            SelectedHaliKeyVersion = _settings.HaliKeyVersion;
         }
         _loadingSettings = false;
 
@@ -222,22 +202,6 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!_loadingSettings && _settings != null)
         {
             _settings.InputType = value == InputDeviceType.MIDI ? "MIDI" : "Serial";
-            _settings.Save();
-        }
-    }
-
-    partial void OnSelectedHaliKeyVersionChanged(string value)
-    {
-        // If a serial port is open, update the pin states
-        if (_serialPort != null && _serialPort.IsOpen)
-        {
-            UpdateSerialPinStates();
-        }
-
-        // Save setting
-        if (!_loadingSettings && _settings != null)
-        {
-            _settings.HaliKeyVersion = value;
             _settings.Save();
         }
     }
@@ -482,7 +446,6 @@ public partial class MainWindowViewModel : ViewModelBase
             _serialPort = null;
 
             // Reset indicators and state
-            _riState = false;
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
             LeftPaddleIndicatorColor = Brushes.Black;
@@ -631,28 +594,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
     {
-        // Check which pins to monitor based on HaliKey version
-        if (CurrentHaliKeyVersion == HaliKeyVersion.V1)
+        // HaliKey v1: CTS (left) + DCD (right)
+        if (e.EventType == SerialPinChange.CtsChanged || e.EventType == SerialPinChange.CDChanged)
         {
-            // V1: CTS (left) + DCD (right)
-            if (e.EventType == SerialPinChange.CtsChanged || e.EventType == SerialPinChange.CDChanged)
-            {
-                UpdateSerialPinStates();
-            }
-        }
-        else // V2
-        {
-            // V2: RI (left) + DCD (right)
-            if (e.EventType == SerialPinChange.Ring)
-            {
-                // RI toggled - flip the state
-                _riState = !_riState;
-                UpdateSerialPinStates();
-            }
-            else if (e.EventType == SerialPinChange.CDChanged)
-            {
-                UpdateSerialPinStates();
-            }
+            UpdateSerialPinStates();
         }
     }
 
@@ -664,16 +609,9 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             // Read initial pin states and store as "previous" without sending commands
-            if (CurrentHaliKeyVersion == HaliKeyVersion.V1)
-            {
-                _previousLeftPaddleState = _serialPort.CtsHolding;
-                _previousRightPaddleState = _serialPort.CDHolding;
-            }
-            else // V2
-            {
-                _previousLeftPaddleState = _riState;
-                _previousRightPaddleState = _serialPort.CDHolding;
-            }
+            // HaliKey v1: CTS (left) + DCD (right)
+            _previousLeftPaddleState = _serialPort.CtsHolding;
+            _previousRightPaddleState = _serialPort.CDHolding;
         }
         catch { }
     }
@@ -685,22 +623,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            bool leftPaddleState;
-            bool rightPaddleState;
-
-            if (CurrentHaliKeyVersion == HaliKeyVersion.V1)
-            {
-                // V1: CTS (left) + DCD (right)
-                leftPaddleState = _serialPort.CtsHolding;
-                rightPaddleState = _serialPort.CDHolding;
-            }
-            else // V2
-            {
-                // V2: RI (left) + DCD (right)
-                // RI state is tracked via the Ring event toggling _riState
-                leftPaddleState = _riState;
-                rightPaddleState = _serialPort.CDHolding;
-            }
+            // HaliKey v1: CTS (left) + DCD (right)
+            bool leftPaddleState = _serialPort.CtsHolding;
+            bool rightPaddleState = _serialPort.CDHolding;
 
             // Apply swap if enabled
             if (SwapPaddles)

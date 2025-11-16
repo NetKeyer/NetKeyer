@@ -11,7 +11,6 @@ namespace NetKeyer.Models
         public string SelectedSerialPort { get; set; }
         public string SelectedMidiDevice { get; set; }
         public string InputType { get; set; } = "Serial";
-        public string HaliKeyVersion { get; set; } = "HaliKey v1";
 
         private static string SettingsFilePath
         {
