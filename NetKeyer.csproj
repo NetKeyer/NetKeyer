@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Auth0.AuthenticationApi" Version="7.42.0" />
     <PackageReference Include="Avalonia" Version="11.3.8" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.8" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.8" />
@@ -33,6 +34,7 @@
       <ExcludeAssets>native</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="OpenTK.Audio.OpenAL" Version="4.9.4" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
     <PackageReference Include="System.IO.Ports" Version="9.0.10" />
     <PackageReference Include="Velopack" Version="*" />
   </ItemGroup>

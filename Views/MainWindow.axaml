@@ -20,6 +20,24 @@
             <!-- Setup Page -->
             <StackPanel Spacing="8" IsVisible="{Binding IsSetupPage}">
 
+                <!-- SmartLink Section -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                        IsVisible="{Binding SmartLinkAvailable}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="SmartLink" FontWeight="Bold" FontSize="14"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="{Binding SmartLinkButtonText}"
+                                    Command="{Binding ToggleSmartLinkCommand}"
+                                    Width="180"
+                                    Padding="4"/>
+                            <TextBlock Text="{Binding SmartLinkStatus}"
+                                       VerticalAlignment="Center"
+                                       FontSize="12"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Radio Selection -->
                 <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
                     <StackPanel Spacing="6">
