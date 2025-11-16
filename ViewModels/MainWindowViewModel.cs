@@ -142,8 +142,10 @@ public partial class MainWindowViewModel : ViewModelBase
     private Timer _iambicTimer;
     private readonly object _iambicLock = new object();
     private bool _iambicKeyDown = false;
-    private bool _iambicDitLatched = false;  // Set when dit paddle pressed during element
-    private bool _iambicDahLatched = false;  // Set when dah paddle pressed during element
+    private bool _iambicDitLatched = false;  // Set when dit paddle pressed during element (not at start)
+    private bool _iambicDahLatched = false;  // Set when dah paddle pressed during element (not at start)
+    private bool _ditPaddleAtStart = false;  // Was dit paddle already pressed when element started?
+    private bool _dahPaddleAtStart = false;  // Was dah paddle already pressed when element started?
     private bool _currentLeftPaddleState = false;  // Current physical paddle state
     private bool _currentRightPaddleState = false; // Current physical paddle state
     private int _ditLength = 60; // milliseconds, calculated from WPM
@@ -1002,21 +1004,21 @@ public partial class MainWindowViewModel : ViewModelBase
                     StartElement(KeyerState.SendingDah);
                 }
             }
-            else
+            else if (_keyerState != KeyerState.Idle)
             {
-                // Keyer is already running - just update latches
-                // Latches remember that a paddle was pressed during the current element
-                if (leftPaddle)
+                // Keyer is running - update latches for newly pressed paddles
+                // A paddle is "newly pressed" if it wasn't already pressed at element start
+                if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
                     if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[UpdateIambicKeyer] Setting DIT latch (keyer running)");
+                        Console.WriteLine($"[UpdateIambicKeyer] Setting DIT latch (newly pressed)");
                 }
-                if (rightPaddle)
+                if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
                     if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[UpdateIambicKeyer] Setting DAH latch (keyer running)");
+                        Console.WriteLine($"[UpdateIambicKeyer] Setting DAH latch (newly pressed)");
                 }
             }
         }
@@ -1026,9 +1028,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         bool isDit = (elementState == KeyerState.SendingDit);
         if (DebugFlags.DEBUG_KEYER)
-            Console.WriteLine($"[StartElement] Starting {(isDit ? "dit" : "dah")} - clearing latches");
+            Console.WriteLine($"[StartElement] Starting {(isDit ? "dit" : "dah")} - recording paddle states and clearing latches");
 
-        // Clear latches - we'll track new paddle presses during this element
+        // Record which paddles are currently pressed at element start
+        _ditPaddleAtStart = _currentLeftPaddleState;
+        _dahPaddleAtStart = _currentRightPaddleState;
+
+        // Clear latches - we'll track NEW paddle presses during this element
         _iambicDitLatched = false;
         _iambicDahLatched = false;
 
@@ -1078,12 +1084,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 KeyerState? nextState = null;
                 string reason = "";
 
-                // Priority 1: Check if opposite paddle is currently pressed (alternate)
-                if (_currentRightPaddleState)
+                // Priority 1: Check if opposite paddle is currently pressed OR was newly pressed (latch set)
+                if (_currentRightPaddleState || _iambicDahLatched)
                 {
-                    // Was sending dit, dah paddle currently pressed - alternate to dah
+                    // Was sending dit, dah paddle currently pressed or was newly pressed - alternate to dah
                     nextState = KeyerState.SendingDah;
-                    reason = "Priority1: was dit, dah pressed";
+                    reason = _currentRightPaddleState ? "Priority1: was dit, dah pressed" : "Priority1: was dit, dah latched (newly pressed)";
                 }
                 // Priority 2: Check if same paddle is still pressed (continue)
                 else if (_currentLeftPaddleState)
@@ -1092,12 +1098,12 @@ public partial class MainWindowViewModel : ViewModelBase
                     nextState = KeyerState.SendingDit;
                     reason = "Priority2: was dit, dit still pressed";
                 }
-                // Priority 3 (Mode B only): If latch was set but paddle now released, send one more opposite element
-                else if (IsIambicModeB && _iambicDahLatched && !_currentRightPaddleState)
+                // Priority 3 (Mode B only): If opposite paddle was held from start but now released, send one more
+                else if (IsIambicModeB && _dahPaddleAtStart && !_currentRightPaddleState)
                 {
-                    // Was sending dit, dah was pressed during element but now released - send one dah
+                    // Was sending dit, dah was held from start but now released - send one dah (Mode B only)
                     nextState = KeyerState.SendingDah;
-                    reason = "Priority3/ModeB: was dit, dah latched but released";
+                    reason = "Priority3/ModeB: was dit, dah held from start but released";
                 }
 
                 if (nextState.HasValue)
@@ -1122,12 +1128,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 KeyerState? nextState = null;
                 string reason = "";
 
-                // Priority 1: Check if opposite paddle is currently pressed (alternate)
-                if (_currentLeftPaddleState)
+                // Priority 1: Check if opposite paddle is currently pressed OR was newly pressed (latch set)
+                if (_currentLeftPaddleState || _iambicDitLatched)
                 {
-                    // Was sending dah, dit paddle currently pressed - alternate to dit
+                    // Was sending dah, dit paddle currently pressed or was newly pressed - alternate to dit
                     nextState = KeyerState.SendingDit;
-                    reason = "Priority1: was dah, dit pressed";
+                    reason = _currentLeftPaddleState ? "Priority1: was dah, dit pressed" : "Priority1: was dah, dit latched (newly pressed)";
                 }
                 // Priority 2: Check if same paddle is still pressed (continue)
                 else if (_currentRightPaddleState)
@@ -1136,12 +1142,12 @@ public partial class MainWindowViewModel : ViewModelBase
                     nextState = KeyerState.SendingDah;
                     reason = "Priority2: was dah, dah still pressed";
                 }
-                // Priority 3 (Mode B only): If latch was set but paddle now released, send one more opposite element
-                else if (IsIambicModeB && _iambicDitLatched && !_currentLeftPaddleState)
+                // Priority 3 (Mode B only): If opposite paddle was held from start but now released, send one more
+                else if (IsIambicModeB && _ditPaddleAtStart && !_currentLeftPaddleState)
                 {
-                    // Was sending dah, dit was pressed during element but now released - send one dit
+                    // Was sending dah, dit was held from start but now released - send one dit (Mode B only)
                     nextState = KeyerState.SendingDit;
-                    reason = "Priority3/ModeB: was dah, dit latched but released";
+                    reason = "Priority3/ModeB: was dah, dit held from start but released";
                 }
 
                 if (nextState.HasValue)
@@ -1185,6 +1191,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _keyerState = KeyerState.Idle;
             _iambicDitLatched = false;
             _iambicDahLatched = false;
+            _ditPaddleAtStart = false;
+            _dahPaddleAtStart = false;
         }
     }
 
