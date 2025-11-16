@@ -1544,14 +1544,14 @@ public partial class MainWindowViewModel : ViewModelBase
                             };
 
                             // Check if already in list
-                            // var existing = RadioClientSelections.FirstOrDefault(s =>
-                            //     s.Radio?.Serial == radio.Serial &&
-                            //     s.GuiClient?.Station == guiClient.Station);
-                            //
-                            // if (existing == null)
-                            // {
+                            var existing = RadioClientSelections.FirstOrDefault(s =>
+                                s.Radio?.Serial == radio.Serial &&
+                                s.GuiClient?.Station == guiClient.Station);
+
+                            if (existing == null)
+                            {
                                 RadioClientSelections.Add(selection);
-                            // }
+                            }
                         }
                     }
                     else
