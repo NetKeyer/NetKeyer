@@ -60,11 +60,11 @@
                         <StackPanel Spacing="3">
                             <TextBlock Text="Input Type:" FontSize="12"/>
                             <StackPanel Orientation="Horizontal" Spacing="15">
-                                <RadioButton Content="Serial Port (HaliKey)"
+                                <RadioButton Content="Serial Port (HaliKey v1)"
                                              GroupName="InputType"
                                              IsChecked="{Binding IsSerialInput}"
                                              Padding="2"/>
-                                <RadioButton Content="MIDI Device"
+                                <RadioButton Content="MIDI (HaliKey MIDI, CTR2)"
                                              GroupName="InputType"
                                              IsChecked="{Binding IsMidiInput}"
                                              Padding="2"/>
@@ -73,13 +73,6 @@
 
                         <!-- Serial Port Settings -->
                         <StackPanel Spacing="6" IsVisible="{Binding IsSerialInput}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="HaliKey Version:" VerticalAlignment="Center" Width="110"/>
-                                <ComboBox ItemsSource="{Binding HaliKeyVersions}"
-                                          SelectedItem="{Binding SelectedHaliKeyVersion}"
-                                          Width="140"/>
-                            </StackPanel>
-
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock Text="Port:" VerticalAlignment="Center" Width="110"/>
                                 <ComboBox ItemsSource="{Binding SerialPorts}"
