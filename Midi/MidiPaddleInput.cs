@@ -95,11 +95,11 @@ namespace NetKeyer.Midi
             byte note = data[1];
             byte velocity = data[2];
 
-            if (messageType == NOTE_ON && velocity > 0)
+            if (messageType == NOTE_ON)
             {
                 HandleNoteEvent(note, true);
             }
-            else if (messageType == NOTE_OFF || (messageType == NOTE_ON && velocity == 0))
+            else if (messageType == NOTE_OFF)
             {
                 HandleNoteEvent(note, false);
             }
