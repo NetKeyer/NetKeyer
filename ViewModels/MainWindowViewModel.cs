@@ -1583,6 +1583,25 @@ public partial class MainWindowViewModel : ViewModelBase
                     RadioClientSelections.Remove(placeholder);
                 }
             }
+
+            // Restore previously selected radio/client if it's a SmartLink radio
+            // (and not already selected)
+            if (SelectedRadioClient == null || SelectedRadioClient.Radio == null)
+            {
+                if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedRadioSerial))
+                {
+                    _loadingSettings = true;
+                    var savedSelection = RadioClientSelections.FirstOrDefault(s =>
+                        s.Radio?.Serial == _settings.SelectedRadioSerial &&
+                        s.GuiClient?.Station == _settings.SelectedGuiClientStation);
+
+                    if (savedSelection != null)
+                    {
+                        SelectedRadioClient = savedSelection;
+                    }
+                    _loadingSettings = false;
+                }
+            }
         });
     }
 
