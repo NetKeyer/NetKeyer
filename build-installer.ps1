@@ -29,6 +29,8 @@ if (-not $vpkInstalled) {
 # Step 2: Clean previous builds
 Write-Host "`n[2/5] Cleaning previous builds..." -ForegroundColor Yellow
 dotnet clean -c Release
+# Remove all obj and bin directories to prevent cross-platform build contamination
+Get-ChildItem -Path . -Include "obj","bin" -Recurse -Directory -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path . -Filter "publish-*" -Directory | Remove-Item -Recurse -Force
 if (Test-Path "Releases") { Remove-Item -Recurse -Force "Releases" }
 

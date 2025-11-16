@@ -44,6 +44,10 @@
     <ProjectReference Include="FlexLib\FlexLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="obj\**\*.cs" />
+  </ItemGroup>
+
   <!-- Copy OpenAL native DLLs to output directory -->
   <Target Name="CopyOpenALNative" AfterTargets="Build;Publish">
     <PropertyGroup>
