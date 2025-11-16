@@ -25,6 +25,8 @@ fi
 # Step 2: Clean previous builds
 echo -e "\n\033[1;33m[2/5] Cleaning previous builds...\033[0m"
 dotnet clean -c Release
+# Remove all obj and bin directories to prevent cross-platform build contamination
+find . -type d \( -name "obj" -o -name "bin" \) -exec rm -rf {} + 2>/dev/null || true
 rm -rf publish-* Releases
 
 # Function to build for a specific platform
