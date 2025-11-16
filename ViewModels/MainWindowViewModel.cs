@@ -587,13 +587,22 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void MidiInput_PaddleStateChanged(object sender, PaddleStateChangedEventArgs e)
     {
+        bool leftPaddleState = e.LeftPaddle;
+        bool rightPaddleState = e.RightPaddle;
+
+        // Apply swap if enabled
+        if (SwapPaddles)
+        {
+            (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
+        }
+
         // Update indicators
         Dispatcher.UIThread.Post(() =>
         {
-            LeftPaddleIndicatorColor = e.LeftPaddle ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = e.LeftPaddle ? "ON" : "OFF";
-            RightPaddleIndicatorColor = e.RightPaddle ? Brushes.LimeGreen : Brushes.Black;
-            RightPaddleStateText = e.RightPaddle ? "ON" : "OFF";
+            LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
+            RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
+            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
 
         // Handle keying based on mode
@@ -602,22 +611,22 @@ public partial class MainWindowViewModel : ViewModelBase
             if (IsIambicMode)
             {
                 // Iambic mode - call keyer logic
-                UpdateIambicKeyer(e.LeftPaddle, e.RightPaddle);
+                UpdateIambicKeyer(leftPaddleState, rightPaddleState);
             }
             else
             {
                 // Straight key mode - left paddle directly controls CW key
-                if (e.LeftPaddle != _previousLeftPaddleState)
+                if (leftPaddleState != _previousLeftPaddleState)
                 {
                     string timestamp = GetTimestamp();
-                    _connectedRadio.CWKey(e.LeftPaddle, timestamp, _boundGuiClientHandle);
+                    _connectedRadio.CWKey(leftPaddleState, timestamp, _boundGuiClientHandle);
                 }
             }
         }
 
         // Update previous states
-        _previousLeftPaddleState = e.LeftPaddle;
-        _previousRightPaddleState = e.RightPaddle;
+        _previousLeftPaddleState = leftPaddleState;
+        _previousRightPaddleState = rightPaddleState;
     }
 
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
@@ -691,6 +700,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 // RI state is tracked via the Ring event toggling _riState
                 leftPaddleState = _riState;
                 rightPaddleState = _serialPort.CDHolding;
+            }
+
+            // Apply swap if enabled
+            if (SwapPaddles)
+            {
+                (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
             }
 
             // Update left paddle indicator
