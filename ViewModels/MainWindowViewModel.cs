@@ -1458,11 +1458,20 @@ public partial class MainWindowViewModel : ViewModelBase
                     SmartLinkStatus = "Authenticated";
                     SmartLinkButtonText = "Logout from SmartLink";
 
-                    // Save refresh token
-                    var refreshToken = _smartLinkAuth.GetRefreshToken();
-                    if (!string.IsNullOrEmpty(refreshToken))
+                    // Save refresh token only if Remember Me is enabled
+                    if (_settings.RememberMeSmartLink)
                     {
-                        _settings.SmartLinkRefreshToken = refreshToken;
+                        var refreshToken = _smartLinkAuth.GetRefreshToken();
+                        if (!string.IsNullOrEmpty(refreshToken))
+                        {
+                            _settings.SmartLinkRefreshToken = refreshToken;
+                            _settings.Save();
+                        }
+                    }
+                    else
+                    {
+                        // Clear any existing refresh token if Remember Me is disabled
+                        _settings.SmartLinkRefreshToken = null;
                         _settings.Save();
                     }
                     break;
@@ -1641,6 +1650,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var loginDialog = new Views.SmartLinkLoginDialog();
 
+        // Set the Remember Me checkbox to the current setting value
+        loginDialog.SetRememberMe(_settings.RememberMeSmartLink);
+
         // Get the main window
         var mainWindow = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
@@ -1656,6 +1668,10 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var username = loginDialog.Username;
             var password = loginDialog.Password;
+
+            // Update and save the Remember Me preference
+            _settings.RememberMeSmartLink = loginDialog.RememberMe;
+            _settings.Save();
 
             // Attempt login
             SmartLinkStatus = "Authenticating...";
