@@ -4,7 +4,7 @@ using OpenTK.Audio.OpenAL;
 
 namespace NetKeyer.Audio
 {
-    public class SidetoneGenerator : IDisposable
+    public class SidetoneGenerator : ISidetoneGenerator
     {
         private ALDevice _device;
         private ALContext _context;
@@ -50,6 +50,10 @@ namespace NetKeyer.Audio
                 // Set source properties for low latency
                 AL.Source(_source, ALSourcef.Gain, _volume);
                 AL.Source(_source, ALSourceb.Looping, true);
+
+                // Pre-generate and upload default frequency buffer for instant first-press response
+                short[] samples = GetOrGenerateBuffer(_frequency);
+                AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
             }
             catch (Exception ex)
             {
@@ -66,11 +70,27 @@ namespace NetKeyer.Audio
 
             _frequency = frequencyHz;
 
-            // If currently playing, restart with new frequency
-            if (_isPlaying)
+            // Pre-generate and upload buffer immediately to eliminate first-press delay
+            if (_buffer != 0)
             {
-                Stop();
-                Start();
+                short[] samples = GetOrGenerateBuffer(_frequency);
+
+                // If currently playing, must detach buffer before updating
+                if (_isPlaying)
+                {
+                    AL.SourceStop(_source);
+                    AL.Source(_source, ALSourcei.Buffer, 0);
+                }
+
+                // Upload new frequency data
+                AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
+
+                // If was playing, restart
+                if (_isPlaying)
+                {
+                    AL.Source(_source, ALSourcei.Buffer, _buffer);
+                    AL.SourcePlay(_source);
+                }
             }
         }
 
@@ -141,13 +161,8 @@ namespace NetKeyer.Audio
 
             try
             {
-                // Get pre-generated or cached buffer for the current frequency
-                short[] samples = GetOrGenerateBuffer(_frequency);
-
-                // Upload buffer data
-                AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
-
-                // Attach buffer to source and play
+                // Buffer is already pre-generated and uploaded by SetFrequency
+                // Just attach buffer to source and play
                 AL.Source(_source, ALSourcei.Buffer, _buffer);
                 AL.SourcePlay(_source);
 
