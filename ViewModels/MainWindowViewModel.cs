@@ -155,7 +155,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private KeyerState _keyerState = KeyerState.Idle;
 
     // Sidetone generator
-    private SidetoneGenerator _sidetoneGenerator;
+    private ISidetoneGenerator _sidetoneGenerator;
 
     // SmartLink support
     private SmartLinkAuthService _smartLinkAuth;
@@ -204,10 +204,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // Calculate initial dit length from CW speed
         UpdateDitLength();
 
-        // Initialize sidetone generator
+        // Initialize sidetone generator (platform-specific)
         try
         {
-            _sidetoneGenerator = new SidetoneGenerator();
+            _sidetoneGenerator = SidetoneGeneratorFactory.Create();
             _sidetoneGenerator.SetFrequency(CwPitch);
             _sidetoneGenerator.SetVolume(SidetoneVolume);
         }

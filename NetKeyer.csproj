@@ -30,6 +30,7 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="managed-midi" Version="1.10.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="OpenAL.Soft" Version="1.23.1">
       <ExcludeAssets>native</ExcludeAssets>
     </PackageReference>
