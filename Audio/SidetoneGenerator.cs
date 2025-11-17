@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using OpenTK.Audio.OpenAL;
 
 namespace NetKeyer.Audio
@@ -12,8 +13,12 @@ namespace NetKeyer.Audio
         private bool _isPlaying;
         private int _frequency = 600; // Hz
         private float _volume = 0.5f; // 0.0 to 1.0
-        private const int SAMPLE_RATE = 44100;
+        private const int SAMPLE_RATE = 48000;
+        private const int TARGET_BUFFER_SIZE = 2048; // Target ~43ms of audio at 48kHz
         private bool _disposed;
+
+        // Cache pre-generated buffers for common frequencies to eliminate generation overhead
+        private Dictionary<int, short[]> _bufferCache = new Dictionary<int, short[]>();
 
         public SidetoneGenerator()
         {
@@ -27,6 +32,8 @@ namespace NetKeyer.Audio
                 }
 
                 // Create audio context
+                // Note: OpenTK's OpenAL doesn't expose low-latency context attributes,
+                // but the reduced buffer size and caching provide the main latency benefits
                 _context = ALC.CreateContext(_device, (int[])null);
                 if (_context == ALContext.Null)
                 {
@@ -78,6 +85,55 @@ namespace NetKeyer.Audio
             }
         }
 
+        private static int GCD(int a, int b)
+        {
+            while (b != 0)
+            {
+                int temp = b;
+                b = a % b;
+                a = temp;
+            }
+            return a;
+        }
+
+        private static int CalculateBufferSize(int frequency, int sampleRate, int targetSize)
+        {
+            // Calculate minimum buffer size for whole cycles: sampleRate / GCD(sampleRate, frequency)
+            // This ensures the buffer contains an exact number of cycles for seamless looping
+            int gcd = GCD(sampleRate, frequency);
+            int minBufferSize = sampleRate / gcd;
+
+            // Choose a multiple of minBufferSize close to our target
+            int cycles = Math.Max(1, (targetSize + minBufferSize / 2) / minBufferSize);
+            return cycles * minBufferSize;
+        }
+
+        private short[] GetOrGenerateBuffer(int frequency)
+        {
+            // Check if we already have this buffer cached
+            if (_bufferCache.TryGetValue(frequency, out short[] cachedBuffer))
+            {
+                return cachedBuffer;
+            }
+
+            // Calculate buffer size for whole cycles at this frequency
+            int bufferSize = CalculateBufferSize(frequency, SAMPLE_RATE, TARGET_BUFFER_SIZE);
+
+            // Generate new buffer
+            short[] samples = new short[bufferSize];
+            for (int i = 0; i < bufferSize; i++)
+            {
+                double t = (double)i / SAMPLE_RATE;
+                double sample = Math.Sin(2.0 * Math.PI * frequency * t);
+                samples[i] = (short)(sample * short.MaxValue * 0.5); // Scale to prevent clipping
+            }
+
+            // Cache for future use
+            _bufferCache[frequency] = samples;
+
+            return samples;
+        }
+
         public void Start()
         {
             if (_disposed || _isPlaying || _source == 0 || _buffer == 0)
@@ -85,16 +141,8 @@ namespace NetKeyer.Audio
 
             try
             {
-                // Generate one second of sine wave tone
-                int bufferSize = SAMPLE_RATE;
-                short[] samples = new short[bufferSize];
-
-                for (int i = 0; i < bufferSize; i++)
-                {
-                    double t = (double)i / SAMPLE_RATE;
-                    double sample = Math.Sin(2.0 * Math.PI * _frequency * t);
-                    samples[i] = (short)(sample * short.MaxValue * 0.5); // Scale to prevent clipping
-                }
+                // Get pre-generated or cached buffer for the current frequency
+                short[] samples = GetOrGenerateBuffer(_frequency);
 
                 // Upload buffer data
                 AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
@@ -119,6 +167,8 @@ namespace NetKeyer.Audio
             try
             {
                 AL.SourceStop(_source);
+                // Detach buffer from source to allow buffer data updates
+                AL.Source(_source, ALSourcei.Buffer, 0);
                 _isPlaying = false;
             }
             catch (Exception ex)
