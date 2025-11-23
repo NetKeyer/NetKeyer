@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using NAudio.CoreAudioApi;
 
 namespace NetKeyer.Audio
 {
     /// <summary>
     /// Windows-specific WASAPI sidetone generator for ultra-low latency audio output.
     /// Uses exclusive mode WASAPI with minimal buffering for ~3-5ms latency.
+    /// Automatically follows Windows default playback device changes.
     /// </summary>
     public class WasapiSidetoneGenerator : ISidetoneGenerator
     {
@@ -18,6 +20,8 @@ namespace NetKeyer.Audio
         private bool _isPlaying;
         private int _frequency = 600;
         private float _volume = 0.5f;
+        private MMDeviceEnumerator _deviceEnumerator;
+        private DeviceNotificationClient _notificationClient;
 
         // Use very low latency - 3ms at 48kHz
         private const int SAMPLE_RATE = 48000;
@@ -41,20 +45,69 @@ namespace NetKeyer.Audio
                     Volume = _volume
                 };
 
-                // Initialize WASAPI in shared mode with minimal latency
-                // Note: Exclusive mode would be even lower latency but may not be available
-                _wasapiOut = new WasapiOut(
-                    NAudio.CoreAudioApi.AudioClientShareMode.Shared,
-                    LATENCY_MS
-                );
+                // Set up device change monitoring
+                _deviceEnumerator = new MMDeviceEnumerator();
+                _notificationClient = new DeviceNotificationClient(OnDefaultDeviceChanged);
+                _deviceEnumerator.RegisterEndpointNotificationCallback(_notificationClient);
 
-                _wasapiOut.Init(_volumeProvider);
+                // Initialize WASAPI output
+                InitializeWasapiOut();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to initialize WASAPI audio: {ex.Message}");
                 Dispose();
                 throw;
+            }
+        }
+
+        private void InitializeWasapiOut()
+        {
+            // Initialize WASAPI in shared mode with minimal latency
+            // Note: Exclusive mode would be even lower latency but may not be available
+            _wasapiOut = new WasapiOut(
+                AudioClientShareMode.Shared,
+                LATENCY_MS
+            );
+
+            _wasapiOut.Init(_volumeProvider);
+        }
+
+        private void OnDefaultDeviceChanged()
+        {
+            if (_disposed)
+                return;
+
+            try
+            {
+                // Save current playing state
+                bool wasPlaying = _isPlaying;
+
+                // Stop and dispose old device
+                if (_wasapiOut != null)
+                {
+                    if (_isPlaying)
+                    {
+                        _wasapiOut.Stop();
+                        _isPlaying = false;
+                    }
+                    _wasapiOut.Dispose();
+                    _wasapiOut = null;
+                }
+
+                // Reinitialize with new default device
+                InitializeWasapiOut();
+
+                // Resume playback if we were playing
+                if (wasPlaying)
+                {
+                    _wasapiOut.Play();
+                    _isPlaying = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to switch to new default audio device: {ex.Message}");
             }
         }
 
@@ -118,7 +171,15 @@ namespace NetKeyer.Audio
             if (_disposed)
                 return;
 
+            _disposed = true;
+
             Stop();
+
+            // Unregister device change notifications
+            if (_deviceEnumerator != null && _notificationClient != null)
+            {
+                _deviceEnumerator.UnregisterEndpointNotificationCallback(_notificationClient);
+            }
 
             if (_wasapiOut != null)
             {
@@ -126,7 +187,39 @@ namespace NetKeyer.Audio
                 _wasapiOut = null;
             }
 
-            _disposed = true;
+            if (_deviceEnumerator != null)
+            {
+                _deviceEnumerator.Dispose();
+                _deviceEnumerator = null;
+            }
         }
+    }
+
+    /// <summary>
+    /// Notification client for monitoring Windows default audio device changes
+    /// </summary>
+    internal class DeviceNotificationClient : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
+    {
+        private readonly Action _onDefaultDeviceChanged;
+
+        public DeviceNotificationClient(Action onDefaultDeviceChanged)
+        {
+            _onDefaultDeviceChanged = onDefaultDeviceChanged;
+        }
+
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+        {
+            // Only respond to changes in the default playback device
+            if (flow == DataFlow.Render && role == Role.Multimedia)
+            {
+                _onDefaultDeviceChanged?.Invoke();
+            }
+        }
+
+        // These other events we don't need to handle
+        public void OnDeviceAdded(string pwstrDeviceId) { }
+        public void OnDeviceRemoved(string pwstrDeviceId) { }
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState) { }
+        public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }
 }
