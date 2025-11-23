@@ -112,9 +112,16 @@
                                         Padding="4"/>
                             </StackPanel>
 
-                            <TextBlock Text="Note: MIDI uses Note 20 (Left Paddle) and Note 21 (Right Paddle)"
-                                       FontSize="10"
-                                       Foreground="Gray"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="Configure MIDI Notes..."
+                                        Command="{Binding ConfigureMidiNotesCommand}"
+                                        Width="180"
+                                        Padding="4"/>
+                                <TextBlock Text="Configure which MIDI notes control paddles, straight key, and PTT"
+                                           FontSize="10"
+                                           Foreground="Gray"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>

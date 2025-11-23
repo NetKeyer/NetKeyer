@@ -2,13 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Commons.Music.Midi;
+using NetKeyer.Models;
 
 namespace NetKeyer.Midi
 {
     public class MidiPaddleInput : IDisposable
     {
-        private const int LEFT_PADDLE_NOTE = 20;
-        private const int RIGHT_PADDLE_NOTE = 21;
         private const byte NOTE_ON = 0x90;
         private const byte NOTE_OFF = 0x80;
         private const bool DEBUG_MIDI = false; // Set to true to enable MIDI debug logging
@@ -17,7 +16,11 @@ namespace NetKeyer.Midi
         private IMidiInput _inputPort;
         private bool _leftPaddleState = false;
         private bool _rightPaddleState = false;
+        private bool _straightKeyState = false;
+        private bool _pttState = false;
         private byte _lastStatusByte = 0; // Track last status byte for running status
+
+        private List<MidiNoteMapping> _noteMappings;
 
         public event EventHandler<PaddleStateChangedEventArgs> PaddleStateChanged;
 
@@ -35,9 +38,20 @@ namespace NetKeyer.Midi
             }
         }
 
+        public void SetNoteMappings(List<MidiNoteMapping> mappings)
+        {
+            _noteMappings = mappings ?? MidiNoteMapping.GetDefaultMappings();
+        }
+
         public void Open(string deviceName)
         {
             Close();
+
+            // Ensure we have note mappings
+            if (_noteMappings == null)
+            {
+                _noteMappings = MidiNoteMapping.GetDefaultMappings();
+            }
 
             try
             {
@@ -80,9 +94,11 @@ namespace NetKeyer.Midi
                 }
             }
 
-            // Reset paddle states and running status
+            // Reset all states and running status
             _leftPaddleState = false;
             _rightPaddleState = false;
+            _straightKeyState = false;
+            _pttState = false;
             _lastStatusByte = 0;
         }
 
@@ -183,28 +199,46 @@ namespace NetKeyer.Midi
             if (DEBUG_MIDI)
                 Console.WriteLine($"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
 
-            if (noteNumber == LEFT_PADDLE_NOTE)
+            // Find all mappings for this note
+            var mapping = _noteMappings?.FirstOrDefault(m => m.NoteNumber == noteNumber);
+            if (mapping == null)
             {
-                // Handle note OFF when we didn't see note ON - this means the paddle
-                // was pressed while the other paddle was already held (MIDI device limitation)
+                if (DEBUG_MIDI)
+                    Console.WriteLine($"[MIDI] Ignoring unmapped note {noteNumber}");
+                return;
+            }
+
+            bool stateChanged = false;
+
+            // Update states based on mapped functions
+            if (mapping.HasFunction(MidiNoteFunction.LeftPaddle))
+            {
+                // Handle note OFF when we didn't see note ON
                 if (!isOn && !_leftPaddleState)
                 {
                     if (DEBUG_MIDI)
                         Console.WriteLine($"[MIDI] Left paddle OFF without ON - treating as brief press/release");
-                    // Fire event for both ON and OFF to simulate the missed press
                     _leftPaddleState = true;
+                    stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                     {
                         LeftPaddle = _leftPaddleState,
-                        RightPaddle = _rightPaddleState
+                        RightPaddle = _rightPaddleState,
+                        StraightKey = _straightKeyState,
+                        PTT = _pttState
                     });
                 }
 
-                _leftPaddleState = isOn;
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] Left paddle -> {isOn}");
+                if (_leftPaddleState != isOn)
+                {
+                    _leftPaddleState = isOn;
+                    stateChanged = true;
+                    if (DEBUG_MIDI)
+                        Console.WriteLine($"[MIDI] Left paddle -> {isOn}");
+                }
             }
-            else if (noteNumber == RIGHT_PADDLE_NOTE)
+
+            if (mapping.HasFunction(MidiNoteFunction.RightPaddle))
             {
                 // Handle note OFF when we didn't see note ON
                 if (!isOn && !_rightPaddleState)
@@ -212,31 +246,60 @@ namespace NetKeyer.Midi
                     if (DEBUG_MIDI)
                         Console.WriteLine($"[MIDI] Right paddle OFF without ON - treating as brief press/release");
                     _rightPaddleState = true;
+                    stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                     {
                         LeftPaddle = _leftPaddleState,
-                        RightPaddle = _rightPaddleState
+                        RightPaddle = _rightPaddleState,
+                        StraightKey = _straightKeyState,
+                        PTT = _pttState
                     });
                 }
 
-                _rightPaddleState = isOn;
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] Right paddle -> {isOn}");
-            }
-            else
-            {
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] Ignoring unknown note {noteNumber}");
-                return; // Don't fire event for unknown notes
+                if (_rightPaddleState != isOn)
+                {
+                    _rightPaddleState = isOn;
+                    stateChanged = true;
+                    if (DEBUG_MIDI)
+                        Console.WriteLine($"[MIDI] Right paddle -> {isOn}");
+                }
             }
 
-            if (DEBUG_MIDI)
-                Console.WriteLine($"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState}");
-            PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
+            if (mapping.HasFunction(MidiNoteFunction.StraightKey))
             {
-                LeftPaddle = _leftPaddleState,
-                RightPaddle = _rightPaddleState
-            });
+                if (_straightKeyState != isOn)
+                {
+                    _straightKeyState = isOn;
+                    stateChanged = true;
+                    if (DEBUG_MIDI)
+                        Console.WriteLine($"[MIDI] Straight key -> {isOn}");
+                }
+            }
+
+            if (mapping.HasFunction(MidiNoteFunction.PTT))
+            {
+                if (_pttState != isOn)
+                {
+                    _pttState = isOn;
+                    stateChanged = true;
+                    if (DEBUG_MIDI)
+                        Console.WriteLine($"[MIDI] PTT -> {isOn}");
+                }
+            }
+
+            // Fire event if any state changed
+            if (stateChanged)
+            {
+                if (DEBUG_MIDI)
+                    Console.WriteLine($"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
+                PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
+                {
+                    LeftPaddle = _leftPaddleState,
+                    RightPaddle = _rightPaddleState,
+                    StraightKey = _straightKeyState,
+                    PTT = _pttState
+                });
+            }
         }
 
         public void Dispose()
@@ -249,5 +312,7 @@ namespace NetKeyer.Midi
     {
         public bool LeftPaddle { get; set; }
         public bool RightPaddle { get; set; }
+        public bool StraightKey { get; set; }
+        public bool PTT { get; set; }
     }
 }
