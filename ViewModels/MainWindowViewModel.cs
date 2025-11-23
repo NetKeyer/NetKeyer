@@ -135,6 +135,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private MidiPaddleInput _midiInput;
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
+    private bool _previousStraightKeyState = false;
+    private bool _previousPttState = false;
     private uint _boundGuiClientHandle = 0;
     private bool _updatingFromRadio = false; // Prevent feedback loops
     private UserSettings _settings;
@@ -467,6 +469,38 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private async Task ConfigureMidiNotes()
+    {
+        var dialog = new Views.MidiConfigDialog();
+
+        // Load current mappings
+        dialog.LoadMappings(_settings.MidiNoteMappings);
+
+        // Get the main window
+        var mainWindow = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
+        if (mainWindow == null)
+        {
+            return;
+        }
+
+        await dialog.ShowDialog(mainWindow);
+
+        if (dialog.ConfigurationSaved)
+        {
+            // Save the new mappings
+            _settings.MidiNoteMappings = dialog.Mappings;
+            _settings.Save();
+
+            // Update the MIDI input if it's currently open
+            if (_midiInput != null)
+            {
+                _midiInput.SetNoteMappings(_settings.MidiNoteMappings);
+            }
+        }
+    }
+
     private void CloseSerialPort()
     {
         if (_serialPort != null)
@@ -570,6 +604,7 @@ public partial class MainWindowViewModel : ViewModelBase
             try
             {
                 _midiInput = new MidiPaddleInput();
+                _midiInput.SetNoteMappings(_settings.MidiNoteMappings);
                 _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
                 _midiInput.Open(SelectedMidiDevice);
 
@@ -591,11 +626,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         bool leftPaddleState = e.LeftPaddle;
         bool rightPaddleState = e.RightPaddle;
+        bool straightKeyState = e.StraightKey;
+        bool pttState = e.PTT;
 
         if (DebugFlags.DEBUG_MIDI_HANDLER)
-            Console.WriteLine($"[MidiInput_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState}");
+            Console.WriteLine($"[MidiInput_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
 
-        // Apply swap if enabled
+        // Apply swap if enabled (only affects paddles, not straight key)
         if (SwapPaddles)
         {
             (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
@@ -619,13 +656,18 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 if (DebugFlags.DEBUG_MIDI_HANDLER)
                     Console.WriteLine($"[MidiInput_PaddleStateChanged] Calling UpdateIambicKeyer with L={leftPaddleState} R={rightPaddleState}");
-                // Iambic mode - call keyer logic
+                // Iambic mode - use paddle inputs
                 UpdateIambicKeyer(leftPaddleState, rightPaddleState);
             }
             else
             {
-                // Straight key mode - left paddle directly controls CW key
-                if (leftPaddleState != _previousLeftPaddleState)
+                // Straight key mode - use dedicated straight key input if changed,
+                // otherwise fall back to left paddle (for backward compatibility)
+                if (straightKeyState != _previousStraightKeyState)
+                {
+                    SendCWKey(straightKeyState);
+                }
+                else if (leftPaddleState != _previousLeftPaddleState)
                 {
                     SendCWKey(leftPaddleState);
                 }
@@ -640,6 +682,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update previous states
         _previousLeftPaddleState = leftPaddleState;
         _previousRightPaddleState = rightPaddleState;
+        _previousStraightKeyState = straightKeyState;
+        _previousPttState = pttState;
+
+        // Note: PTT state is tracked but not yet implemented
     }
 
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
