@@ -1,9 +1,10 @@
 #!/usr/bin/env pwsh
 # Build script for creating NetKeyer cross-platform installers with Velopack
-# Usage: ./build-installer.ps1 -Version "1.0.0" [-Platform "all|windows|linux"]
+# Usage: ./build-installer.ps1 -Version "1.0.0" [-Platform "all|windows|linux"] [-AzureSignMetadata "path/to/metadata.json"]
 # Examples:
 #   ./build-installer.ps1 -Version "1.0.0"                    # Build all platforms
 #   ./build-installer.ps1 -Version "1.0.0" -Platform windows  # Build Windows only
+#   ./build-installer.ps1 -Version "1.0.0" -Platform windows -AzureSignMetadata "azure-signing.json"  # Build and sign with Azure
 
 param(
     [Parameter(Mandatory=$true)]
@@ -11,7 +12,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("all", "windows", "linux", "macos")]
-    [string]$Platform = "all"
+    [string]$Platform = "all",
+
+    [Parameter(Mandatory=$false)]
+    [string]$AzureSignMetadata = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,28 +73,59 @@ function Build-Platform {
     if ($VpkTarget -eq "windows") {
         # Windows - use normal pack command when on Windows, or [win] directive for cross-compilation
         if ($IsWindows -or ($PSVersionTable.Platform -eq $null)) {
-            vpk pack `
-                --packId "NetKeyer" `
-                --packVersion $Version `
-                --packDir "publish-$PlatformName" `
-                --mainExe $MainExe `
-                --packTitle "NetKeyer" `
-                --packAuthors "NetKeyer Contributors" `
-                --runtime $RuntimeId `
-                --channel $Channel `
-                --outputDir "Releases/$PlatformName"
+            # Check if Azure signing is enabled
+            if ($AzureSignMetadata -and (Test-Path $AzureSignMetadata)) {
+                Write-Host "Using Azure Trusted Signing with metadata file: $AzureSignMetadata" -ForegroundColor Cyan
+                vpk pack `
+                    --packId "NetKeyer" `
+                    --packVersion $Version `
+                    --packDir "publish-$PlatformName" `
+                    --mainExe $MainExe `
+                    --packTitle "NetKeyer" `
+                    --packAuthors "NetKeyer Contributors" `
+                    --runtime $RuntimeId `
+                    --channel $Channel `
+                    --outputDir "Releases/$PlatformName" `
+                    --azureTrustedSignFile $AzureSignMetadata
+            } else {
+                vpk pack `
+                    --packId "NetKeyer" `
+                    --packVersion $Version `
+                    --packDir "publish-$PlatformName" `
+                    --mainExe $MainExe `
+                    --packTitle "NetKeyer" `
+                    --packAuthors "NetKeyer Contributors" `
+                    --runtime $RuntimeId `
+                    --channel $Channel `
+                    --outputDir "Releases/$PlatformName"
+            }
         } else {
             # Cross-compile from Linux/Mac
-            vpk "[win]" pack `
-                --packId "NetKeyer" `
-                --packVersion $Version `
-                --packDir "publish-$PlatformName" `
-                --mainExe $MainExe `
-                --packTitle "NetKeyer" `
-                --packAuthors "NetKeyer Contributors" `
-                --runtime $RuntimeId `
-                --channel $Channel `
-                --outputDir "Releases/$PlatformName"
+            if ($AzureSignMetadata -and (Test-Path $AzureSignMetadata)) {
+                Write-Host "Using Azure Trusted Signing with metadata file: $AzureSignMetadata" -ForegroundColor Cyan
+                vpk "[win]" pack `
+                    --packId "NetKeyer" `
+                    --packVersion $Version `
+                    --packDir "publish-$PlatformName" `
+                    --mainExe $MainExe `
+                    --packTitle "NetKeyer" `
+                    --packAuthors "NetKeyer Contributors" `
+                    --runtime $RuntimeId `
+                    --channel $Channel `
+                    --outputDir "Releases/$PlatformName" `
+                    --azureTrustedSignFile $AzureSignMetadata
+            } else {
+                vpk "[win]" pack `
+                    --packId "NetKeyer" `
+                    --packVersion $Version `
+                    --packDir "publish-$PlatformName" `
+                    --mainExe $MainExe `
+                    --packTitle "NetKeyer" `
+                    --packAuthors "NetKeyer Contributors" `
+                    --runtime $RuntimeId `
+                    --channel $Channel `
+                    --outputDir "Releases/$PlatformName"
+            }
         }
     } else {
         # Linux/macOS uses regular pack command
