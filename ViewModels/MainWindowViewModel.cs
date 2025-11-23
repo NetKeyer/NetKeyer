@@ -143,6 +143,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private UserSettings _settings;
     private bool _loadingSettings = false; // Prevent saving while loading
     private bool _isTransmitModeCW = true; // Track if transmit slice is in CW mode
+    private bool _isSidetoneOnlyMode = false; // Track if we're in sidetone-only mode (no radio)
 
     // Iambic keyer state
     private Timer _iambicTimer;
@@ -289,11 +290,21 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private const string SIDETONE_ONLY_OPTION = "No radio (sidetone only)";
+
     [RelayCommand]
     private void RefreshRadios()
     {
         // Clear current list
         RadioClientSelections.Clear();
+
+        // Always add sidetone-only option first
+        RadioClientSelections.Add(new RadioClientSelection
+        {
+            Radio = null,
+            GuiClient = null,
+            DisplayName = SIDETONE_ONLY_OPTION
+        });
 
         // Get discovered radios from FlexLib (local LAN radios)
         foreach (var radio in API.RadioList)
@@ -333,16 +344,6 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // The WanRadioRadioListRecieved event handler will add SmartLink radios to the list
             // Note: This happens automatically when WanServer is connected
-        }
-
-        if (RadioClientSelections.Count == 0)
-        {
-            RadioClientSelections.Add(new RadioClientSelection
-            {
-                Radio = null,
-                GuiClient = null,
-                DisplayName = "No radios found"
-            });
         }
 
         // Restore previously selected radio/client if available
@@ -652,6 +653,7 @@ public partial class MainWindowViewModel : ViewModelBase
         });
 
         // Handle keying based on mode and transmit slice mode
+        // In sidetone-only mode, _connectedRadio is null but we still want to key locally
         if (_connectedRadio != null && _boundGuiClientHandle != 0)
         {
             if (_isTransmitModeCW)
@@ -686,6 +688,26 @@ public partial class MainWindowViewModel : ViewModelBase
                     if (DebugFlags.DEBUG_MIDI_HANDLER)
                         Console.WriteLine($"[MidiInput_PaddleStateChanged] Non-CW mode - sending PTT={pttState}");
                     SendPTT(pttState);
+                }
+            }
+        }
+        else if (_isSidetoneOnlyMode)
+        {
+            // Sidetone-only mode - still run keyer logic, just no radio commands
+            if (IsIambicMode)
+            {
+                UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+            }
+            else
+            {
+                // Straight key mode
+                if (straightKeyState != _previousStraightKeyState)
+                {
+                    SendCWKey(straightKeyState);
+                }
+                else if (leftPaddleState != _previousLeftPaddleState)
+                {
+                    SendCWKey(leftPaddleState);
                 }
             }
         }
@@ -783,6 +805,22 @@ public partial class MainWindowViewModel : ViewModelBase
                     }
                 }
             }
+            else if (_isSidetoneOnlyMode)
+            {
+                // Sidetone-only mode - still run keyer logic, just no radio commands
+                if (IsIambicMode)
+                {
+                    UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+                }
+                else
+                {
+                    // Straight key mode
+                    if (leftPaddleState != _previousLeftPaddleState)
+                    {
+                        SendCWKey(leftPaddleState);
+                    }
+                }
+            }
 
             // Update previous states
             _previousLeftPaddleState = leftPaddleState;
@@ -802,9 +840,26 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleConnection()
     {
-        if (_connectedRadio == null)
+        if (_connectedRadio == null && !_isSidetoneOnlyMode)
         {
-            // Connect
+            // Check if sidetone-only mode is selected
+            if (SelectedRadioClient != null && SelectedRadioClient.DisplayName == SIDETONE_ONLY_OPTION)
+            {
+                // Sidetone-only mode - no radio connection
+                _isSidetoneOnlyMode = true;
+                _connectedRadio = null;
+                ConnectButtonText = "Disconnect";
+                HasRadioError = false;
+
+                // Open the selected input device
+                OpenInputDevice();
+
+                // Switch to operating page
+                CurrentPage = PageType.Operating;
+                return;
+            }
+
+            // Connect to real radio
             if (SelectedRadioClient == null || SelectedRadioClient.Radio == null)
             {
                 RadioStatus = "No radio/client selected";
@@ -950,17 +1005,19 @@ public partial class MainWindowViewModel : ViewModelBase
                     _monitoredTransmitSlice.PropertyChanged -= TransmitSlice_PropertyChanged;
                     _monitoredTransmitSlice = null;
                 }
+
+                _connectedRadio.Disconnect();
+                _connectedRadio = null;
             }
 
             // Close input devices
             CloseSerialPort();
             CloseMidiDevice();
 
-            _connectedRadio.Disconnect();
-            _connectedRadio = null;
             _boundGuiClientHandle = 0;
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
+            _isSidetoneOnlyMode = false;
 
             // Clear any error status on manual disconnect
             HasRadioError = false;
@@ -1770,16 +1827,6 @@ public partial class MainWindowViewModel : ViewModelBase
                             RadioClientSelections.Add(selection);
                         }
                     }
-                }
-            }
-
-            // Remove "No radios found" placeholder if we have radios now
-            if (RadioClientSelections.Any(r => r.Radio != null))
-            {
-                var placeholder = RadioClientSelections.FirstOrDefault(r => r.Radio == null);
-                if (placeholder != null)
-                {
-                    RadioClientSelections.Remove(placeholder);
                 }
             }
 
