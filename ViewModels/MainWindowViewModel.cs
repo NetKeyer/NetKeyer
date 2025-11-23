@@ -28,6 +28,7 @@ file static class DebugFlags
 {
     public const bool DEBUG_KEYER = false; // Set to true to enable iambic keyer debug logging
     public const bool DEBUG_MIDI_HANDLER = false; // Set to true to enable MIDI handler debug logging
+    public const bool DEBUG_SLICE_MODE = false; // Set to true to enable transmit slice mode debug logging
 }
 
 public enum PageType
@@ -141,6 +142,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _updatingFromRadio = false; // Prevent feedback loops
     private UserSettings _settings;
     private bool _loadingSettings = false; // Prevent saving while loading
+    private bool _isTransmitModeCW = true; // Track if transmit slice is in CW mode
 
     // Iambic keyer state
     private Timer _iambicTimer;
@@ -649,27 +651,41 @@ public partial class MainWindowViewModel : ViewModelBase
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
 
-        // Handle keying based on mode
+        // Handle keying based on mode and transmit slice mode
         if (_connectedRadio != null && _boundGuiClientHandle != 0)
         {
-            if (IsIambicMode)
+            if (_isTransmitModeCW)
             {
-                if (DebugFlags.DEBUG_MIDI_HANDLER)
-                    Console.WriteLine($"[MidiInput_PaddleStateChanged] Calling UpdateIambicKeyer with L={leftPaddleState} R={rightPaddleState}");
-                // Iambic mode - use paddle inputs
-                UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+                // CW mode - use paddle/straight key keying
+                if (IsIambicMode)
+                {
+                    if (DebugFlags.DEBUG_MIDI_HANDLER)
+                        Console.WriteLine($"[MidiInput_PaddleStateChanged] CW/Iambic - calling UpdateIambicKeyer with L={leftPaddleState} R={rightPaddleState}");
+                    // Iambic mode - use paddle inputs
+                    UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+                }
+                else
+                {
+                    // Straight key mode - use dedicated straight key input if changed,
+                    // otherwise fall back to left paddle (for backward compatibility)
+                    if (straightKeyState != _previousStraightKeyState)
+                    {
+                        SendCWKey(straightKeyState);
+                    }
+                    else if (leftPaddleState != _previousLeftPaddleState)
+                    {
+                        SendCWKey(leftPaddleState);
+                    }
+                }
             }
             else
             {
-                // Straight key mode - use dedicated straight key input if changed,
-                // otherwise fall back to left paddle (for backward compatibility)
-                if (straightKeyState != _previousStraightKeyState)
+                // Non-CW mode - use PTT keying
+                if (pttState != _previousPttState)
                 {
-                    SendCWKey(straightKeyState);
-                }
-                else if (leftPaddleState != _previousLeftPaddleState)
-                {
-                    SendCWKey(leftPaddleState);
+                    if (DebugFlags.DEBUG_MIDI_HANDLER)
+                        Console.WriteLine($"[MidiInput_PaddleStateChanged] Non-CW mode - sending PTT={pttState}");
+                    SendPTT(pttState);
                 }
             }
         }
@@ -684,8 +700,6 @@ public partial class MainWindowViewModel : ViewModelBase
         _previousRightPaddleState = rightPaddleState;
         _previousStraightKeyState = straightKeyState;
         _previousPttState = pttState;
-
-        // Note: PTT state is tracked but not yet implemented
     }
 
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
@@ -737,20 +751,35 @@ public partial class MainWindowViewModel : ViewModelBase
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
 
-            // Handle keying based on mode
+            // Handle keying based on mode and transmit slice mode
             if (_connectedRadio != null && _boundGuiClientHandle != 0)
             {
-                if (IsIambicMode)
+                if (_isTransmitModeCW)
                 {
-                    // Iambic mode - call keyer logic
-                    UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+                    // CW mode - use paddle/straight key keying
+                    if (IsIambicMode)
+                    {
+                        // Iambic mode - call keyer logic
+                        UpdateIambicKeyer(leftPaddleState, rightPaddleState);
+                    }
+                    else
+                    {
+                        // Straight key mode - left paddle directly controls CW key
+                        if (leftPaddleState != _previousLeftPaddleState)
+                        {
+                            SendCWKey(leftPaddleState);
+                        }
+                    }
                 }
                 else
                 {
-                    // Straight key mode - left paddle directly controls CW key
-                    if (leftPaddleState != _previousLeftPaddleState)
+                    // Non-CW mode - either paddle triggers PTT
+                    bool pttState = leftPaddleState || rightPaddleState;
+                    bool previousPttState = _previousLeftPaddleState || _previousRightPaddleState;
+
+                    if (pttState != previousPttState)
                     {
-                        SendCWKey(leftPaddleState);
+                        SendPTT(pttState);
                     }
                 }
             }
@@ -893,6 +922,9 @@ public partial class MainWindowViewModel : ViewModelBase
             // Subscribe to radio property changes
             _connectedRadio.PropertyChanged += Radio_PropertyChanged;
 
+            // Subscribe to transmit slice property changes and update initial mode
+            SubscribeToTransmitSlice();
+
             // Apply initial CW settings
             ApplyCwSettings();
 
@@ -911,6 +943,13 @@ public partial class MainWindowViewModel : ViewModelBase
             if (_connectedRadio != null)
             {
                 _connectedRadio.PropertyChanged -= Radio_PropertyChanged;
+
+                // Unsubscribe from monitored transmit slice if present
+                if (_monitoredTransmitSlice != null)
+                {
+                    _monitoredTransmitSlice.PropertyChanged -= TransmitSlice_PropertyChanged;
+                    _monitoredTransmitSlice = null;
+                }
             }
 
             // Close input devices
@@ -1343,8 +1382,122 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private void SendPTT(bool state)
+    {
+        // PTT does not use sidetone
+
+        // Send to radio
+        if (_connectedRadio != null)
+        {
+            _connectedRadio.Mox = state;
+        }
+    }
+
+    private Slice _monitoredTransmitSlice = null;
+
+    private Slice FindOurTransmitSlice()
+    {
+        if (_connectedRadio == null || _boundGuiClientHandle == 0)
+            return null;
+
+        foreach (var slice in _connectedRadio.SliceList)
+        {
+            if (slice.IsTransmitSlice && slice.ClientHandle == _boundGuiClientHandle)
+                return slice;
+        }
+
+        return null;
+    }
+
+    private void UpdateTransmitSliceMode()
+    {
+        var txSlice = FindOurTransmitSlice();
+
+        if (txSlice != null)
+        {
+            string mode = txSlice.DemodMode?.ToUpper() ?? "USB";
+            bool wasCW = _isTransmitModeCW;
+            _isTransmitModeCW = (mode == "CW");
+
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] Slice {txSlice.Index} mode: {mode}, isCW: {_isTransmitModeCW}");
+
+            if (wasCW != _isTransmitModeCW)
+            {
+                if (DebugFlags.DEBUG_SLICE_MODE)
+                    Console.WriteLine($"[TransmitSliceMode] Mode changed from {(wasCW ? "CW" : "non-CW")} to {(_isTransmitModeCW ? "CW" : "non-CW")}");
+            }
+        }
+        else
+        {
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] No transmit slice for our client, defaulting to CW mode");
+            _isTransmitModeCW = true; // Default to CW mode if no transmit slice
+        }
+    }
+
+    private void SubscribeToTransmitSlice()
+    {
+        // Unsubscribe from old slice if present
+        if (_monitoredTransmitSlice != null)
+        {
+            _monitoredTransmitSlice.PropertyChanged -= TransmitSlice_PropertyChanged;
+            _monitoredTransmitSlice = null;
+        }
+
+        // Debug: Check radio and slices
+        if (DebugFlags.DEBUG_SLICE_MODE && _connectedRadio != null)
+        {
+            Console.WriteLine($"[TransmitSliceMode] Connected radio has {_connectedRadio.SliceList.Count} slices");
+            Console.WriteLine($"[TransmitSliceMode] Our bound ClientHandle: {_boundGuiClientHandle}");
+            Console.WriteLine($"[TransmitSliceMode] Radio's internal ClientHandle: {_connectedRadio.ClientHandle}");
+
+            foreach (var slice in _connectedRadio.SliceList)
+            {
+                Console.WriteLine($"[TransmitSliceMode]   Slice {slice.Index}: IsTransmitSlice={slice.IsTransmitSlice}, ClientHandle={slice.ClientHandle}, Mode={slice.DemodMode}");
+            }
+        }
+
+        // Subscribe to new slice using our own finder
+        var txSlice = FindOurTransmitSlice();
+        if (txSlice != null)
+        {
+            _monitoredTransmitSlice = txSlice;
+            _monitoredTransmitSlice.PropertyChanged += TransmitSlice_PropertyChanged;
+
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] Subscribed to slice {_monitoredTransmitSlice.Index}");
+        }
+        else
+        {
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] No transmit slice found for our client");
+        }
+
+        UpdateTransmitSliceMode();
+    }
+
+    private void TransmitSlice_PropertyChanged(object sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == "DemodMode")
+        {
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] DemodMode property changed");
+            UpdateTransmitSliceMode();
+        }
+    }
+
     private void Radio_PropertyChanged(object sender, PropertyChangedEventArgs e)
     {
+        // Handle TransmitSlice changes (needs to be done outside UI thread)
+        if (e.PropertyName == "TransmitSlice")
+        {
+            if (DebugFlags.DEBUG_SLICE_MODE)
+                Console.WriteLine($"[TransmitSliceMode] Radio TransmitSlice property changed");
+            SubscribeToTransmitSlice();
+            return;
+        }
+
         // Dispatch all UI updates to the UI thread
         Dispatcher.UIThread.Post(() =>
         {
