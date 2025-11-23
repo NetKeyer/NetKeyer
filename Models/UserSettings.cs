@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +15,9 @@ namespace NetKeyer.Models
         public string SelectedSerialPort { get; set; }
         public string SelectedMidiDevice { get; set; }
         public string InputType { get; set; } = "Serial";
+
+        // MIDI note mappings
+        public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 
         // SmartLink settings
         public string SmartLinkClientId { get; set; }
@@ -197,6 +202,12 @@ namespace NetKeyer.Models
                         settings._smartLinkRefreshToken = DecryptString(settings.SmartLinkRefreshTokenEncrypted);
                     }
 
+                    // Load default MIDI note mappings if not present
+                    if (settings.MidiNoteMappings == null || settings.MidiNoteMappings.Count == 0)
+                    {
+                        settings.MidiNoteMappings = MidiNoteMapping.GetDefaultMappings();
+                    }
+
                     return settings;
                 }
             }
@@ -205,7 +216,9 @@ namespace NetKeyer.Models
                 Console.WriteLine($"Error loading settings: {ex.Message}");
             }
 
-            return new UserSettings();
+            var newSettings = new UserSettings();
+            newSettings.MidiNoteMappings = MidiNoteMapping.GetDefaultMappings();
+            return newSettings;
         }
 
         public void Save()
