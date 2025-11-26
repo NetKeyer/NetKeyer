@@ -25,6 +25,9 @@ namespace NetKeyer.Audio
         private const int SAMPLE_RATE = 48000;
         private const int LATENCY_MS = 0; // Let WASAPI use its minimum possible
 
+        public event Action OnSilenceComplete;
+        public event Action OnToneComplete;
+
         public WasapiSidetoneGenerator()
         {
             try
@@ -34,6 +37,10 @@ namespace NetKeyer.Audio
                 _sidetoneProvider.SetFrequency(_frequency);
                 _sidetoneProvider.SetVolume(_volume);
                 _sidetoneProvider.SetWpm(_wpm);
+
+                // Forward events
+                _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
+                _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
 
                 // Set up device change monitoring
                 _deviceEnumerator = new MMDeviceEnumerator();
