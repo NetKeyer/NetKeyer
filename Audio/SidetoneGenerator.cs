@@ -19,6 +19,9 @@ namespace NetKeyer.Audio
         private float[] _readBuffer;
         private readonly object _lock = new object();
 
+        public event Action OnSilenceComplete;
+        public event Action OnToneComplete;
+
         public SidetoneGenerator()
         {
             try
@@ -28,6 +31,10 @@ namespace NetKeyer.Audio
 
                 // Create the sidetone provider
                 _sidetoneProvider = new SidetoneProvider();
+
+                // Forward events
+                _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
+                _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
 
                 // Allocate read buffer for callback
                 _readBuffer = new float[BUFFER_SAMPLES];

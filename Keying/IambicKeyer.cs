@@ -60,6 +60,10 @@ public class IambicKeyer
         _radioClientHandle = radioClientHandle;
         _getTimestamp = getTimestamp ?? throw new ArgumentNullException(nameof(getTimestamp));
         _sendRadioKey = sendRadioKey; // Can be null for sidetone-only mode
+
+        // Subscribe to sidetone events
+        _sidetoneGenerator.OnSilenceComplete += OnSilenceComplete;
+        _sidetoneGenerator.OnToneComplete += OnToneComplete;
     }
 
     /// <summary>
@@ -193,58 +197,43 @@ public class IambicKeyer
         SendCWKey(true, elementDuration);
         _iambicKeyDown = true;
 
-        // Send key-up to radio after the tone duration
-        // (Sidetone will handle its own timing)
-        Task.Delay(elementDuration).ContinueWith(_ =>
+        // OnToneComplete event will fire when the tone ends, and we'll handle silence there
+    }
+
+    private void OnToneComplete()
+    {
+        lock (_lock)
         {
-            lock (_lock)
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended, sending radio key-up and queueing silence");
+
+            // Send key-up to radio
+            if (_sendRadioKey != null && _radioClientHandle != 0)
             {
-                // Send key-up to radio
-                if (_sendRadioKey != null && _radioClientHandle != 0)
-                {
-                    string timestamp = _getTimestamp();
-                    _sendRadioKey(false, timestamp, _radioClientHandle);
-                }
-                _iambicKeyDown = false;
-
-                // Transition to space state
-                _keyerState = isDit ? KeyerState.SpaceAfterDit : KeyerState.SpaceAfterDah;
-
-                // Queue the inter-element space in the sidetone
-                _sidetoneGenerator?.QueueSilence(_ditLength);
-
-                // Schedule callback for when silence completes
-                Task.Delay(_ditLength).ContinueWith(__ =>
-                {
-                    lock (_lock)
-                    {
-                        OnSilenceComplete();
-                    }
-                });
+                string timestamp = _getTimestamp();
+                _sendRadioKey(false, timestamp, _radioClientHandle);
             }
-        });
+            _iambicKeyDown = false;
+
+            // Transition to space state
+            bool wasDit = (_keyerState == KeyerState.SendingDit);
+            _keyerState = wasDit ? KeyerState.SpaceAfterDit : KeyerState.SpaceAfterDah;
+
+            // Queue the inter-element space in the sidetone
+            // The SidetoneProvider will fire OnSilenceComplete event when silence ends
+            _sidetoneGenerator?.QueueSilence(_ditLength);
+        }
     }
 
     private void CheckAndQueueNextElement()
     {
-        // Only queue if we're in a space state
-        if (_keyerState != KeyerState.SpaceAfterDit && _keyerState != KeyerState.SpaceAfterDah)
-            return;
+        // This method is called when a paddle is pressed during an element or silence.
+        // The latches have already been set by UpdatePaddleState.
+        // We don't need to do anything here - OnSilenceComplete will check the latches
+        // and start the next element when the current silence ends.
 
-        bool wasSendingDit = (_keyerState == KeyerState.SpaceAfterDit);
-        KeyerState? nextState = DetermineNextElement(wasSendingDit);
-
-        if (nextState.HasValue)
-        {
-            bool nextIsDit = (nextState.Value == KeyerState.SendingDit);
-            int nextDuration = nextIsDit ? _ditLength : (_ditLength * 3);
-
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] CheckAndQueue: Queueing next {(nextIsDit ? "dit" : "dah")} after current silence");
-
-            // Queue the next tone to start after the current silence
-            _sidetoneGenerator?.StartTone(nextDuration);
-        }
+        if (_enableDebugLogging)
+            Console.WriteLine($"[IambicKeyer] CheckAndQueue: Paddle pressed during {_keyerState}, latches updated");
     }
 
     private void OnSilenceComplete()
