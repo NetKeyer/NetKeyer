@@ -21,6 +21,7 @@ namespace NetKeyer.Audio
 
         public event Action OnSilenceComplete;
         public event Action OnToneComplete;
+        public event Action OnBecomeIdle;
 
         public SidetoneGenerator()
         {
@@ -35,6 +36,7 @@ namespace NetKeyer.Audio
                 // Forward events
                 _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
                 _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
+                _sidetoneProvider.OnBecomeIdle += () => OnBecomeIdle?.Invoke();
 
                 // Allocate read buffer for callback
                 _readBuffer = new float[BUFFER_SAMPLES];

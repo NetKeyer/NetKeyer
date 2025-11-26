@@ -24,5 +24,11 @@ namespace NetKeyer.Audio
         /// Used by the iambic keyer to coordinate radio key-up and silence queueing.
         /// </summary>
         event Action OnToneComplete;
+
+        /// <summary>
+        /// Event fired when entering non-timed Silent state (fully idle).
+        /// Used by WASAPI to stop playback for minimum latency.
+        /// </summary>
+        event Action OnBecomeIdle;
     }
 }

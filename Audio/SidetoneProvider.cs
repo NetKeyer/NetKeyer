@@ -40,6 +40,9 @@ namespace NetKeyer.Audio
         // Event fired when any timed tone completes (whether silence follows or not)
         public event Action OnToneComplete;
 
+        // Event fired when entering non-timed Silent state (fully idle)
+        public event Action OnBecomeIdle;
+
         public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SAMPLE_RATE, 1);
 
         private enum PlaybackState
@@ -349,6 +352,7 @@ namespace NetKeyer.Audio
                                 else
                                 {
                                     _state = PlaybackState.Silent;
+
                                 }
 
                                 // Fill any remaining buffer with silence
@@ -373,11 +377,21 @@ namespace NetKeyer.Audio
                             // Check if silence period is complete
                             if (_remainingSilenceSamples <= 0)
                             {
+                                if (_enableDebugLogging)
+                                    Console.WriteLine($"[SidetoneProvider] Silence complete");
+
+                                // Fire OnSilenceComplete event (always fires when any silence completes)
+                                var silenceCompleteHandler = OnSilenceComplete;
+                                if (silenceCompleteHandler != null)
+                                {
+                                    System.Threading.Tasks.Task.Run(() => silenceCompleteHandler());
+                                }
+
                                 // Check if we have a queued tone
                                 if (_queuedToneDurationMs.HasValue)
                                 {
                                     if (_enableDebugLogging)
-                                        Console.WriteLine($"[SidetoneProvider] Silence complete, starting queued tone: {_queuedToneDurationMs.Value}ms");
+                                        Console.WriteLine($"[SidetoneProvider] Starting queued tone: {_queuedToneDurationMs.Value}ms");
                                     int toneMs = _queuedToneDurationMs.Value;
                                     _queuedToneDurationMs = null;
 
@@ -393,18 +407,15 @@ namespace NetKeyer.Audio
                                 else
                                 {
                                     if (_enableDebugLogging)
-                                        Console.WriteLine($"[SidetoneProvider] Silence complete, no queued tone, going silent");
+                                        Console.WriteLine($"[SidetoneProvider] No queued tone, going silent");
                                     _state = PlaybackState.Silent;
 
-                                    // Fire event to notify that silence completed without a queued tone
-                                    // Release lock before firing event to avoid deadlocks
-                                    var handler = OnSilenceComplete;
-                                    if (handler != null)
+                                    // Fire OnBecomeIdle event (only when going to Silent with no queued tone)
+                                    var idleHandler = OnBecomeIdle;
+                                    if (idleHandler != null)
                                     {
-                                        System.Threading.Tasks.Task.Run(() => handler());
+                                        System.Threading.Tasks.Task.Run(() => idleHandler());
                                     }
-
-                                    return count;
                                 }
                             }
                             break;
