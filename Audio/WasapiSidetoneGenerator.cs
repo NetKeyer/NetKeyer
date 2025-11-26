@@ -21,9 +21,9 @@ namespace NetKeyer.Audio
         private MMDeviceEnumerator _deviceEnumerator;
         private DeviceNotificationClient _notificationClient;
 
-        // Use ultra-low latency - 1ms at 48kHz
+        // Use absolute minimum latency - WASAPI minimum is typically 3ms in shared mode
         private const int SAMPLE_RATE = 48000;
-        private const int LATENCY_MS = 1;
+        private const int LATENCY_MS = 0; // Let WASAPI use its minimum possible
 
         public WasapiSidetoneGenerator()
         {
@@ -161,33 +161,12 @@ namespace NetKeyer.Audio
                 // Stop the tone (triggers ramp-down in the provider)
                 _sidetoneProvider?.Stop();
 
-                // Schedule WASAPI stop after ramp-down completes
-                // Poll until the provider is actually silent to avoid race conditions
+                // For straight-key mode: immediately stop WASAPI to minimize latency
+                // The ramp-down will be cut short, but that's better than 35-45ms delay
                 if (_isPlaying)
                 {
-                    System.Threading.Tasks.Task.Run(async () =>
-                    {
-                        // Wait for ramp-down to complete (poll every 5ms, max 50ms)
-                        for (int i = 0; i < 10; i++)
-                        {
-                            await System.Threading.Tasks.Task.Delay(5);
-                            if (_sidetoneProvider?.IsSilent == true)
-                            {
-                                break;
-                            }
-                        }
-
-                        // Only stop if still silent (no new tone started)
-                        if (_wasapiOut != null && _isPlaying && _sidetoneProvider?.IsSilent == true)
-                        {
-                            try
-                            {
-                                _wasapiOut.Stop();
-                                _isPlaying = false;
-                            }
-                            catch { }
-                        }
-                    });
+                    _wasapiOut.Stop();
+                    _isPlaying = false;
                 }
             }
             catch (Exception ex)
@@ -213,23 +192,9 @@ namespace NetKeyer.Audio
                     _isPlaying = true;
                 }
 
-                // Schedule WASAPI stop after tone completes
-                System.Threading.Tasks.Task.Run(async () =>
-                {
-                    // Wait for tone duration plus a bit extra for ramp-down
-                    await System.Threading.Tasks.Task.Delay(durationMs + 20);
-
-                    // Only stop if still silent (no new tone started)
-                    if (_wasapiOut != null && _isPlaying && _sidetoneProvider?.IsSilent == true)
-                    {
-                        try
-                        {
-                            _wasapiOut.Stop();
-                            _isPlaying = false;
-                        }
-                        catch { }
-                    }
-                });
+                // For timed tones (iambic mode), don't stop WASAPI immediately
+                // Let it keep running for the next dit/dah to minimize inter-element latency
+                // WASAPI will be stopped by the polling task in Stop() when truly idle
             }
             catch (Exception ex)
             {
