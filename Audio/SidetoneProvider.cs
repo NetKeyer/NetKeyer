@@ -23,10 +23,18 @@ namespace NetKeyer.Audio
         private int _patchPosition = 0;
         private int _remainingCycles = 0;
         private bool _indefiniteTone = false; // true for straight-key mode
+        private int _remainingSilenceSamples = 0;
+
+        // Queued next action after current state completes
+        private int? _queuedToneDurationMs = null;
+        private int? _queuedSilenceDurationMs = null;
 
         private readonly object _lockObject = new object();
 
-        public bool IsSilent => _state == PlaybackState.Silent;
+        public bool IsSilent => _state == PlaybackState.Silent || _state == PlaybackState.TimedSilence;
+
+        // Event fired when a timed silence completes and no next tone was queued
+        public event Action OnSilenceComplete;
 
         public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SAMPLE_RATE, 1);
 
@@ -35,7 +43,8 @@ namespace NetKeyer.Audio
             Silent,
             RampUp,
             Sustain,
-            RampDown
+            RampDown,
+            TimedSilence
         }
 
         public SidetoneProvider()
@@ -86,13 +95,23 @@ namespace NetKeyer.Audio
         /// <summary>
         /// Start playing a tone for a specific duration in milliseconds.
         /// Used for iambic mode where duration is known in advance.
+        /// If called during timed silence, the tone will be queued to start after the silence ends.
         /// </summary>
         public void StartTone(int durationMs)
         {
             lock (_lockObject)
             {
+                // If we're in timed silence, queue the tone instead of starting immediately
+                if (_state == PlaybackState.TimedSilence)
+                {
+                    Console.WriteLine($"[SidetoneProvider] StartTone called during silence, queuing tone: {durationMs}ms");
+                    _queuedToneDurationMs = durationMs;
+                    return;
+                }
+
+                // If playing another tone, stop it first
                 if (_state != PlaybackState.Silent)
-                    Stop(); // Stop any ongoing tone
+                    Stop();
 
                 int totalSamples = (int)(durationMs * SAMPLE_RATE / 1000.0);
                 int rampSamples = _rampUpPatch.Length + _rampDownPatch.Length;
@@ -108,6 +127,43 @@ namespace NetKeyer.Audio
                 _indefiniteTone = false;
                 _patchPosition = 0;
                 _state = PlaybackState.RampUp;
+
+                Console.WriteLine($"[SidetoneProvider] Starting timed tone: {durationMs}ms");
+            }
+        }
+
+        /// <summary>
+        /// Start a timed silence period followed by a tone.
+        /// Used for iambic mode to chain silence -> tone without timers.
+        /// </summary>
+        public void StartSilenceThenTone(int silenceMs, int toneMs)
+        {
+            lock (_lockObject)
+            {
+                // Queue the tone to play after silence
+                _queuedToneDurationMs = toneMs;
+                _queuedSilenceDurationMs = null;
+
+                // Start the silence
+                _remainingSilenceSamples = (int)(silenceMs * SAMPLE_RATE / 1000.0);
+                _state = PlaybackState.TimedSilence;
+
+                Console.WriteLine($"[SidetoneProvider] Starting silence ({silenceMs}ms) then tone ({toneMs}ms)");
+            }
+        }
+
+        /// <summary>
+        /// Queue a silence period to start after the current tone completes.
+        /// Can optionally chain another tone after the silence.
+        /// </summary>
+        public void QueueSilence(int silenceMs, int? followingToneMs = null)
+        {
+            lock (_lockObject)
+            {
+                _queuedSilenceDurationMs = silenceMs;
+                _queuedToneDurationMs = followingToneMs;
+
+                Console.WriteLine($"[SidetoneProvider] Queued silence: {silenceMs}ms, following tone: {followingToneMs?.ToString() ?? "none"}");
             }
         }
 
@@ -224,14 +280,74 @@ namespace NetKeyer.Audio
                             samplesWritten += CopyFromPatch(_rampDownPatch, buffer, offset + samplesWritten, count - samplesWritten);
                             if (_patchPosition >= _rampDownPatch.Length)
                             {
-                                _state = PlaybackState.Silent;
                                 _patchPosition = 0;
+
+                                // Check if we have a queued silence
+                                if (_queuedSilenceDurationMs.HasValue)
+                                {
+                                    Console.WriteLine($"[SidetoneProvider] Ramp-down complete, starting queued silence: {_queuedSilenceDurationMs.Value}ms");
+                                    _remainingSilenceSamples = (int)(_queuedSilenceDurationMs.Value * SAMPLE_RATE / 1000.0);
+                                    _queuedSilenceDurationMs = null;
+                                    _state = PlaybackState.TimedSilence;
+                                }
+                                else
+                                {
+                                    _state = PlaybackState.Silent;
+                                }
+
                                 // Fill any remaining buffer with silence
                                 for (int i = samplesWritten; i < count; i++)
                                 {
                                     buffer[offset + i] = 0.0f;
                                 }
                                 return count;
+                            }
+                            break;
+
+                        case PlaybackState.TimedSilence:
+                            // Output silence samples
+                            int silenceSamplesToWrite = Math.Min(count - samplesWritten, _remainingSilenceSamples);
+                            for (int i = 0; i < silenceSamplesToWrite; i++)
+                            {
+                                buffer[offset + samplesWritten + i] = 0.0f;
+                            }
+                            samplesWritten += silenceSamplesToWrite;
+                            _remainingSilenceSamples -= silenceSamplesToWrite;
+
+                            // Check if silence period is complete
+                            if (_remainingSilenceSamples <= 0)
+                            {
+                                // Check if we have a queued tone
+                                if (_queuedToneDurationMs.HasValue)
+                                {
+                                    Console.WriteLine($"[SidetoneProvider] Silence complete, starting queued tone: {_queuedToneDurationMs.Value}ms");
+                                    int toneMs = _queuedToneDurationMs.Value;
+                                    _queuedToneDurationMs = null;
+
+                                    // Start the queued tone
+                                    int totalSamples = (int)(toneMs * SAMPLE_RATE / 1000.0);
+                                    int rampSamples = _rampUpPatch.Length + _rampDownPatch.Length;
+                                    int sustainSamples = Math.Max(0, totalSamples - rampSamples);
+                                    _remainingCycles = sustainSamples / _singleCyclePatch.Length;
+                                    _indefiniteTone = false;
+                                    _patchPosition = 0;
+                                    _state = PlaybackState.RampUp;
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"[SidetoneProvider] Silence complete, no queued tone, going silent");
+                                    _state = PlaybackState.Silent;
+
+                                    // Fire event to notify that silence completed without a queued tone
+                                    // Release lock before firing event to avoid deadlocks
+                                    var handler = OnSilenceComplete;
+                                    if (handler != null)
+                                    {
+                                        System.Threading.Tasks.Task.Run(() => handler());
+                                    }
+
+                                    return count;
+                                }
                             }
                             break;
                     }

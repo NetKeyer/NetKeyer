@@ -10,5 +10,7 @@ namespace NetKeyer.Audio
         void Start();
         void Stop();
         void StartTone(int durationMs);
+        void StartSilenceThenTone(int silenceMs, int toneMs);
+        void QueueSilence(int silenceMs, int? followingToneMs = null);
     }
 }
