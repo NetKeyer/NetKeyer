@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using NetKeyer.Audio;
 
 namespace NetKeyer.Keying;
@@ -7,6 +6,7 @@ namespace NetKeyer.Keying;
 /// <summary>
 /// Iambic keyer implementation supporting Mode A and Mode B.
 /// Handles timing, paddle latching, and element generation for iambic keying.
+/// Uses event-driven architecture based on audio sample timing.
 /// </summary>
 public class IambicKeyer
 {
@@ -16,8 +16,7 @@ public class IambicKeyer
     private readonly ISidetoneGenerator _sidetoneGenerator;
     private readonly uint _radioClientHandle;
 
-    private bool _enableDebugLogging = false;
-    private bool _iambicKeyDown = false;
+    private bool _enableDebugLogging = true;
     private bool _iambicDitLatched = false;
     private bool _iambicDahLatched = false;
     private bool _ditPaddleAtStart = false;
@@ -27,7 +26,7 @@ public class IambicKeyer
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
 
-    private enum KeyerState { Idle, SendingDit, SendingDah, SpaceAfterDit, SpaceAfterDah }
+    private enum KeyerState { Idle, Playing }
 
     /// <summary>
     /// Gets or sets whether to use Mode B (true) or Mode A (false).
@@ -93,7 +92,7 @@ public class IambicKeyer
         lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] UpdatePaddleState: L={leftPaddle} R={rightPaddle} State={_keyerState} DitLatch={_iambicDitLatched} DahLatch={_iambicDahLatched}");
+                Console.WriteLine($"[IambicKeyer] UpdatePaddleState: L={leftPaddle} R={rightPaddle} State={_keyerState}");
 
             // Update current paddle states
             _currentLeftPaddleState = leftPaddle;
@@ -102,48 +101,23 @@ public class IambicKeyer
             // If keyer is idle and at least one paddle is pressed, start sending
             if (_keyerState == KeyerState.Idle && (leftPaddle || rightPaddle))
             {
-                // Determine which element to send
-                if (leftPaddle && rightPaddle)
-                {
-                    // Both paddles pressed - send dit first (standard behavior)
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Starting from idle with BOTH paddles - sending dit");
-                    StartElement(KeyerState.SendingDit);
-                }
-                else if (leftPaddle)
-                {
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Starting from idle with LEFT paddle - sending dit");
-                    StartElement(KeyerState.SendingDit);
-                }
-                else
-                {
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Starting from idle with RIGHT paddle - sending dah");
-                    StartElement(KeyerState.SendingDah);
-                }
+                StartNextElement();
             }
-            else if (_keyerState != KeyerState.Idle)
+            // If keyer is playing, update latches for newly pressed paddles
+            else if (_keyerState == KeyerState.Playing)
             {
-                // Keyer is running - update latches for newly pressed paddles
                 // A paddle is "newly pressed" if it wasn't already pressed at element start
                 if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
                     if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DIT latch (newly pressed)");
-
-                    // Check if we should queue a dit for after the current silence
-                    CheckAndQueueNextElement();
+                        Console.WriteLine($"[IambicKeyer] Setting DIT latch");
                 }
                 if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
                     if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DAH latch (newly pressed)");
-
-                    // Check if we should queue a dah for after the current silence
-                    CheckAndQueueNextElement();
+                        Console.WriteLine($"[IambicKeyer] Setting DAH latch");
                 }
             }
         }
@@ -159,12 +133,8 @@ public class IambicKeyer
             if (_enableDebugLogging)
                 Console.WriteLine($"[IambicKeyer] Stop called, going to Idle");
 
-            // Ensure key is up
-            if (_iambicKeyDown)
-            {
-                SendCWKey(false);
-                _iambicKeyDown = false;
-            }
+            // Send radio key-up if needed
+            SendRadioKey(false);
 
             // Reset state
             _keyerState = KeyerState.Idle;
@@ -175,159 +145,133 @@ public class IambicKeyer
         }
     }
 
-    private void StartElement(KeyerState elementState)
-    {
-        bool isDit = (elementState == KeyerState.SendingDit);
-        if (_enableDebugLogging)
-            Console.WriteLine($"[IambicKeyer] StartElement: {(isDit ? "dit" : "dah")} - recording paddle states and clearing latches");
-
-        // Record which paddles are currently pressed at element start
-        _ditPaddleAtStart = _currentLeftPaddleState;
-        _dahPaddleAtStart = _currentRightPaddleState;
-
-        // Clear latches - we'll track NEW paddle presses during this element
-        _iambicDitLatched = false;
-        _iambicDahLatched = false;
-
-        // Start sending the current element (dit or dah) with precise duration
-        _keyerState = elementState;
-        int elementDuration = isDit ? _ditLength : (_ditLength * 3);
-
-        // Send the tone to both sidetone and radio
-        SendCWKey(true, elementDuration);
-        _iambicKeyDown = true;
-
-        // OnToneComplete event will fire when the tone ends, and we'll handle silence there
-    }
-
+    /// <summary>
+    /// Called when a tone completes. Send radio key-up.
+    /// </summary>
     private void OnToneComplete()
     {
         lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended, sending radio key-up and queueing silence");
+                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended");
 
-            // Send key-up to radio
-            if (_sendRadioKey != null && _radioClientHandle != 0)
-            {
-                string timestamp = _getTimestamp();
-                _sendRadioKey(false, timestamp, _radioClientHandle);
-            }
-            _iambicKeyDown = false;
+            // Send radio key-up
+            SendRadioKey(false);
 
-            // Transition to space state
-            bool wasDit = (_keyerState == KeyerState.SendingDit);
-            _keyerState = wasDit ? KeyerState.SpaceAfterDit : KeyerState.SpaceAfterDah;
-
-            // Queue the inter-element space in the sidetone
-            // The SidetoneProvider will fire OnSilenceComplete event when silence ends
-            _sidetoneGenerator?.QueueSilence(_ditLength);
+            // Note: Silence was already queued when we started the tone
         }
     }
 
-    private void CheckAndQueueNextElement()
-    {
-        // This method is called when a paddle is pressed during an element or silence.
-        // The latches have already been set by UpdatePaddleState.
-        // We don't need to do anything here - OnSilenceComplete will check the latches
-        // and start the next element when the current silence ends.
-
-        if (_enableDebugLogging)
-            Console.WriteLine($"[IambicKeyer] CheckAndQueue: Paddle pressed during {_keyerState}, latches updated");
-    }
-
+    /// <summary>
+    /// Called when silence completes. Determine and start next element or go idle.
+    /// </summary>
     private void OnSilenceComplete()
     {
-        if (_enableDebugLogging)
-            Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Silence ended, checking for next element");
-
-        bool wasSendingDit = (_keyerState == KeyerState.SpaceAfterDit);
-        KeyerState? nextState = DetermineNextElement(wasSendingDit);
-
-        if (nextState.HasValue)
+        lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Starting next element: {nextState.Value}");
-            StartElement(nextState.Value);
-        }
-        else
-        {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: No next element, stopping");
-            Stop();
+                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Silence ended");
+
+            StartNextElement();
         }
     }
 
-    private KeyerState? DetermineNextElement(bool wasSendingDit)
+    /// <summary>
+    /// Determines what element to send next based on paddle states and latches,
+    /// then starts it (or goes idle if nothing to send).
+    /// </summary>
+    private void StartNextElement()
     {
-        KeyerState? nextState = null;
-        string reason = "";
+        // Determine what to send based on current state
+        bool sendDit = false;
+        bool sendDah = false;
+        bool wasSendingDit = _ditPaddleAtStart; // Last element was a dit if dit paddle was at start
 
-        if (wasSendingDit)
+        // Determine next element using iambic logic
+        if (wasSendingDit || _keyerState == KeyerState.Idle)
         {
-            // Priority 1: opposite paddle pressed or latched
+            // After dit (or from idle): Priority 1 = opposite (dah), Priority 2 = same (dit), Priority 3 (ModeB) = opposite squeeze
             if (_currentRightPaddleState || _iambicDahLatched)
             {
-                nextState = KeyerState.SendingDah;
-                reason = _currentRightPaddleState ? "dah pressed" : "dah latched";
+                sendDah = true;
             }
-            // Priority 2: same paddle still pressed
             else if (_currentLeftPaddleState)
             {
-                nextState = KeyerState.SendingDit;
-                reason = "dit still pressed";
+                sendDit = true;
             }
-            // Priority 3 (Mode B): opposite was held from start but now released
             else if (IsModeB && _dahPaddleAtStart && !_currentRightPaddleState)
             {
-                nextState = KeyerState.SendingDah;
-                reason = "ModeB: dah held then released";
+                // Mode B: squeeze - dah was held at start but now released
+                sendDah = true;
             }
         }
         else // was sending dah
         {
-            // Priority 1: opposite paddle pressed or latched
+            // After dah: Priority 1 = opposite (dit), Priority 2 = same (dah), Priority 3 (ModeB) = opposite squeeze
             if (_currentLeftPaddleState || _iambicDitLatched)
             {
-                nextState = KeyerState.SendingDit;
-                reason = _currentLeftPaddleState ? "dit pressed" : "dit latched";
+                sendDit = true;
             }
-            // Priority 2: same paddle still pressed
             else if (_currentRightPaddleState)
             {
-                nextState = KeyerState.SendingDah;
-                reason = "dah still pressed";
+                sendDah = true;
             }
-            // Priority 3 (Mode B): opposite was held from start but now released
             else if (IsModeB && _ditPaddleAtStart && !_currentLeftPaddleState)
             {
-                nextState = KeyerState.SendingDit;
-                reason = "ModeB: dit held then released";
+                // Mode B: squeeze - dit was held at start but now released
+                sendDit = true;
             }
         }
 
-        if (_enableDebugLogging && nextState.HasValue)
-            Console.WriteLine($"[IambicKeyer] DetermineNext: Next={nextState.Value}, Reason={reason}");
-
-        return nextState;
-    }
-
-    private void SendCWKey(bool state, int? durationMs = null)
-    {
-        // Control local sidetone
-        if (state)
+        // Handle special case: both paddles pressed from idle = dit first
+        if (_keyerState == KeyerState.Idle && _currentLeftPaddleState && _currentRightPaddleState)
         {
-            if (durationMs.HasValue)
-                _sidetoneGenerator?.StartTone(durationMs.Value);
-            else
-                _sidetoneGenerator?.Start();
+            sendDit = true;
+            sendDah = false;
+        }
+
+        // Send the element or go idle
+        if (sendDit || sendDah)
+        {
+            // Record paddle states at element start
+            _ditPaddleAtStart = _currentLeftPaddleState;
+            _dahPaddleAtStart = _currentRightPaddleState;
+
+            // Clear latches
+            _iambicDitLatched = false;
+            _iambicDahLatched = false;
+
+            // Calculate duration and start tone
+            int duration = sendDit ? _ditLength : (_ditLength * 3);
+
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] Starting {(sendDit ? "dit" : "dah")} ({duration}ms)");
+
+            _keyerState = KeyerState.Playing;
+
+            // Send radio key-down and start tone with following silence
+            SendRadioKey(true);
+            _sidetoneGenerator?.StartTone(duration);
+            // Queue the silence that will follow this tone
+            _sidetoneGenerator?.QueueSilence(_ditLength);
         }
         else
         {
-            _sidetoneGenerator?.Stop();
-        }
+            // Nothing to send, go idle
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] No element to send, going idle");
 
-        // Send to radio (if available)
+            _keyerState = KeyerState.Idle;
+            _ditPaddleAtStart = false;
+            _dahPaddleAtStart = false;
+        }
+    }
+
+    /// <summary>
+    /// Sends radio key command (if radio is configured).
+    /// </summary>
+    private void SendRadioKey(bool state)
+    {
         if (_sendRadioKey != null && _radioClientHandle != 0)
         {
             string timestamp = _getTimestamp();
