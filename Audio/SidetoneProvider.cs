@@ -18,6 +18,7 @@ namespace NetKeyer.Audio
         private int _frequency = 600;
         private float _volume = 0.5f;
         private int _wpm = 20;
+        private bool _enableDebugLogging = false;
 
         private PlaybackState _state = PlaybackState.Silent;
         private int _patchPosition = 0;
@@ -50,6 +51,15 @@ namespace NetKeyer.Audio
         public SidetoneProvider()
         {
             RegeneratePatches();
+        }
+
+        /// <summary>
+        /// Gets or sets whether debug logging is enabled.
+        /// </summary>
+        public bool EnableDebugLogging
+        {
+            get => _enableDebugLogging;
+            set => _enableDebugLogging = value;
         }
 
         /// <summary>
@@ -104,7 +114,8 @@ namespace NetKeyer.Audio
                 // If we're in timed silence, queue the tone instead of starting immediately
                 if (_state == PlaybackState.TimedSilence)
                 {
-                    Console.WriteLine($"[SidetoneProvider] StartTone called during silence, queuing tone: {durationMs}ms");
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] StartTone called during silence, queuing tone: {durationMs}ms");
                     _queuedToneDurationMs = durationMs;
                     return;
                 }
@@ -128,7 +139,8 @@ namespace NetKeyer.Audio
                 _patchPosition = 0;
                 _state = PlaybackState.RampUp;
 
-                Console.WriteLine($"[SidetoneProvider] Starting timed tone: {durationMs}ms");
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[SidetoneProvider] Starting timed tone: {durationMs}ms");
             }
         }
 
@@ -148,7 +160,8 @@ namespace NetKeyer.Audio
                 _remainingSilenceSamples = (int)(silenceMs * SAMPLE_RATE / 1000.0);
                 _state = PlaybackState.TimedSilence;
 
-                Console.WriteLine($"[SidetoneProvider] Starting silence ({silenceMs}ms) then tone ({toneMs}ms)");
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[SidetoneProvider] Starting silence ({silenceMs}ms) then tone ({toneMs}ms)");
             }
         }
 
@@ -163,7 +176,8 @@ namespace NetKeyer.Audio
                 _queuedSilenceDurationMs = silenceMs;
                 _queuedToneDurationMs = followingToneMs;
 
-                Console.WriteLine($"[SidetoneProvider] Queued silence: {silenceMs}ms, following tone: {followingToneMs?.ToString() ?? "none"}");
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[SidetoneProvider] Queued silence: {silenceMs}ms, following tone: {followingToneMs?.ToString() ?? "none"}");
             }
         }
 
@@ -178,12 +192,14 @@ namespace NetKeyer.Audio
                 // If already playing or ramping up, ignore
                 if (_state == PlaybackState.RampUp || _state == PlaybackState.Sustain)
                 {
-                    Console.WriteLine($"[SidetoneProvider] StartIndefiniteTone called but already playing (state={_state}), ignoring");
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] StartIndefiniteTone called but already playing (state={_state}), ignoring");
                     return;
                 }
 
                 // If in ramp-down or silent, start a new tone immediately
-                Console.WriteLine($"[SidetoneProvider] Starting indefinite tone (was {_state}), freq={_frequency}Hz vol={_volume} wpm={_wpm}");
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[SidetoneProvider] Starting indefinite tone (was {_state}), freq={_frequency}Hz vol={_volume} wpm={_wpm}");
                 _indefiniteTone = true;
                 _patchPosition = 0;
                 _state = PlaybackState.RampUp;
@@ -199,11 +215,13 @@ namespace NetKeyer.Audio
             {
                 if (_state == PlaybackState.Silent)
                 {
-                    Console.WriteLine($"[SidetoneProvider] Stop called but already silent");
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Stop called but already silent");
                     return;
                 }
 
-                Console.WriteLine($"[SidetoneProvider] Stopping tone, transitioning to ramp-down");
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[SidetoneProvider] Stopping tone, transitioning to ramp-down");
                 // Immediate transition to ramp-down
                 _state = PlaybackState.RampDown;
                 _patchPosition = 0;
@@ -216,10 +234,13 @@ namespace NetKeyer.Audio
         {
             lock (_lockObject)
             {
-                _readCallCount++;
-                if (_readCallCount % 1000 == 0)
+                if (_enableDebugLogging)
                 {
-                    Console.WriteLine($"[SidetoneProvider] Read called {_readCallCount} times, state={_state}");
+                    _readCallCount++;
+                    if (_readCallCount % 1000 == 0)
+                    {
+                        Console.WriteLine($"[SidetoneProvider] Read called {_readCallCount} times, state={_state}");
+                    }
                 }
 
                 int samplesWritten = 0;
@@ -285,7 +306,8 @@ namespace NetKeyer.Audio
                                 // Check if we have a queued silence
                                 if (_queuedSilenceDurationMs.HasValue)
                                 {
-                                    Console.WriteLine($"[SidetoneProvider] Ramp-down complete, starting queued silence: {_queuedSilenceDurationMs.Value}ms");
+                                    if (_enableDebugLogging)
+                                        Console.WriteLine($"[SidetoneProvider] Ramp-down complete, starting queued silence: {_queuedSilenceDurationMs.Value}ms");
                                     _remainingSilenceSamples = (int)(_queuedSilenceDurationMs.Value * SAMPLE_RATE / 1000.0);
                                     _queuedSilenceDurationMs = null;
                                     _state = PlaybackState.TimedSilence;
@@ -320,7 +342,8 @@ namespace NetKeyer.Audio
                                 // Check if we have a queued tone
                                 if (_queuedToneDurationMs.HasValue)
                                 {
-                                    Console.WriteLine($"[SidetoneProvider] Silence complete, starting queued tone: {_queuedToneDurationMs.Value}ms");
+                                    if (_enableDebugLogging)
+                                        Console.WriteLine($"[SidetoneProvider] Silence complete, starting queued tone: {_queuedToneDurationMs.Value}ms");
                                     int toneMs = _queuedToneDurationMs.Value;
                                     _queuedToneDurationMs = null;
 
@@ -335,7 +358,8 @@ namespace NetKeyer.Audio
                                 }
                                 else
                                 {
-                                    Console.WriteLine($"[SidetoneProvider] Silence complete, no queued tone, going silent");
+                                    if (_enableDebugLogging)
+                                        Console.WriteLine($"[SidetoneProvider] Silence complete, no queued tone, going silent");
                                     _state = PlaybackState.Silent;
 
                                     // Fire event to notify that silence completed without a queued tone
@@ -398,7 +422,8 @@ namespace NetKeyer.Audio
             int rampCycles = Math.Max(1, (int)Math.Round((double)rampSamples / samplesPerCycle));
             int actualRampSamples = rampCycles * samplesPerCycle;
 
-            Console.WriteLine($"[SidetoneProvider] RegeneratePatches: freq={_frequency}Hz->actual={actualFrequency:F1}Hz, vol={_volume}, wpm={_wpm}, samplesPerCycle={samplesPerCycle}, rampSamples={actualRampSamples}");
+            if (_enableDebugLogging)
+                Console.WriteLine($"[SidetoneProvider] RegeneratePatches: freq={_frequency}Hz->actual={actualFrequency:F1}Hz, vol={_volume}, wpm={_wpm}, samplesPerCycle={samplesPerCycle}, rampSamples={actualRampSamples}");
 
             // Generate single cycle patch
             _singleCyclePatch = new float[samplesPerCycle];
