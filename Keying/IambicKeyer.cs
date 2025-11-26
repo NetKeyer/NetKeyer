@@ -25,6 +25,7 @@ public class IambicKeyer
     private bool _currentRightPaddleState = false;
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
+    private bool _lastElementWasDit = true; // Track what was actually sent last
 
     private enum KeyerState { Idle, Playing }
 
@@ -180,14 +181,19 @@ public class IambicKeyer
 
             if (nextToneDuration.HasValue)
             {
+                bool isDit = (nextToneDuration.Value == _ditLength);
+
                 if (_enableDebugLogging)
-                    Console.WriteLine($"[IambicKeyer] Queueing next tone ({nextToneDuration.Value}ms) to follow the silence");
+                    Console.WriteLine($"[IambicKeyer] Queueing next {(isDit ? "dit" : "dah")} ({nextToneDuration.Value}ms) to follow the silence");
 
                 // Update paddle states for the queued element
                 _ditPaddleAtStart = _currentLeftPaddleState;
                 _dahPaddleAtStart = _currentRightPaddleState;
                 _iambicDitLatched = false;
                 _iambicDahLatched = false;
+
+                // Track what we're queueing
+                _lastElementWasDit = isDit;
 
                 // Re-queue the silence with the next tone to follow
                 _sidetoneGenerator?.QueueSilence(_ditLength, nextToneDuration.Value);
@@ -219,6 +225,8 @@ public class IambicKeyer
 
         if (nextDuration.HasValue)
         {
+            bool isDit = (nextDuration.Value == _ditLength);
+
             // Record paddle states at element start
             _ditPaddleAtStart = _currentLeftPaddleState;
             _dahPaddleAtStart = _currentRightPaddleState;
@@ -227,7 +235,8 @@ public class IambicKeyer
             _iambicDitLatched = false;
             _iambicDahLatched = false;
 
-            bool isDit = (nextDuration.Value == _ditLength);
+            // Track what we're sending
+            _lastElementWasDit = isDit;
 
             if (_enableDebugLogging)
                 Console.WriteLine($"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
@@ -255,12 +264,11 @@ public class IambicKeyer
     /// </summary>
     private int? DetermineNextToneDuration()
     {
-        bool wasSendingDit = _ditPaddleAtStart;
         bool sendDit = false;
         bool sendDah = false;
 
         // Determine next element using iambic logic
-        if (wasSendingDit || _keyerState == KeyerState.Idle)
+        if (_lastElementWasDit || _keyerState == KeyerState.Idle)
         {
             // After dit (or from idle): Priority 1 = opposite (dah), Priority 2 = same (dit), Priority 3 (ModeB) = opposite squeeze
             if (_currentRightPaddleState || _iambicDahLatched)
