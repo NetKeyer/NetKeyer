@@ -20,6 +20,7 @@ namespace NetKeyer.Audio
         private readonly object _lock = new object();
 
         public event Action OnSilenceComplete;
+        public event Action OnToneStart;
         public event Action OnToneComplete;
         public event Action OnBecomeIdle;
 
@@ -35,6 +36,7 @@ namespace NetKeyer.Audio
 
                 // Forward events
                 _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
+                _sidetoneProvider.OnToneStart += () => OnToneStart?.Invoke();
                 _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
                 _sidetoneProvider.OnBecomeIdle += () => OnBecomeIdle?.Invoke();
 

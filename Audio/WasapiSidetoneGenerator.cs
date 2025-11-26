@@ -26,6 +26,7 @@ namespace NetKeyer.Audio
         private const int LATENCY_MS = 0; // Let WASAPI use its minimum possible
 
         public event Action OnSilenceComplete;
+        public event Action OnToneStart;
         public event Action OnToneComplete;
         public event Action OnBecomeIdle;
 
@@ -41,6 +42,7 @@ namespace NetKeyer.Audio
 
                 // Forward events
                 _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
+                _sidetoneProvider.OnToneStart += () => OnToneStart?.Invoke();
                 _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
                 _sidetoneProvider.OnBecomeIdle += OnProviderBecomeIdle;
 

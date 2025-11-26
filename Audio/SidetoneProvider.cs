@@ -37,6 +37,9 @@ namespace NetKeyer.Audio
         // Event fired when a timed silence completes and no next tone was queued
         public event Action OnSilenceComplete;
 
+        // Event fired when any tone starts (including queued tones)
+        public event Action OnToneStart;
+
         // Event fired when any timed tone completes (whether silence follows or not)
         public event Action OnToneComplete;
 
@@ -147,6 +150,13 @@ namespace NetKeyer.Audio
 
                 if (_enableDebugLogging)
                     Console.WriteLine($"[SidetoneProvider] Starting timed tone: {durationMs}ms, totalSamples={totalSamples}, rampSamples={rampSamples}, sustainSamples={sustainSamples}, remainingCycles={_remainingCycles}");
+
+                // Fire event that tone is starting
+                var toneStartHandler = OnToneStart;
+                if (toneStartHandler != null)
+                {
+                    System.Threading.Tasks.Task.Run(() => toneStartHandler());
+                }
             }
         }
 
@@ -403,6 +413,13 @@ namespace NetKeyer.Audio
                                     _indefiniteTone = false;
                                     _patchPosition = 0;
                                     _state = PlaybackState.RampUp;
+
+                                    // Fire event that queued tone is starting
+                                    var toneStartHandler = OnToneStart;
+                                    if (toneStartHandler != null)
+                                    {
+                                        System.Threading.Tasks.Task.Run(() => toneStartHandler());
+                                    }
                                 }
                                 else
                                 {

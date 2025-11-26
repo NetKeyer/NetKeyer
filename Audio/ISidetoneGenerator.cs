@@ -20,6 +20,12 @@ namespace NetKeyer.Audio
         event Action OnSilenceComplete;
 
         /// <summary>
+        /// Event fired when any tone starts (including queued tones that start after silence).
+        /// Used by the iambic keyer to send radio key-down commands.
+        /// </summary>
+        event Action OnToneStart;
+
+        /// <summary>
         /// Event fired when any timed tone completes (whether silence follows or not).
         /// Used by the iambic keyer to coordinate radio key-up and silence queueing.
         /// </summary>

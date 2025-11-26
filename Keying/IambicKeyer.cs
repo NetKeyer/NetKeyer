@@ -62,6 +62,7 @@ public class IambicKeyer
 
         // Subscribe to sidetone events
         _sidetoneGenerator.OnSilenceComplete += OnSilenceComplete;
+        _sidetoneGenerator.OnToneStart += OnToneStart;
         _sidetoneGenerator.OnToneComplete += OnToneComplete;
     }
 
@@ -146,31 +147,63 @@ public class IambicKeyer
     }
 
     /// <summary>
-    /// Called when a tone completes. Send radio key-up.
+    /// Called when a tone starts (including queued tones). Send radio key-down.
+    /// </summary>
+    private void OnToneStart()
+    {
+        lock (_lock)
+        {
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
+
+            // Send radio key-down
+            SendRadioKey(true);
+            _keyerState = KeyerState.Playing;
+        }
+    }
+
+    /// <summary>
+    /// Called when a tone completes. Send radio key-up and potentially queue next tone with the silence.
     /// </summary>
     private void OnToneComplete()
     {
         lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended");
+                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended, checking if we should queue next tone");
 
             // Send radio key-up
             SendRadioKey(false);
 
-            // Note: Silence was already queued when we started the tone
+            // Determine if we'll send another element after the silence
+            int? nextToneDuration = DetermineNextToneDuration();
+
+            if (nextToneDuration.HasValue)
+            {
+                if (_enableDebugLogging)
+                    Console.WriteLine($"[IambicKeyer] Queueing next tone ({nextToneDuration.Value}ms) to follow the silence");
+
+                // Update paddle states for the queued element
+                _ditPaddleAtStart = _currentLeftPaddleState;
+                _dahPaddleAtStart = _currentRightPaddleState;
+                _iambicDitLatched = false;
+                _iambicDahLatched = false;
+
+                // Re-queue the silence with the next tone to follow
+                _sidetoneGenerator?.QueueSilence(_ditLength, nextToneDuration.Value);
+            }
         }
     }
 
     /// <summary>
-    /// Called when silence completes. Determine and start next element or go idle.
+    /// Called when silence completes with no queued tone. Determine and start next element or go idle.
     /// </summary>
     private void OnSilenceComplete()
     {
         lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Silence ended");
+                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Silence ended, starting next element");
 
             StartNextElement();
         }
@@ -182,10 +215,49 @@ public class IambicKeyer
     /// </summary>
     private void StartNextElement()
     {
-        // Determine what to send based on current state
+        int? nextDuration = DetermineNextToneDuration();
+
+        if (nextDuration.HasValue)
+        {
+            // Record paddle states at element start
+            _ditPaddleAtStart = _currentLeftPaddleState;
+            _dahPaddleAtStart = _currentRightPaddleState;
+
+            // Clear latches
+            _iambicDitLatched = false;
+            _iambicDahLatched = false;
+
+            bool isDit = (nextDuration.Value == _ditLength);
+
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
+
+            // Start tone (OnToneStart will fire and send radio key-down)
+            _sidetoneGenerator?.StartTone(nextDuration.Value);
+            // Queue the silence that will follow this tone
+            _sidetoneGenerator?.QueueSilence(_ditLength);
+        }
+        else
+        {
+            // Nothing to send, go idle
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] No element to send, going idle");
+
+            _keyerState = KeyerState.Idle;
+            _ditPaddleAtStart = false;
+            _dahPaddleAtStart = false;
+        }
+    }
+
+    /// <summary>
+    /// Determines what the next tone duration should be based on current paddle states.
+    /// Returns null if no tone should be sent.
+    /// </summary>
+    private int? DetermineNextToneDuration()
+    {
+        bool wasSendingDit = _ditPaddleAtStart;
         bool sendDit = false;
         bool sendDah = false;
-        bool wasSendingDit = _ditPaddleAtStart; // Last element was a dit if dit paddle was at start
 
         // Determine next element using iambic logic
         if (wasSendingDit || _keyerState == KeyerState.Idle)
@@ -230,41 +302,12 @@ public class IambicKeyer
             sendDah = false;
         }
 
-        // Send the element or go idle
-        if (sendDit || sendDah)
-        {
-            // Record paddle states at element start
-            _ditPaddleAtStart = _currentLeftPaddleState;
-            _dahPaddleAtStart = _currentRightPaddleState;
-
-            // Clear latches
-            _iambicDitLatched = false;
-            _iambicDahLatched = false;
-
-            // Calculate duration and start tone
-            int duration = sendDit ? _ditLength : (_ditLength * 3);
-
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] Starting {(sendDit ? "dit" : "dah")} ({duration}ms)");
-
-            _keyerState = KeyerState.Playing;
-
-            // Send radio key-down and start tone with following silence
-            SendRadioKey(true);
-            _sidetoneGenerator?.StartTone(duration);
-            // Queue the silence that will follow this tone
-            _sidetoneGenerator?.QueueSilence(_ditLength);
-        }
+        if (sendDit)
+            return _ditLength;
+        else if (sendDah)
+            return _ditLength * 3;
         else
-        {
-            // Nothing to send, go idle
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] No element to send, going idle");
-
-            _keyerState = KeyerState.Idle;
-            _ditPaddleAtStart = false;
-            _dahPaddleAtStart = false;
-        }
+            return null;
     }
 
     /// <summary>
