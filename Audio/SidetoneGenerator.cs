@@ -1,29 +1,34 @@
 using System;
-using System.Collections.Generic;
+using System.Threading;
 using OpenTK.Audio.OpenAL;
 
 namespace NetKeyer.Audio
 {
+    /// <summary>
+    /// OpenAL-based sidetone generator using streaming audio with SidetoneProvider.
+    /// Used on Linux/macOS for low-latency audio output with shaped waveforms.
+    /// </summary>
     public class SidetoneGenerator : ISidetoneGenerator
     {
         private ALDevice _device;
         private ALContext _context;
         private int _source;
-        private int _buffer;
-        private bool _isPlaying;
-        private int _frequency = 600; // Hz
-        private float _volume = 0.5f; // 0.0 to 1.0
+        private int[] _buffers;
+        private const int NUM_BUFFERS = 3;
         private const int SAMPLE_RATE = 48000;
-        private const int TARGET_BUFFER_SIZE = 2048; // Target ~43ms of audio at 48kHz
+        private const int BUFFER_SAMPLES = 256;
         private bool _disposed;
-
-        // Cache pre-generated buffers for common frequencies to eliminate generation overhead
-        private Dictionary<int, short[]> _bufferCache = new Dictionary<int, short[]>();
+        private Thread _streamingThread;
+        private bool _shouldStop;
+        private SidetoneProvider _sidetoneProvider;
 
         public SidetoneGenerator()
         {
             try
             {
+                // Create the sidetone provider
+                _sidetoneProvider = new SidetoneProvider();
+
                 // Open default audio device
                 _device = ALC.OpenDevice(null);
                 if (_device == ALDevice.Null)
@@ -32,8 +37,6 @@ namespace NetKeyer.Audio
                 }
 
                 // Create audio context
-                // Note: OpenTK's OpenAL doesn't expose low-latency context attributes,
-                // but the reduced buffer size and caching provide the main latency benefits
                 _context = ALC.CreateContext(_device, (int[])null);
                 if (_context == ALContext.Null)
                 {
@@ -43,23 +46,95 @@ namespace NetKeyer.Audio
 
                 ALC.MakeContextCurrent(_context);
 
-                // Generate source and buffer
+                // Generate source and buffers
                 _source = AL.GenSource();
-                _buffer = AL.GenBuffer();
+                _buffers = AL.GenBuffers(NUM_BUFFERS);
 
-                // Set source properties for low latency
-                AL.Source(_source, ALSourcef.Gain, _volume);
-                AL.Source(_source, ALSourceb.Looping, true);
+                // Set source properties
+                AL.Source(_source, ALSourcef.Gain, 1.0f);
 
-                // Pre-generate and upload default frequency buffer for instant first-press response
-                short[] samples = GetOrGenerateBuffer(_frequency);
-                AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
+                // Start streaming thread
+                _shouldStop = false;
+                _streamingThread = new Thread(StreamingThreadProc);
+                _streamingThread.IsBackground = true;
+                _streamingThread.Start();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize audio: {ex.Message}");
+                Console.WriteLine($"Failed to initialize OpenAL audio: {ex.Message}");
                 Dispose();
                 throw;
+            }
+        }
+
+        private void StreamingThreadProc()
+        {
+            try
+            {
+                // Pre-fill all buffers
+                float[] floatBuffer = new float[BUFFER_SAMPLES];
+                short[] shortBuffer = new short[BUFFER_SAMPLES];
+
+                for (int i = 0; i < NUM_BUFFERS; i++)
+                {
+                    _sidetoneProvider.Read(floatBuffer, 0, BUFFER_SAMPLES);
+                    ConvertToShort(floatBuffer, shortBuffer);
+                    AL.BufferData(_buffers[i], ALFormat.Mono16, shortBuffer, SAMPLE_RATE);
+                }
+
+                AL.SourceQueueBuffers(_source, NUM_BUFFERS, _buffers);
+                AL.SourcePlay(_source);
+
+                // Streaming loop
+                while (!_shouldStop)
+                {
+                    // Check for processed buffers
+                    AL.GetSource(_source, ALGetSourcei.BuffersProcessed, out int processedBuffers);
+
+                    while (processedBuffers > 0)
+                    {
+                        // Unqueue processed buffer
+                        int buffer = AL.SourceUnqueueBuffer(_source);
+
+                        // Fill with new data
+                        _sidetoneProvider.Read(floatBuffer, 0, BUFFER_SAMPLES);
+                        ConvertToShort(floatBuffer, shortBuffer);
+                        AL.BufferData(buffer, ALFormat.Mono16, shortBuffer, SAMPLE_RATE);
+
+                        // Re-queue buffer
+                        AL.SourceQueueBuffers(_source, 1, new[] { buffer });
+
+                        processedBuffers--;
+                    }
+
+                    // Make sure source is still playing
+                    AL.GetSource(_source, ALGetSourcei.SourceState, out int state);
+                    if ((ALSourceState)state != ALSourceState.Playing)
+                    {
+                        // Check if we have buffers queued before restarting
+                        AL.GetSource(_source, ALGetSourcei.BuffersQueued, out int buffersQueued);
+                        if (buffersQueued > 0)
+                        {
+                            AL.SourcePlay(_source);
+                        }
+                    }
+
+                    // Sleep briefly to avoid busy-waiting
+                    Thread.Sleep(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"OpenAL streaming thread error: {ex.Message}");
+            }
+        }
+
+        private void ConvertToShort(float[] floatSamples, short[] shortSamples)
+        {
+            for (int i = 0; i < floatSamples.Length; i++)
+            {
+                float sample = Math.Clamp(floatSamples[i], -1.0f, 1.0f);
+                shortSamples[i] = (short)(sample * short.MaxValue);
             }
         }
 
@@ -68,128 +143,33 @@ namespace NetKeyer.Audio
             if (frequencyHz < 100 || frequencyHz > 2000)
                 return;
 
-            _frequency = frequencyHz;
-
-            // Pre-generate and upload buffer immediately to eliminate first-press delay
-            if (_buffer != 0)
-            {
-                short[] samples = GetOrGenerateBuffer(_frequency);
-
-                // If currently playing, must detach buffer before updating
-                if (_isPlaying)
-                {
-                    AL.SourceStop(_source);
-                    AL.Source(_source, ALSourcei.Buffer, 0);
-                }
-
-                // Upload new frequency data
-                AL.BufferData(_buffer, ALFormat.Mono16, samples, SAMPLE_RATE);
-
-                // If was playing, restart
-                if (_isPlaying)
-                {
-                    AL.Source(_source, ALSourcei.Buffer, _buffer);
-                    AL.SourcePlay(_source);
-                }
-            }
+            _sidetoneProvider?.SetFrequency(frequencyHz);
         }
 
         public void SetVolume(int volumePercent)
         {
-            // Convert 0-100 to 0.0-1.0
-            _volume = Math.Clamp(volumePercent / 100.0f, 0.0f, 1.0f);
-
-            if (_source != 0)
-            {
-                AL.Source(_source, ALSourcef.Gain, _volume);
-            }
+            float volume = Math.Clamp(volumePercent / 100.0f, 0.0f, 1.0f);
+            _sidetoneProvider?.SetVolume(volume);
         }
 
-        private static int GCD(int a, int b)
+        public void SetWpm(int wpm)
         {
-            while (b != 0)
-            {
-                int temp = b;
-                b = a % b;
-                a = temp;
-            }
-            return a;
-        }
-
-        private static int CalculateBufferSize(int frequency, int sampleRate, int targetSize)
-        {
-            // Calculate minimum buffer size for whole cycles: sampleRate / GCD(sampleRate, frequency)
-            // This ensures the buffer contains an exact number of cycles for seamless looping
-            int gcd = GCD(sampleRate, frequency);
-            int minBufferSize = sampleRate / gcd;
-
-            // Choose a multiple of minBufferSize close to our target
-            int cycles = Math.Max(1, (targetSize + minBufferSize / 2) / minBufferSize);
-            return cycles * minBufferSize;
-        }
-
-        private short[] GetOrGenerateBuffer(int frequency)
-        {
-            // Check if we already have this buffer cached
-            if (_bufferCache.TryGetValue(frequency, out short[] cachedBuffer))
-            {
-                return cachedBuffer;
-            }
-
-            // Calculate buffer size for whole cycles at this frequency
-            int bufferSize = CalculateBufferSize(frequency, SAMPLE_RATE, TARGET_BUFFER_SIZE);
-
-            // Generate new buffer
-            short[] samples = new short[bufferSize];
-            for (int i = 0; i < bufferSize; i++)
-            {
-                double t = (double)i / SAMPLE_RATE;
-                double sample = Math.Sin(2.0 * Math.PI * frequency * t);
-                samples[i] = (short)(sample * short.MaxValue * 0.5); // Scale to prevent clipping
-            }
-
-            // Cache for future use
-            _bufferCache[frequency] = samples;
-
-            return samples;
+            _sidetoneProvider?.SetWpm(wpm);
         }
 
         public void Start()
         {
-            if (_disposed || _isPlaying || _source == 0 || _buffer == 0)
-                return;
-
-            try
-            {
-                // Buffer is already pre-generated and uploaded by SetFrequency
-                // Just attach buffer to source and play
-                AL.Source(_source, ALSourcei.Buffer, _buffer);
-                AL.SourcePlay(_source);
-
-                _isPlaying = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to start sidetone: {ex.Message}");
-            }
+            _sidetoneProvider?.StartIndefiniteTone();
         }
 
         public void Stop()
         {
-            if (_disposed || !_isPlaying || _source == 0)
-                return;
+            _sidetoneProvider?.Stop();
+        }
 
-            try
-            {
-                AL.SourceStop(_source);
-                // Detach buffer from source to allow buffer data updates
-                AL.Source(_source, ALSourcei.Buffer, 0);
-                _isPlaying = false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to stop sidetone: {ex.Message}");
-            }
+        public void StartTone(int durationMs)
+        {
+            _sidetoneProvider?.StartTone(durationMs);
         }
 
         public void Dispose()
@@ -197,18 +177,27 @@ namespace NetKeyer.Audio
             if (_disposed)
                 return;
 
-            Stop();
+            _disposed = true;
 
+            // Stop streaming thread
+            _shouldStop = true;
+            if (_streamingThread != null)
+            {
+                _streamingThread.Join(1000);
+            }
+
+            // Clean up OpenAL resources
             if (_source != 0)
             {
+                AL.SourceStop(_source);
                 AL.DeleteSource(_source);
                 _source = 0;
             }
 
-            if (_buffer != 0)
+            if (_buffers != null)
             {
-                AL.DeleteBuffer(_buffer);
-                _buffer = 0;
+                AL.DeleteBuffers(_buffers);
+                _buffers = null;
             }
 
             if (_context != ALContext.Null)
@@ -223,8 +212,6 @@ namespace NetKeyer.Audio
                 ALC.CloseDevice(_device);
                 _device = ALDevice.Null;
             }
-
-            _disposed = true;
         }
     }
 }
