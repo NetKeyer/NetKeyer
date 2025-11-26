@@ -37,7 +37,11 @@ namespace NetKeyer.Audio
                 }
 
                 // Create audio context
-                _context = ALC.CreateContext(_device, (int[])null);
+                ALContextAttributes attrs = new ALContextAttributes();
+                attrs.Refresh = 100;
+                attrs.Frequency = SAMPLE_RATE;
+
+                _context = ALC.CreateContext(_device, attrs);
                 if (_context == ALContext.Null)
                 {
                     ALC.CloseDevice(_device);
@@ -170,6 +174,16 @@ namespace NetKeyer.Audio
         public void StartTone(int durationMs)
         {
             _sidetoneProvider?.StartTone(durationMs);
+        }
+
+        public void StartSilenceThenTone(int silenceMs, int toneMs)
+        {
+            _sidetoneProvider?.StartSilenceThenTone(silenceMs, toneMs);
+        }
+
+        public void QueueSilence(int silenceMs, int? followingToneMs = null)
+        {
+            _sidetoneProvider?.QueueSilence(silenceMs, followingToneMs);
         }
 
         public void Dispose()

@@ -202,6 +202,43 @@ namespace NetKeyer.Audio
             }
         }
 
+        public void StartSilenceThenTone(int silenceMs, int toneMs)
+        {
+            if (_disposed || _wasapiOut == null)
+                return;
+
+            try
+            {
+                _sidetoneProvider?.StartSilenceThenTone(silenceMs, toneMs);
+
+                // Start WASAPI playback if not already playing
+                if (!_isPlaying)
+                {
+                    _wasapiOut.Play();
+                    _isPlaying = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to start silence+tone: {ex.Message}");
+            }
+        }
+
+        public void QueueSilence(int silenceMs, int? followingToneMs = null)
+        {
+            if (_disposed || _wasapiOut == null)
+                return;
+
+            try
+            {
+                _sidetoneProvider?.QueueSilence(silenceMs, followingToneMs);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to queue silence: {ex.Message}");
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)

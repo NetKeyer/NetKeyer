@@ -146,7 +146,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isSidetoneOnlyMode = false; // Track if we're in sidetone-only mode (no radio)
 
     // Iambic keyer state
-    private Timer _iambicTimer;
     private readonly object _iambicLock = new object();
     private bool _iambicKeyDown = false;
     private bool _iambicDitLatched = false;  // Set when dit paddle pressed during element (not at start)
@@ -1244,12 +1243,18 @@ public partial class MainWindowViewModel : ViewModelBase
                     _iambicDitLatched = true;
                     if (DebugFlags.DEBUG_KEYER)
                         Console.WriteLine($"[UpdateIambicKeyer] Setting DIT latch (newly pressed)");
+
+                    // Check if we should queue a dit for after the current silence
+                    CheckAndQueueNextElement();
                 }
                 if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
                     if (DebugFlags.DEBUG_KEYER)
                         Console.WriteLine($"[UpdateIambicKeyer] Setting DAH latch (newly pressed)");
+
+                    // Check if we should queue a dah for after the current silence
+                    CheckAndQueueNextElement();
                 }
             }
         }
@@ -1272,129 +1277,138 @@ public partial class MainWindowViewModel : ViewModelBase
         // Start sending the current element (dit or dah) with precise duration
         _keyerState = elementState;
         int elementDuration = isDit ? _ditLength : (_ditLength * 3);
+
+        // Send the tone to both sidetone and radio
         SendCWKey(true, elementDuration);
         _iambicKeyDown = true;
 
-        _iambicTimer = new Timer(IambicTimerCallback, null, elementDuration, Timeout.Infinite);
+        // Send key-up to radio after the tone duration
+        // (Sidetone will handle its own timing)
+        System.Threading.Tasks.Task.Delay(elementDuration).ContinueWith(_ =>
+        {
+            lock (_iambicLock)
+            {
+                if (_connectedRadio != null && _boundGuiClientHandle != 0)
+                {
+                    string timestamp = GetTimestamp();
+                    _connectedRadio.CWKey(false, timestamp, _boundGuiClientHandle);
+                }
+                _iambicKeyDown = false;
+
+                // Transition to space state
+                _keyerState = isDit ? KeyerState.SpaceAfterDit : KeyerState.SpaceAfterDah;
+
+                // Queue the inter-element space in the sidetone
+                _sidetoneGenerator?.QueueSilence(_ditLength);
+
+                // Schedule callback for when silence completes
+                System.Threading.Tasks.Task.Delay(_ditLength).ContinueWith(__ =>
+                {
+                    lock (_iambicLock)
+                    {
+                        OnSilenceComplete();
+                    }
+                });
+            }
+        });
     }
 
-    private void IambicTimerCallback(object state)
+    private void CheckAndQueueNextElement()
     {
-        lock (_iambicLock)
+        // Only queue if we're in a space state
+        if (_keyerState != KeyerState.SpaceAfterDit && _keyerState != KeyerState.SpaceAfterDah)
+            return;
+
+        bool wasSendingDit = (_keyerState == KeyerState.SpaceAfterDit);
+        KeyerState? nextState = DetermineNextElement(wasSendingDit);
+
+        if (nextState.HasValue)
         {
-            if (_keyerState == KeyerState.SendingDit)
-            {
-                if (DebugFlags.DEBUG_KEYER)
-                    Console.WriteLine($"[TimerCallback] Dit complete, starting inter-element space");
-                // Dit completed - send key up and start inter-element space
-                SendCWKey(false);
-                _iambicKeyDown = false;
-                _keyerState = KeyerState.SpaceAfterDit;
+            bool nextIsDit = (nextState.Value == KeyerState.SendingDit);
+            int nextDuration = nextIsDit ? _ditLength : (_ditLength * 3);
 
-                // Schedule inter-element space (one dit length)
-                _iambicTimer?.Change(_ditLength, Timeout.Infinite);
+            if (DebugFlags.DEBUG_KEYER)
+                Console.WriteLine($"[CheckAndQueue] Queueing next {(nextIsDit ? "dit" : "dah")} after current silence");
+
+            // Queue the next tone to start after the current silence
+            _sidetoneGenerator?.StartTone(nextDuration);
+        }
+    }
+
+    private void OnSilenceComplete()
+    {
+        if (DebugFlags.DEBUG_KEYER)
+            Console.WriteLine($"[OnSilenceComplete] Silence ended, checking for next element");
+
+        bool wasSendingDit = (_keyerState == KeyerState.SpaceAfterDit);
+        KeyerState? nextState = DetermineNextElement(wasSendingDit);
+
+        if (nextState.HasValue)
+        {
+            if (DebugFlags.DEBUG_KEYER)
+                Console.WriteLine($"[OnSilenceComplete] Starting next element: {nextState.Value}");
+            StartElement(nextState.Value);
+        }
+        else
+        {
+            if (DebugFlags.DEBUG_KEYER)
+                Console.WriteLine($"[OnSilenceComplete] No next element, stopping");
+            StopIambicKeyer();
+        }
+    }
+
+    private KeyerState? DetermineNextElement(bool wasSendingDit)
+    {
+        KeyerState? nextState = null;
+        string reason = "";
+
+        if (wasSendingDit)
+        {
+            // Priority 1: opposite paddle pressed or latched
+            if (_currentRightPaddleState || _iambicDahLatched)
+            {
+                nextState = KeyerState.SendingDah;
+                reason = _currentRightPaddleState ? "dah pressed" : "dah latched";
             }
-            else if (_keyerState == KeyerState.SendingDah)
+            // Priority 2: same paddle still pressed
+            else if (_currentLeftPaddleState)
             {
-                if (DebugFlags.DEBUG_KEYER)
-                    Console.WriteLine($"[TimerCallback] Dah complete, starting inter-element space");
-                // Dah completed - send key up and start inter-element space
-                SendCWKey(false);
-                _iambicKeyDown = false;
-                _keyerState = KeyerState.SpaceAfterDah;
-
-                // Schedule inter-element space (one dit length)
-                _iambicTimer?.Change(_ditLength, Timeout.Infinite);
+                nextState = KeyerState.SendingDit;
+                reason = "dit still pressed";
             }
-            else if (_keyerState == KeyerState.SpaceAfterDit)
+            // Priority 3 (Mode B): opposite was held from start but now released
+            else if (IsIambicModeB && _dahPaddleAtStart && !_currentRightPaddleState)
             {
-                if (DebugFlags.DEBUG_KEYER)
-                    Console.WriteLine($"[TimerCallback] Space after dit complete. L={_currentLeftPaddleState} R={_currentRightPaddleState} DitLatch={_iambicDitLatched} DahLatch={_iambicDahLatched}");
-
-                // Inter-element space after dit completed - decide what to do next
-                KeyerState? nextState = null;
-                string reason = "";
-
-                // Priority 1: Check if opposite paddle is currently pressed OR was newly pressed (latch set)
-                if (_currentRightPaddleState || _iambicDahLatched)
-                {
-                    // Was sending dit, dah paddle currently pressed or was newly pressed - alternate to dah
-                    nextState = KeyerState.SendingDah;
-                    reason = _currentRightPaddleState ? "Priority1: was dit, dah pressed" : "Priority1: was dit, dah latched (newly pressed)";
-                }
-                // Priority 2: Check if same paddle is still pressed (continue)
-                else if (_currentLeftPaddleState)
-                {
-                    // Was sending dit, dit paddle still pressed - send another dit
-                    nextState = KeyerState.SendingDit;
-                    reason = "Priority2: was dit, dit still pressed";
-                }
-                // Priority 3 (Mode B only): If opposite paddle was held from start but now released, send one more
-                else if (IsIambicModeB && _dahPaddleAtStart && !_currentRightPaddleState)
-                {
-                    // Was sending dit, dah was held from start but now released - send one dah (Mode B only)
-                    nextState = KeyerState.SendingDah;
-                    reason = "Priority3/ModeB: was dit, dah held from start but released";
-                }
-
-                if (nextState.HasValue)
-                {
-                    if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[TimerCallback] Sending next: {(nextState.Value == KeyerState.SendingDit ? "dit" : "dah")} - Reason: {reason}");
-                    StartElement(nextState.Value);
-                }
-                else
-                {
-                    if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[TimerCallback] Stopping - no more elements to send");
-                    StopIambicKeyer();
-                }
-            }
-            else if (_keyerState == KeyerState.SpaceAfterDah)
-            {
-                if (DebugFlags.DEBUG_KEYER)
-                    Console.WriteLine($"[TimerCallback] Space after dah complete. L={_currentLeftPaddleState} R={_currentRightPaddleState} DitLatch={_iambicDitLatched} DahLatch={_iambicDahLatched}");
-
-                // Inter-element space after dah completed - decide what to do next
-                KeyerState? nextState = null;
-                string reason = "";
-
-                // Priority 1: Check if opposite paddle is currently pressed OR was newly pressed (latch set)
-                if (_currentLeftPaddleState || _iambicDitLatched)
-                {
-                    // Was sending dah, dit paddle currently pressed or was newly pressed - alternate to dit
-                    nextState = KeyerState.SendingDit;
-                    reason = _currentLeftPaddleState ? "Priority1: was dah, dit pressed" : "Priority1: was dah, dit latched (newly pressed)";
-                }
-                // Priority 2: Check if same paddle is still pressed (continue)
-                else if (_currentRightPaddleState)
-                {
-                    // Was sending dah, dah paddle still pressed - send another dah
-                    nextState = KeyerState.SendingDah;
-                    reason = "Priority2: was dah, dah still pressed";
-                }
-                // Priority 3 (Mode B only): If opposite paddle was held from start but now released, send one more
-                else if (IsIambicModeB && _ditPaddleAtStart && !_currentLeftPaddleState)
-                {
-                    // Was sending dah, dit was held from start but now released - send one dit (Mode B only)
-                    nextState = KeyerState.SendingDit;
-                    reason = "Priority3/ModeB: was dah, dit held from start but released";
-                }
-
-                if (nextState.HasValue)
-                {
-                    if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[TimerCallback] Sending next: {(nextState.Value == KeyerState.SendingDit ? "dit" : "dah")} - Reason: {reason}");
-                    StartElement(nextState.Value);
-                }
-                else
-                {
-                    if (DebugFlags.DEBUG_KEYER)
-                        Console.WriteLine($"[TimerCallback] Stopping - no more elements to send");
-                    StopIambicKeyer();
-                }
+                nextState = KeyerState.SendingDah;
+                reason = "ModeB: dah held then released";
             }
         }
+        else // was sending dah
+        {
+            // Priority 1: opposite paddle pressed or latched
+            if (_currentLeftPaddleState || _iambicDitLatched)
+            {
+                nextState = KeyerState.SendingDit;
+                reason = _currentLeftPaddleState ? "dit pressed" : "dit latched";
+            }
+            // Priority 2: same paddle still pressed
+            else if (_currentRightPaddleState)
+            {
+                nextState = KeyerState.SendingDah;
+                reason = "dah still pressed";
+            }
+            // Priority 3 (Mode B): opposite was held from start but now released
+            else if (IsIambicModeB && _ditPaddleAtStart && !_currentLeftPaddleState)
+            {
+                nextState = KeyerState.SendingDit;
+                reason = "ModeB: dit held then released";
+            }
+        }
+
+        if (DebugFlags.DEBUG_KEYER && nextState.HasValue)
+            Console.WriteLine($"[DetermineNext] Next={nextState.Value}, Reason={reason}");
+
+        return nextState;
     }
 
     private void StopIambicKeyer()
@@ -1403,13 +1417,6 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             if (DebugFlags.DEBUG_KEYER)
                 Console.WriteLine($"[StopIambicKeyer] Stopping keyer, going to Idle");
-
-            // Clean up timer
-            if (_iambicTimer != null)
-            {
-                _iambicTimer.Dispose();
-                _iambicTimer = null;
-            }
 
             // Ensure key is up
             if (_iambicKeyDown)
