@@ -1,144 +1,100 @@
 using System;
-using System.Threading;
-using OpenTK.Audio.OpenAL;
+using System.Runtime.InteropServices;
+using PortAudioSharp;
 
 namespace NetKeyer.Audio
 {
     /// <summary>
-    /// OpenAL-based sidetone generator using streaming audio with SidetoneProvider.
+    /// PortAudio-based sidetone generator using streaming audio with SidetoneProvider.
     /// Used on Linux/macOS for low-latency audio output with shaped waveforms.
+    /// Uses ALSA backend on Linux and CoreAudio on macOS for optimal latency.
     /// </summary>
     public class SidetoneGenerator : ISidetoneGenerator
     {
-        private ALDevice _device;
-        private ALContext _context;
-        private int _source;
-        private int[] _buffers;
-        private const int NUM_BUFFERS = 3;
+        private Stream _stream;
         private const int SAMPLE_RATE = 48000;
-        private const int BUFFER_SAMPLES = 256;
+        private const int BUFFER_SAMPLES = 256; // ~5.3 ms buffer at 48 kHz for low latency
         private bool _disposed;
-        private Thread _streamingThread;
-        private bool _shouldStop;
         private SidetoneProvider _sidetoneProvider;
+        private float[] _readBuffer;
+        private readonly object _lock = new object();
 
         public SidetoneGenerator()
         {
             try
             {
+                // Initialize PortAudio
+                PortAudio.Initialize();
+
                 // Create the sidetone provider
                 _sidetoneProvider = new SidetoneProvider();
 
-                // Open default audio device
-                _device = ALC.OpenDevice(null);
-                if (_device == ALDevice.Null)
+                // Allocate read buffer for callback
+                _readBuffer = new float[BUFFER_SAMPLES];
+
+                // Get default output device info for latency
+                var deviceInfo = PortAudio.GetDeviceInfo(PortAudio.DefaultOutputDevice);
+
+                // Configure stream parameters for output
+                var streamParams = new StreamParameters
                 {
-                    throw new InvalidOperationException("Failed to open audio device");
-                }
+                    device = PortAudio.DefaultOutputDevice,
+                    channelCount = 1, // Mono
+                    sampleFormat = SampleFormat.Float32,
+                    suggestedLatency = deviceInfo.defaultLowOutputLatency,
+                    hostApiSpecificStreamInfo = IntPtr.Zero
+                };
 
-                // Create audio context
-                ALContextAttributes attrs = new ALContextAttributes();
-                attrs.Refresh = 100;
-                attrs.Frequency = SAMPLE_RATE;
+                // Open stream with callback
+                _stream = new Stream(
+                    inParams: null,
+                    outParams: streamParams,
+                    sampleRate: SAMPLE_RATE,
+                    framesPerBuffer: BUFFER_SAMPLES,
+                    streamFlags: StreamFlags.ClipOff,
+                    callback: StreamCallback,
+                    userData: null
+                );
 
-                _context = ALC.CreateContext(_device, attrs);
-                if (_context == ALContext.Null)
-                {
-                    ALC.CloseDevice(_device);
-                    throw new InvalidOperationException("Failed to create audio context");
-                }
+                // Start the stream
+                _stream.Start();
 
-                ALC.MakeContextCurrent(_context);
-
-                // Generate source and buffers
-                _source = AL.GenSource();
-                _buffers = AL.GenBuffers(NUM_BUFFERS);
-
-                // Set source properties
-                AL.Source(_source, ALSourcef.Gain, 1.0f);
-
-                // Start streaming thread
-                _shouldStop = false;
-                _streamingThread = new Thread(StreamingThreadProc);
-                _streamingThread.IsBackground = true;
-                _streamingThread.Start();
+                Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
+                                  $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize OpenAL audio: {ex.Message}");
+                Console.WriteLine($"Failed to initialize PortAudio: {ex.Message}");
                 Dispose();
                 throw;
             }
         }
 
-        private void StreamingThreadProc()
+        private StreamCallbackResult StreamCallback(
+            IntPtr input,
+            IntPtr output,
+            uint frameCount,
+            ref StreamCallbackTimeInfo timeInfo,
+            StreamCallbackFlags statusFlags,
+            IntPtr userData)
         {
-            try
+            lock (_lock)
             {
-                // Pre-fill all buffers
-                float[] floatBuffer = new float[BUFFER_SAMPLES];
-                short[] shortBuffer = new short[BUFFER_SAMPLES];
-
-                for (int i = 0; i < NUM_BUFFERS; i++)
+                try
                 {
-                    _sidetoneProvider.Read(floatBuffer, 0, BUFFER_SAMPLES);
-                    ConvertToShort(floatBuffer, shortBuffer);
-                    AL.BufferData(_buffers[i], ALFormat.Mono16, shortBuffer, SAMPLE_RATE);
+                    // Read samples from SidetoneProvider
+                    _sidetoneProvider.Read(_readBuffer, 0, (int)frameCount);
+
+                    // Copy to output buffer
+                    Marshal.Copy(_readBuffer, 0, output, (int)frameCount);
+
+                    return StreamCallbackResult.Continue;
                 }
-
-                AL.SourceQueueBuffers(_source, NUM_BUFFERS, _buffers);
-                AL.SourcePlay(_source);
-
-                // Streaming loop
-                while (!_shouldStop)
+                catch (Exception ex)
                 {
-                    // Check for processed buffers
-                    AL.GetSource(_source, ALGetSourcei.BuffersProcessed, out int processedBuffers);
-
-                    while (processedBuffers > 0)
-                    {
-                        // Unqueue processed buffer
-                        int buffer = AL.SourceUnqueueBuffer(_source);
-
-                        // Fill with new data
-                        _sidetoneProvider.Read(floatBuffer, 0, BUFFER_SAMPLES);
-                        ConvertToShort(floatBuffer, shortBuffer);
-                        AL.BufferData(buffer, ALFormat.Mono16, shortBuffer, SAMPLE_RATE);
-
-                        // Re-queue buffer
-                        AL.SourceQueueBuffers(_source, 1, new[] { buffer });
-
-                        processedBuffers--;
-                    }
-
-                    // Make sure source is still playing
-                    AL.GetSource(_source, ALGetSourcei.SourceState, out int state);
-                    if ((ALSourceState)state != ALSourceState.Playing)
-                    {
-                        // Check if we have buffers queued before restarting
-                        AL.GetSource(_source, ALGetSourcei.BuffersQueued, out int buffersQueued);
-                        if (buffersQueued > 0)
-                        {
-                            AL.SourcePlay(_source);
-                        }
-                    }
-
-                    // Sleep briefly to avoid busy-waiting
-                    Thread.Sleep(1);
+                    Console.WriteLine($"PortAudio callback error: {ex.Message}");
+                    return StreamCallbackResult.Abort;
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"OpenAL streaming thread error: {ex.Message}");
-            }
-        }
-
-        private void ConvertToShort(float[] floatSamples, short[] shortSamples)
-        {
-            for (int i = 0; i < floatSamples.Length; i++)
-            {
-                float sample = Math.Clamp(floatSamples[i], -1.0f, 1.0f);
-                shortSamples[i] = (short)(sample * short.MaxValue);
             }
         }
 
@@ -193,38 +149,33 @@ namespace NetKeyer.Audio
 
             _disposed = true;
 
-            // Stop streaming thread
-            _shouldStop = true;
-            if (_streamingThread != null)
+            // Stop and close stream
+            if (_stream != null)
             {
-                _streamingThread.Join(1000);
+                try
+                {
+                    if (!_stream.IsStopped)
+                    {
+                        _stream.Stop();
+                    }
+                    _stream.Close();
+                    _stream.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error disposing PortAudio stream: {ex.Message}");
+                }
+                _stream = null;
             }
 
-            // Clean up OpenAL resources
-            if (_source != 0)
+            // Terminate PortAudio when done
+            try
             {
-                AL.SourceStop(_source);
-                AL.DeleteSource(_source);
-                _source = 0;
+                PortAudio.Terminate();
             }
-
-            if (_buffers != null)
+            catch
             {
-                AL.DeleteBuffers(_buffers);
-                _buffers = null;
-            }
-
-            if (_context != ALContext.Null)
-            {
-                ALC.MakeContextCurrent(ALContext.Null);
-                ALC.DestroyContext(_context);
-                _context = ALContext.Null;
-            }
-
-            if (_device != ALDevice.Null)
-            {
-                ALC.CloseDevice(_device);
-                _device = ALDevice.Null;
+                // Ignore termination errors
             }
         }
     }
