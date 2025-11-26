@@ -27,6 +27,7 @@ namespace NetKeyer.Audio
 
         public event Action OnSilenceComplete;
         public event Action OnToneComplete;
+        public event Action OnBecomeIdle;
 
         public WasapiSidetoneGenerator()
         {
@@ -41,6 +42,7 @@ namespace NetKeyer.Audio
                 // Forward events
                 _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
                 _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
+                _sidetoneProvider.OnBecomeIdle += OnProviderBecomeIdle;
 
                 // Set up device change monitoring
                 _deviceEnumerator = new MMDeviceEnumerator();
@@ -70,6 +72,29 @@ namespace NetKeyer.Audio
             );
 
             _wasapiOut.Init(_sidetoneProvider);
+        }
+
+        private void OnProviderBecomeIdle()
+        {
+            if (_disposed || _wasapiOut == null)
+                return;
+
+            try
+            {
+                // Stop WASAPI playback when fully idle to minimize latency for next tone
+                if (_isPlaying)
+                {
+                    _wasapiOut.Stop();
+                    _isPlaying = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to stop WASAPI on idle: {ex.Message}");
+            }
+
+            // Forward the event
+            OnBecomeIdle?.Invoke();
         }
 
         private void OnDefaultDeviceChanged()
@@ -201,7 +226,7 @@ namespace NetKeyer.Audio
 
                 // For timed tones (iambic mode), don't stop WASAPI immediately
                 // Let it keep running for the next dit/dah to minimize inter-element latency
-                // WASAPI will be stopped by the polling task in Stop() when truly idle
+                // WASAPI will be stopped by OnProviderBecomeIdle when truly idle (not in timed silence)
             }
             catch (Exception ex)
             {
