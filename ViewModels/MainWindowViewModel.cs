@@ -215,6 +215,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _sidetoneGenerator = SidetoneGeneratorFactory.Create();
             _sidetoneGenerator.SetFrequency(CwPitch);
             _sidetoneGenerator.SetVolume(SidetoneVolume);
+            _sidetoneGenerator.SetWpm(CwSpeed);
         }
         catch (Exception ex)
         {
@@ -1078,6 +1079,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         UpdateDitLength();
 
+        // Update sidetone generator WPM for ramp calculations
+        _sidetoneGenerator?.SetWpm(value);
+
         // Only send to radio if not updating from radio (prevent feedback loop)
         if (_connectedRadio != null && !_updatingFromRadio)
         {
@@ -1265,12 +1269,12 @@ public partial class MainWindowViewModel : ViewModelBase
         _iambicDitLatched = false;
         _iambicDahLatched = false;
 
-        // Start sending the current element (dit or dah)
+        // Start sending the current element (dit or dah) with precise duration
         _keyerState = elementState;
-        SendCWKey(true);
+        int elementDuration = isDit ? _ditLength : (_ditLength * 3);
+        SendCWKey(true, elementDuration);
         _iambicKeyDown = true;
 
-        int elementDuration = isDit ? _ditLength : (_ditLength * 3);
         _iambicTimer = new Timer(IambicTimerCallback, null, elementDuration, Timeout.Infinite);
     }
 
@@ -1425,11 +1429,23 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void SendCWKey(bool state)
     {
+        SendCWKey(state, null);
+    }
+
+    private void SendCWKey(bool state, int? durationMs)
+    {
         // Control local sidetone
         if (state)
-            _sidetoneGenerator?.Start();
+        {
+            if (durationMs.HasValue)
+                _sidetoneGenerator?.StartTone(durationMs.Value);
+            else
+                _sidetoneGenerator?.Start();
+        }
         else
+        {
             _sidetoneGenerator?.Stop();
+        }
 
         // Send to radio
         if (_connectedRadio != null && _boundGuiClientHandle != 0)

@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using NAudio.CoreAudioApi;
 
 namespace NetKeyer.Audio
@@ -14,36 +12,28 @@ namespace NetKeyer.Audio
     public class WasapiSidetoneGenerator : ISidetoneGenerator
     {
         private WasapiOut _wasapiOut;
-        private SignalGenerator _signalGenerator;
-        private VolumeSampleProvider _volumeProvider;
+        private SidetoneProvider _sidetoneProvider;
         private bool _disposed;
         private bool _isPlaying;
         private int _frequency = 600;
         private float _volume = 0.5f;
+        private int _wpm = 20;
         private MMDeviceEnumerator _deviceEnumerator;
         private DeviceNotificationClient _notificationClient;
 
-        // Use very low latency - 3ms at 48kHz
+        // Use ultra-low latency - 1ms at 48kHz
         private const int SAMPLE_RATE = 48000;
-        private const int LATENCY_MS = 3;
+        private const int LATENCY_MS = 1;
 
         public WasapiSidetoneGenerator()
         {
             try
             {
-                // Create signal generator for sine wave
-                _signalGenerator = new SignalGenerator(SAMPLE_RATE, 1)
-                {
-                    Gain = 0.25, // Prevent clipping
-                    Frequency = _frequency,
-                    Type = SignalGeneratorType.Sin
-                };
-
-                // Add volume control
-                _volumeProvider = new VolumeSampleProvider(_signalGenerator)
-                {
-                    Volume = _volume
-                };
+                // Create custom sidetone provider
+                _sidetoneProvider = new SidetoneProvider();
+                _sidetoneProvider.SetFrequency(_frequency);
+                _sidetoneProvider.SetVolume(_volume);
+                _sidetoneProvider.SetWpm(_wpm);
 
                 // Set up device change monitoring
                 _deviceEnumerator = new MMDeviceEnumerator();
@@ -52,6 +42,8 @@ namespace NetKeyer.Audio
 
                 // Initialize WASAPI output
                 InitializeWasapiOut();
+
+                // Don't start the audio stream until needed - this reduces latency
             }
             catch (Exception ex)
             {
@@ -70,7 +62,7 @@ namespace NetKeyer.Audio
                 LATENCY_MS
             );
 
-            _wasapiOut.Init(_volumeProvider);
+            _wasapiOut.Init(_sidetoneProvider);
         }
 
         private void OnDefaultDeviceChanged()
@@ -80,9 +72,6 @@ namespace NetKeyer.Audio
 
             try
             {
-                // Save current playing state
-                bool wasPlaying = _isPlaying;
-
                 // Stop and dispose old device
                 if (_wasapiOut != null)
                 {
@@ -98,12 +87,7 @@ namespace NetKeyer.Audio
                 // Reinitialize with new default device
                 InitializeWasapiOut();
 
-                // Resume playback if we were playing
-                if (wasPlaying)
-                {
-                    _wasapiOut.Play();
-                    _isPlaying = true;
-                }
+                // Don't auto-start - will be started when tone is needed
             }
             catch (Exception ex)
             {
@@ -118,9 +102,9 @@ namespace NetKeyer.Audio
 
             _frequency = frequencyHz;
 
-            if (_signalGenerator != null)
+            if (_sidetoneProvider != null)
             {
-                _signalGenerator.Frequency = frequencyHz;
+                _sidetoneProvider.SetFrequency(frequencyHz);
             }
         }
 
@@ -128,21 +112,38 @@ namespace NetKeyer.Audio
         {
             _volume = Math.Clamp(volumePercent / 100.0f, 0.0f, 1.0f);
 
-            if (_volumeProvider != null)
+            if (_sidetoneProvider != null)
             {
-                _volumeProvider.Volume = _volume;
+                _sidetoneProvider.SetVolume(_volume);
+            }
+        }
+
+        public void SetWpm(int wpm)
+        {
+            _wpm = wpm;
+
+            if (_sidetoneProvider != null)
+            {
+                _sidetoneProvider.SetWpm(wpm);
             }
         }
 
         public void Start()
         {
-            if (_disposed || _isPlaying || _wasapiOut == null)
+            if (_disposed || _wasapiOut == null)
                 return;
 
             try
             {
-                _wasapiOut.Play();
-                _isPlaying = true;
+                // Start indefinite tone (for straight-key mode)
+                _sidetoneProvider?.StartIndefiniteTone();
+
+                // Start WASAPI playback if not already playing
+                if (!_isPlaying)
+                {
+                    _wasapiOut.Play();
+                    _isPlaying = true;
+                }
             }
             catch (Exception ex)
             {
@@ -152,17 +153,87 @@ namespace NetKeyer.Audio
 
         public void Stop()
         {
-            if (_disposed || !_isPlaying || _wasapiOut == null)
+            if (_disposed || _wasapiOut == null)
                 return;
 
             try
             {
-                _wasapiOut.Stop();
-                _isPlaying = false;
+                // Stop the tone (triggers ramp-down in the provider)
+                _sidetoneProvider?.Stop();
+
+                // Schedule WASAPI stop after ramp-down completes
+                // Poll until the provider is actually silent to avoid race conditions
+                if (_isPlaying)
+                {
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        // Wait for ramp-down to complete (poll every 5ms, max 50ms)
+                        for (int i = 0; i < 10; i++)
+                        {
+                            await System.Threading.Tasks.Task.Delay(5);
+                            if (_sidetoneProvider?.IsSilent == true)
+                            {
+                                break;
+                            }
+                        }
+
+                        // Only stop if still silent (no new tone started)
+                        if (_wasapiOut != null && _isPlaying && _sidetoneProvider?.IsSilent == true)
+                        {
+                            try
+                            {
+                                _wasapiOut.Stop();
+                                _isPlaying = false;
+                            }
+                            catch { }
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to stop WASAPI sidetone: {ex.Message}");
+            }
+        }
+
+        public void StartTone(int durationMs)
+        {
+            if (_disposed || _wasapiOut == null)
+                return;
+
+            try
+            {
+                // Start timed tone (for iambic mode)
+                _sidetoneProvider?.StartTone(durationMs);
+
+                // Start WASAPI playback if not already playing
+                if (!_isPlaying)
+                {
+                    _wasapiOut.Play();
+                    _isPlaying = true;
+                }
+
+                // Schedule WASAPI stop after tone completes
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    // Wait for tone duration plus a bit extra for ramp-down
+                    await System.Threading.Tasks.Task.Delay(durationMs + 20);
+
+                    // Only stop if still silent (no new tone started)
+                    if (_wasapiOut != null && _isPlaying && _sidetoneProvider?.IsSilent == true)
+                    {
+                        try
+                        {
+                            _wasapiOut.Stop();
+                            _isPlaying = false;
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to start timed WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -173,8 +244,6 @@ namespace NetKeyer.Audio
 
             _disposed = true;
 
-            Stop();
-
             // Unregister device change notifications
             if (_deviceEnumerator != null && _notificationClient != null)
             {
@@ -183,6 +252,11 @@ namespace NetKeyer.Audio
 
             if (_wasapiOut != null)
             {
+                if (_isPlaying)
+                {
+                    _wasapiOut.Stop();
+                    _isPlaying = false;
+                }
                 _wasapiOut.Dispose();
                 _wasapiOut = null;
             }
