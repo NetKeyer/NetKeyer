@@ -145,6 +145,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _loadingSettings = false; // Prevent saving while loading
     private bool _isTransmitModeCW = true; // Track if transmit slice is in CW mode
     private bool _isSidetoneOnlyMode = false; // Track if we're in sidetone-only mode (no radio)
+    private DateTime _inputDeviceOpenedTime = DateTime.MinValue; // Track when input device was opened
+    private const int INPUT_GRACE_PERIOD_MS = 100; // Ignore paddle events for this many ms after opening device
 
     // Sidetone generator and iambic keyer
     private ISidetoneGenerator _sidetoneGenerator;
@@ -525,10 +527,13 @@ public partial class MainWindowViewModel : ViewModelBase
             // Reset indicators and state
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
+            _previousStraightKeyState = false;
+            _previousPttState = false;
             LeftPaddleIndicatorColor = Brushes.Black;
             RightPaddleIndicatorColor = Brushes.Black;
             LeftPaddleStateText = "OFF";
             RightPaddleStateText = "OFF";
+            _inputDeviceOpenedTime = DateTime.MinValue;
         }
     }
 
@@ -551,10 +556,13 @@ public partial class MainWindowViewModel : ViewModelBase
             // Reset indicators and state
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
+            _previousStraightKeyState = false;
+            _previousPttState = false;
             LeftPaddleIndicatorColor = Brushes.Black;
             RightPaddleIndicatorColor = Brushes.Black;
             LeftPaddleStateText = "OFF";
             RightPaddleStateText = "OFF";
+            _inputDeviceOpenedTime = DateTime.MinValue;
         }
     }
 
@@ -580,11 +588,17 @@ public partial class MainWindowViewModel : ViewModelBase
                 _serialPort.PinChanged += SerialPort_PinChanged;
                 _serialPort.Open();
 
-                // Initialize previous states without sending commands
-                InitializeSerialPinStates();
+                // Mark when we opened the device to enable grace period
+                _inputDeviceOpenedTime = DateTime.UtcNow;
 
-                // Now update to show current state
-                UpdateSerialPinStates();
+                // Reset previous states to ensure clean start
+                _previousLeftPaddleState = false;
+                _previousRightPaddleState = false;
+                _previousStraightKeyState = false;
+                _previousPttState = false;
+
+                // Update indicators to show current state (but don't trigger keying)
+                UpdateIndicatorsFromSerial();
             }
             catch (Exception ex)
             {
@@ -612,9 +626,14 @@ public partial class MainWindowViewModel : ViewModelBase
                 _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
                 _midiInput.Open(SelectedMidiDevice);
 
-                // MIDI devices start with both paddles off, so initialize previous states
+                // Mark when we opened the device to enable grace period
+                _inputDeviceOpenedTime = DateTime.UtcNow;
+
+                // Reset previous states to ensure clean start
                 _previousLeftPaddleState = false;
                 _previousRightPaddleState = false;
+                _previousStraightKeyState = false;
+                _previousPttState = false;
             }
             catch (Exception ex)
             {
@@ -628,6 +647,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void MidiInput_PaddleStateChanged(object sender, PaddleStateChangedEventArgs e)
     {
+        // Check if we're in the grace period after opening the input device
+        bool inGracePeriod = (DateTime.UtcNow - _inputDeviceOpenedTime).TotalMilliseconds < INPUT_GRACE_PERIOD_MS;
+        if (inGracePeriod)
+        {
+            if (DebugFlags.DEBUG_MIDI_HANDLER)
+                Console.WriteLine($"[MidiInput_PaddleStateChanged] In grace period - ignoring event");
+            return;
+        }
+
         bool leftPaddleState = e.LeftPaddle;
         bool rightPaddleState = e.RightPaddle;
         bool straightKeyState = e.StraightKey;
@@ -734,23 +762,42 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private void InitializeSerialPinStates()
+    private void UpdateIndicatorsFromSerial()
     {
         if (_serialPort == null || !_serialPort.IsOpen)
             return;
 
         try
         {
-            // Read initial pin states and store as "previous" without sending commands
             // HaliKey v1: CTS (left) + DCD (right)
-            _previousLeftPaddleState = _serialPort.CtsHolding;
-            _previousRightPaddleState = _serialPort.CDHolding;
+            bool leftPaddleState = _serialPort.CtsHolding;
+            bool rightPaddleState = _serialPort.CDHolding;
+
+            // Apply swap if enabled
+            if (SwapPaddles)
+            {
+                (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
+            }
+
+            // Update indicators only
+            LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
+            RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
+            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         }
         catch { }
     }
 
     private void UpdateSerialPinStates()
     {
+        // Check if we're in the grace period after opening the input device
+        bool inGracePeriod = (DateTime.UtcNow - _inputDeviceOpenedTime).TotalMilliseconds < INPUT_GRACE_PERIOD_MS;
+        if (inGracePeriod)
+        {
+            // Ignore all pin state changes during grace period
+            return;
+        }
+
         if (_serialPort == null || !_serialPort.IsOpen)
             return;
 
