@@ -306,6 +306,9 @@ public class IambicKeyer
             if (_enableDebugLogging)
                 Console.WriteLine($"[IambicKeyer] No element to send, going idle");
 
+            // Send key-up as a safety measure (should already be off, but this ensures it)
+            SendRadioKey(false);
+
             _keyerState = KeyerState.Idle;
             _lastStateChange = DateTime.UtcNow;
             _ditPaddleAtStart = false;
