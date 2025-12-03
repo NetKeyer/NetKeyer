@@ -151,11 +151,19 @@ namespace NetKeyer.Audio
                 if (_enableDebugLogging)
                     Console.WriteLine($"[SidetoneProvider] Starting timed tone: {durationMs}ms, totalSamples={totalSamples}, rampSamples={rampSamples}, sustainSamples={sustainSamples}, remainingCycles={_remainingCycles}");
 
-                // Fire event that tone is starting
-                var toneStartHandler = OnToneStart;
-                if (toneStartHandler != null)
+                // Fire event synchronously from audio thread for deterministic timing.
+                // IambicKeyer handlers are designed to be fast (just state updates).
+                if (OnToneStart != null)
                 {
-                    System.Threading.Tasks.Task.Run(() => toneStartHandler());
+                    try
+                    {
+                        OnToneStart.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (_enableDebugLogging)
+                            Console.WriteLine($"[SidetoneProvider] Error in OnToneStart: {ex}");
+                    }
                 }
             }
         }
@@ -341,13 +349,20 @@ namespace NetKeyer.Audio
                             {
                                 _patchPosition = 0;
 
-                                // Fire tone complete event
+                                // Fire tone complete event synchronously from audio thread for deterministic timing.
                                 if (_enableDebugLogging)
                                     Console.WriteLine($"[SidetoneProvider] Firing OnToneComplete event");
-                                var toneCompleteHandler = OnToneComplete;
-                                if (toneCompleteHandler != null)
+                                if (OnToneComplete != null)
                                 {
-                                    System.Threading.Tasks.Task.Run(() => toneCompleteHandler());
+                                    try
+                                    {
+                                        OnToneComplete.Invoke();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        if (_enableDebugLogging)
+                                            Console.WriteLine($"[SidetoneProvider] Error in OnToneComplete: {ex}");
+                                    }
                                 }
 
                                 // Check if we have a queued silence
@@ -390,13 +405,6 @@ namespace NetKeyer.Audio
                                 if (_enableDebugLogging)
                                     Console.WriteLine($"[SidetoneProvider] Silence complete");
 
-                                // Fire OnSilenceComplete event (always fires when any silence completes)
-                                var silenceCompleteHandler = OnSilenceComplete;
-                                if (silenceCompleteHandler != null)
-                                {
-                                    System.Threading.Tasks.Task.Run(() => silenceCompleteHandler());
-                                }
-
                                 // Check if we have a queued tone
                                 if (_queuedToneDurationMs.HasValue)
                                 {
@@ -414,24 +422,54 @@ namespace NetKeyer.Audio
                                     _patchPosition = 0;
                                     _state = PlaybackState.RampUp;
 
-                                    // Fire event that queued tone is starting
-                                    var toneStartHandler = OnToneStart;
-                                    if (toneStartHandler != null)
+                                    // Fire event synchronously from audio thread for deterministic timing.
+                                    if (OnToneStart != null)
                                     {
-                                        System.Threading.Tasks.Task.Run(() => toneStartHandler());
+                                        try
+                                        {
+                                            OnToneStart.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            if (_enableDebugLogging)
+                                                Console.WriteLine($"[SidetoneProvider] Error in OnToneStart: {ex}");
+                                        }
                                     }
                                 }
                                 else
                                 {
+                                    // No queued tone, transition to Silent state FIRST
+                                    // This ensures handlers see the correct state when calling StartTone()
                                     if (_enableDebugLogging)
-                                        Console.WriteLine($"[SidetoneProvider] No queued tone, going silent");
+                                        Console.WriteLine($"[SidetoneProvider] No queued tone, transitioning to Silent");
                                     _state = PlaybackState.Silent;
 
-                                    // Fire OnBecomeIdle event (only when going to Silent with no queued tone)
-                                    var idleHandler = OnBecomeIdle;
-                                    if (idleHandler != null)
+                                    // Fire OnSilenceComplete (handler might start a new tone, changing state)
+                                    if (OnSilenceComplete != null)
                                     {
-                                        System.Threading.Tasks.Task.Run(() => idleHandler());
+                                        try
+                                        {
+                                            OnSilenceComplete.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            if (_enableDebugLogging)
+                                                Console.WriteLine($"[SidetoneProvider] Error in OnSilenceComplete: {ex}");
+                                        }
+                                    }
+
+                                    // Fire OnBecomeIdle only if still Silent (handler didn't start new tone)
+                                    if (_state == PlaybackState.Silent && OnBecomeIdle != null)
+                                    {
+                                        try
+                                        {
+                                            OnBecomeIdle.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            if (_enableDebugLogging)
+                                                Console.WriteLine($"[SidetoneProvider] Error in OnBecomeIdle: {ex}");
+                                        }
                                     }
                                 }
                             }
