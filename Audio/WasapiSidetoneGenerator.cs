@@ -81,19 +81,25 @@ namespace NetKeyer.Audio
             if (_disposed || _wasapiOut == null)
                 return;
 
-            try
+            // Stop WASAPI asynchronously to avoid stopping it from within its own callback chain
+            // This is important because OnProviderBecomeIdle is now called synchronously
+            // from Read(), and we don't want to call Stop() on WASAPI while it's calling us
+            System.Threading.Tasks.Task.Run(() =>
             {
-                // Stop WASAPI playback when fully idle to minimize latency for next tone
-                if (_isPlaying)
+                try
                 {
-                    _wasapiOut.Stop();
-                    _isPlaying = false;
+                    // Stop WASAPI playback when fully idle to minimize latency for next tone
+                    if (_isPlaying && !_disposed && _wasapiOut != null)
+                    {
+                        _wasapiOut.Stop();
+                        _isPlaying = false;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to stop WASAPI on idle: {ex.Message}");
-            }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to stop WASAPI on idle: {ex.Message}");
+                }
+            });
 
             // Forward the event
             OnBecomeIdle?.Invoke();
