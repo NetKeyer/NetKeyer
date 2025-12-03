@@ -267,6 +267,12 @@ namespace NetKeyer.Audio
 
         public int Read(float[] buffer, int offset, int count)
         {
+            // Capture events to fire after lock is released
+            Action onToneStartToFire = null;
+            Action onToneCompleteToFire = null;
+            Action onSilenceCompleteToFire = null;
+            Action onBecomeIdleToFire = null;
+
             lock (_lockObject)
             {
                 if (_enableDebugLogging)
@@ -295,7 +301,8 @@ namespace NetKeyer.Audio
                             {
                                 buffer[offset + i] = 0.0f;
                             }
-                            return count;
+                            samplesWritten = count; // Exit the while loop
+                            break;
 
                         case PlaybackState.RampUp:
                             samplesWritten += CopyFromPatch(_rampUpPatch, buffer, offset + samplesWritten, count - samplesWritten);
@@ -349,21 +356,10 @@ namespace NetKeyer.Audio
                             {
                                 _patchPosition = 0;
 
-                                // Fire tone complete event synchronously from audio thread for deterministic timing.
+                                // Capture OnToneComplete event to fire after lock is released
                                 if (_enableDebugLogging)
-                                    Console.WriteLine($"[SidetoneProvider] Firing OnToneComplete event");
-                                if (OnToneComplete != null)
-                                {
-                                    try
-                                    {
-                                        OnToneComplete.Invoke();
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        if (_enableDebugLogging)
-                                            Console.WriteLine($"[SidetoneProvider] Error in OnToneComplete: {ex}");
-                                    }
-                                }
+                                    Console.WriteLine($"[SidetoneProvider] Capturing OnToneComplete event");
+                                onToneCompleteToFire = OnToneComplete;
 
                                 // Check if we have a queued silence
                                 if (_queuedSilenceDurationMs.HasValue)
@@ -377,15 +373,10 @@ namespace NetKeyer.Audio
                                 else
                                 {
                                     _state = PlaybackState.Silent;
-
                                 }
 
-                                // Fill any remaining buffer with silence
-                                for (int i = samplesWritten; i < count; i++)
-                                {
-                                    buffer[offset + i] = 0.0f;
-                                }
-                                return count;
+                                // Continue to fill the rest of the buffer - the while loop will
+                                // process the new state (TimedSilence or Silent) which will output silence
                             }
                             break;
 
@@ -422,19 +413,8 @@ namespace NetKeyer.Audio
                                     _patchPosition = 0;
                                     _state = PlaybackState.RampUp;
 
-                                    // Fire event synchronously from audio thread for deterministic timing.
-                                    if (OnToneStart != null)
-                                    {
-                                        try
-                                        {
-                                            OnToneStart.Invoke();
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            if (_enableDebugLogging)
-                                                Console.WriteLine($"[SidetoneProvider] Error in OnToneStart: {ex}");
-                                        }
-                                    }
+                                    // Capture OnToneStart event to fire after lock is released
+                                    onToneStartToFire = OnToneStart;
                                 }
                                 else
                                 {
@@ -444,41 +424,91 @@ namespace NetKeyer.Audio
                                         Console.WriteLine($"[SidetoneProvider] No queued tone, transitioning to Silent");
                                     _state = PlaybackState.Silent;
 
-                                    // Fire OnSilenceComplete (handler might start a new tone, changing state)
-                                    if (OnSilenceComplete != null)
-                                    {
-                                        try
-                                        {
-                                            OnSilenceComplete.Invoke();
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            if (_enableDebugLogging)
-                                                Console.WriteLine($"[SidetoneProvider] Error in OnSilenceComplete: {ex}");
-                                        }
-                                    }
+                                    // Capture OnSilenceComplete event to fire after lock is released
+                                    onSilenceCompleteToFire = OnSilenceComplete;
 
-                                    // Fire OnBecomeIdle only if still Silent (handler didn't start new tone)
-                                    if (_state == PlaybackState.Silent && OnBecomeIdle != null)
-                                    {
-                                        try
-                                        {
-                                            OnBecomeIdle.Invoke();
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            if (_enableDebugLogging)
-                                                Console.WriteLine($"[SidetoneProvider] Error in OnBecomeIdle: {ex}");
-                                        }
-                                    }
+                                    // OnBecomeIdle will be fired conditionally after OnSilenceComplete
+                                    // (only if state is still Silent after OnSilenceComplete handler runs)
                                 }
                             }
                             break;
                     }
                 }
+            } // End of lock
 
-                return count;
+            // Fire events AFTER lock is released, in correct order
+            // This prevents deadlock when event handlers call back into SidetoneProvider methods
+            if (onToneStartToFire != null)
+            {
+                try
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Firing OnToneStart event");
+                    onToneStartToFire.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Error in OnToneStart: {ex}");
+                }
             }
+
+            if (onToneCompleteToFire != null)
+            {
+                try
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Firing OnToneComplete event");
+                    onToneCompleteToFire.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Error in OnToneComplete: {ex}");
+                }
+            }
+
+            if (onSilenceCompleteToFire != null)
+            {
+                try
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Firing OnSilenceComplete event");
+                    onSilenceCompleteToFire.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[SidetoneProvider] Error in OnSilenceComplete: {ex}");
+                }
+
+                // After OnSilenceComplete fires, check if we're still Silent
+                // If so, fire OnBecomeIdle to signal we're truly idle
+                lock (_lockObject)
+                {
+                    if (_state == PlaybackState.Silent && OnBecomeIdle != null)
+                    {
+                        onBecomeIdleToFire = OnBecomeIdle;
+                    }
+                }
+
+                if (onBecomeIdleToFire != null)
+                {
+                    try
+                    {
+                        if (_enableDebugLogging)
+                            Console.WriteLine($"[SidetoneProvider] Firing OnBecomeIdle event");
+                        onBecomeIdleToFire.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (_enableDebugLogging)
+                            Console.WriteLine($"[SidetoneProvider] Error in OnBecomeIdle: {ex}");
+                    }
+                }
+            }
+
+            return count;
         }
 
         private int CopyFromPatch(float[] patch, float[] destBuffer, int destOffset, int maxSamples)
