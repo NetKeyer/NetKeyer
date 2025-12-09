@@ -1177,6 +1177,9 @@ public partial class MainWindowViewModel : ViewModelBase
             // Update paddle labels after disconnection
             UpdatePaddleLabels();
 
+            // Refresh radio list to show current availability
+            RefreshRadios();
+
             // Switch back to setup page
             CurrentPage = PageType.Setup;
         }
