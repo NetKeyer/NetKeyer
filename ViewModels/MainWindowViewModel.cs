@@ -14,6 +14,7 @@ using NetKeyer.Audio;
 using NetKeyer.Keying;
 using NetKeyer.Midi;
 using NetKeyer.Models;
+using NetKeyer.Services;
 using NetKeyer.SmartLink;
 
 namespace NetKeyer.ViewModels;
@@ -133,30 +134,29 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _rightPaddleStateText = "OFF";
 
     private Radio _connectedRadio;
-    private SerialPort _serialPort;
-    private MidiPaddleInput _midiInput;
-    private bool _previousLeftPaddleState = false;
-    private bool _previousRightPaddleState = false;
-    private bool _previousStraightKeyState = false;
-    private bool _previousPttState = false;
     private uint _boundGuiClientHandle = 0;
-    private bool _updatingFromRadio = false; // Prevent feedback loops
     private UserSettings _settings;
     private bool _loadingSettings = false; // Prevent saving while loading
-    private bool _isTransmitModeCW = true; // Track if transmit slice is in CW mode
     private bool _isSidetoneOnlyMode = false; // Track if we're in sidetone-only mode (no radio)
     private bool _userExplicitlySelectedSidetoneOnly = false; // Track if user explicitly selected sidetone-only vs. implicit fallback
-    private DateTime _inputDeviceOpenedTime = DateTime.MinValue; // Track when input device was opened
-    private const int INPUT_GRACE_PERIOD_MS = 100; // Ignore paddle events for this many ms after opening device
 
-    // Sidetone generator and iambic keyer
+    // Sidetone generator
     private ISidetoneGenerator _sidetoneGenerator;
-    private IambicKeyer _iambicKeyer;
 
     // SmartLink support
-    private SmartLinkAuthService _smartLinkAuth;
-    private WanServer _wanServer;
-    private ManualResetEvent _wanConnectionReadyEvent = new ManualResetEvent(false);
+    private SmartLinkManager _smartLinkManager;
+
+    // Transmit slice monitoring
+    private TransmitSliceMonitor _transmitSliceMonitor;
+
+    // Radio settings synchronization
+    private RadioSettingsSynchronizer _radioSettingsSynchronizer;
+
+    // Input device management
+    private InputDeviceManager _inputDeviceManager;
+
+    // Keying controller
+    private KeyingController _keyingController;
 
     [ObservableProperty]
     private bool _smartLinkAvailable = false;
@@ -192,13 +192,29 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings = UserSettings.Load();
 
         // Initialize SmartLink support
-        InitializeSmartLink();
+        _smartLinkManager = new SmartLinkManager(_settings);
+        _smartLinkManager.StatusChanged += SmartLinkManager_StatusChanged;
+        _smartLinkManager.WanRadiosDiscovered += SmartLinkManager_WanRadiosDiscovered;
+        _smartLinkManager.RegistrationInvalid += SmartLinkManager_RegistrationInvalid;
+        _smartLinkManager.WanRadioConnectReady += SmartLinkManager_WanRadioConnectReady;
+
+        SmartLinkAvailable = _smartLinkManager.IsAvailable;
+
+        // Try to restore SmartLink session from saved refresh token
+        if (_smartLinkManager.IsAvailable)
+        {
+            Task.Run(async () => await _smartLinkManager.TryRestoreSessionAsync());
+        }
 
         // Initialize FlexLib API
         API.ProgramName = "NetKeyer";
         API.RadioAdded += OnRadioAdded;
         API.RadioRemoved += OnRadioRemoved;
         API.Init();
+
+        // Initialize input device manager (must be done before RefreshSerialPorts/RefreshMidiDevices)
+        _inputDeviceManager = new InputDeviceManager();
+        _inputDeviceManager.PaddleStateChanged += InputDeviceManager_PaddleStateChanged;
 
         // Apply saved input type
         _loadingSettings = true;
@@ -226,9 +242,9 @@ public partial class MainWindowViewModel : ViewModelBase
             Console.WriteLine($"Warning: Could not initialize sidetone generator: {ex.Message}");
         }
 
-        // Initialize iambic keyer
-        _iambicKeyer = new IambicKeyer(
-            _sidetoneGenerator,
+        // Initialize keying controller
+        _keyingController = new KeyingController(_sidetoneGenerator);
+        _keyingController.Initialize(
             _boundGuiClientHandle,
             GetTimestamp,
             (state, timestamp, handle) =>
@@ -237,9 +253,17 @@ public partial class MainWindowViewModel : ViewModelBase
                     _connectedRadio.CWKey(state, timestamp, handle);
             }
         );
-        _iambicKeyer.IsModeB = IsIambicModeB;
-        _iambicKeyer.EnableDebugLogging = DebugFlags.DEBUG_KEYER;
-        _iambicKeyer.SetWpm(CwSpeed);
+        _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+        _keyingController.EnableDebugLogging(DebugFlags.DEBUG_KEYER);
+        _keyingController.SetSpeed(CwSpeed);
+
+        // Initialize transmit slice monitor
+        _transmitSliceMonitor = new TransmitSliceMonitor();
+        _transmitSliceMonitor.TransmitModeChanged += TransmitSliceMonitor_ModeChanged;
+
+        // Initialize radio settings synchronizer
+        _radioSettingsSynchronizer = new RadioSettingsSynchronizer();
+        _radioSettingsSynchronizer.SettingChangedFromRadio += RadioSettingsSynchronizer_SettingChanged;
     }
 
     partial void OnCurrentPageChanged(PageType value)
@@ -311,21 +335,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnIsIambicModeChanged(bool value)
     {
-        // Stop iambic keyer when switching to straight key mode
-        if (!value)
-        {
-            _iambicKeyer?.Stop();
-        }
+        // Update keying controller mode
+        _keyingController?.SetKeyingMode(value, IsIambicModeB);
 
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                _connectedRadio.CWIambic = value;
-            }
-            catch { }
-        }
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncIambicModeToRadio(value);
 
         // Update paddle labels when mode changes
         UpdatePaddleLabels();
@@ -381,12 +395,12 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // If SmartLink is authenticated, ensure connection and request radio list
-        if (_smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
+        if (_smartLinkManager != null && _smartLinkManager.IsAuthenticated)
         {
             // Reconnect to SmartLink server if needed (will trigger radio list refresh)
             Task.Run(async () =>
             {
-                await ConnectToSmartLinkServerAsync();
+                await _smartLinkManager.ConnectToServerAsync();
             });
         }
 
@@ -431,67 +445,22 @@ public partial class MainWindowViewModel : ViewModelBase
         _loadingSettings = true;
         SerialPorts.Clear();
 
-        try
+        var ports = _inputDeviceManager.DiscoverSerialPorts();
+        foreach (var port in ports)
         {
-            var ports = SerialPort.GetPortNames();
+            SerialPorts.Add(port);
+        }
 
-            // Remove duplicates (SerialPort.GetPortNames() can return duplicates on some platforms)
-            var uniquePorts = ports.Distinct().ToArray();
-
-            Array.Sort(uniquePorts, (a, b) =>
+        // Restore previously selected serial port if available
+        if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedSerialPort))
+        {
+            if (SerialPorts.Contains(_settings.SelectedSerialPort))
             {
-                try
-                {
-                    // Extract just the filename from path
-                    string nameA = a;
-                    string nameB = b;
-                    int lastSlashA = a.LastIndexOfAny(new[] { '/', '\\' });
-                    int lastSlashB = b.LastIndexOfAny(new[] { '/', '\\' });
-                    if (lastSlashA >= 0) nameA = a.Substring(lastSlashA + 1);
-                    if (lastSlashB >= 0) nameB = b.Substring(lastSlashB + 1);
-
-                    // Try to extract numeric part for sorting
-                    string numStrA = nameA.Replace("ttyUSB", "").Replace("COM", "").Replace("ttyACM", "");
-                    string numStrB = nameB.Replace("ttyUSB", "").Replace("COM", "").Replace("ttyACM", "");
-
-                    if (int.TryParse(numStrA, out int idA) && int.TryParse(numStrB, out int idB))
-                        return idA.CompareTo(idB);
-
-                    return nameA.CompareTo(nameB);
-                }
-                catch
-                {
-                    return a.CompareTo(b);
-                }
-            });
-
-            foreach (var port in uniquePorts)
-            {
-                SerialPorts.Add(port);
-            }
-
-            if (SerialPorts.Count == 0)
-            {
-                SerialPorts.Add("No ports found");
-            }
-
-            // Restore previously selected serial port if available
-            if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedSerialPort))
-            {
-                if (SerialPorts.Contains(_settings.SelectedSerialPort))
-                {
-                    SelectedSerialPort = _settings.SelectedSerialPort;
-                }
+                SelectedSerialPort = _settings.SelectedSerialPort;
             }
         }
-        catch (Exception ex)
-        {
-            SerialPorts.Add($"Error: {ex.Message}");
-        }
-        finally
-        {
-            _loadingSettings = false;
-        }
+
+        _loadingSettings = false;
     }
 
     [RelayCommand]
@@ -500,39 +469,25 @@ public partial class MainWindowViewModel : ViewModelBase
         _loadingSettings = true;
         MidiDevices.Clear();
 
-        try
+        var devices = _inputDeviceManager.DiscoverMidiDevices();
+        foreach (var device in devices)
         {
-            var devices = MidiPaddleInput.GetAvailableDevices();
+            MidiDevices.Add(device);
+        }
 
-            foreach (var device in devices)
+        // Restore previously selected MIDI device if available (only if we have real devices)
+        if (!devices[0].Contains("No MIDI") && !devices[0].Contains("Error"))
+        {
+            if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
             {
-                MidiDevices.Add(device);
-            }
-
-            if (MidiDevices.Count == 0)
-            {
-                MidiDevices.Add("No MIDI devices found");
-            }
-            else
-            {
-                // Restore previously selected MIDI device if available (only if we have real devices)
-                if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedMidiDevice))
+                if (MidiDevices.Contains(_settings.SelectedMidiDevice))
                 {
-                    if (MidiDevices.Contains(_settings.SelectedMidiDevice))
-                    {
-                        SelectedMidiDevice = _settings.SelectedMidiDevice;
-                    }
+                    SelectedMidiDevice = _settings.SelectedMidiDevice;
                 }
             }
         }
-        catch (Exception ex)
-        {
-            MidiDevices.Add($"MIDI Error: {ex.Message}");
-        }
-        finally
-        {
-            _loadingSettings = false;
-        }
+
+        _loadingSettings = false;
     }
 
     [RelayCommand]
@@ -560,177 +515,63 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.Save();
 
             // Update the MIDI input if it's currently open
-            if (_midiInput != null)
-            {
-                _midiInput.SetNoteMappings(_settings.MidiNoteMappings);
-            }
+            _inputDeviceManager.UpdateMidiNoteMappings(_settings.MidiNoteMappings);
         }
     }
 
-    private void CloseSerialPort()
+    private void CloseInputDevice()
     {
-        if (_serialPort != null)
-        {
-            // Stop iambic keyer if running
-            _iambicKeyer?.Stop();
+        // Stop keying controller
+        _keyingController?.Stop();
 
-            try
-            {
-                if (_serialPort.IsOpen)
-                    _serialPort.Close();
-                _serialPort.PinChanged -= SerialPort_PinChanged;
-                _serialPort.Dispose();
-            }
-            catch { }
-            _serialPort = null;
+        // Close the device
+        _inputDeviceManager?.CloseDevice();
 
-            // Reset indicators and state
-            _previousLeftPaddleState = false;
-            _previousRightPaddleState = false;
-            _previousStraightKeyState = false;
-            _previousPttState = false;
-            LeftPaddleIndicatorColor = Brushes.Black;
-            RightPaddleIndicatorColor = Brushes.Black;
-            LeftPaddleStateText = "OFF";
-            RightPaddleStateText = "OFF";
-            _inputDeviceOpenedTime = DateTime.MinValue;
-        }
-    }
+        // Reset keying controller state
+        _keyingController?.ResetState();
 
-    private void CloseMidiDevice()
-    {
-        if (_midiInput != null)
-        {
-            // Stop iambic keyer if running
-            _iambicKeyer?.Stop();
-
-            try
-            {
-                _midiInput.PaddleStateChanged -= MidiInput_PaddleStateChanged;
-                _midiInput.Close();
-                _midiInput.Dispose();
-            }
-            catch { }
-            _midiInput = null;
-
-            // Reset indicators and state
-            _previousLeftPaddleState = false;
-            _previousRightPaddleState = false;
-            _previousStraightKeyState = false;
-            _previousPttState = false;
-            LeftPaddleIndicatorColor = Brushes.Black;
-            RightPaddleIndicatorColor = Brushes.Black;
-            LeftPaddleStateText = "OFF";
-            RightPaddleStateText = "OFF";
-            _inputDeviceOpenedTime = DateTime.MinValue;
-        }
+        // Reset indicators
+        LeftPaddleIndicatorColor = Brushes.Black;
+        RightPaddleIndicatorColor = Brushes.Black;
+        LeftPaddleStateText = "OFF";
+        RightPaddleStateText = "OFF";
     }
 
     private void OpenInputDevice()
     {
-        if (InputType == InputDeviceType.Serial)
+        string deviceName = InputType == InputDeviceType.Serial ? SelectedSerialPort : SelectedMidiDevice;
+
+        try
         {
-            // Open serial port
-            if (string.IsNullOrEmpty(SelectedSerialPort) || SelectedSerialPort.Contains("No ports") || SelectedSerialPort.Contains("Error"))
+            _inputDeviceManager.OpenDevice(InputType, deviceName, _settings.MidiNoteMappings);
+
+            // Reset keying controller state to ensure clean start
+            _keyingController?.ResetState();
+
+            // Update indicators to show current state (but don't trigger keying) - only for serial
+            if (InputType == InputDeviceType.Serial)
             {
-                RadioStatus = "No serial port selected";
-                RadioStatusColor = Brushes.Orange;
-                HasRadioError = true;
-                return;
-            }
-
-            try
-            {
-                _serialPort = new SerialPort(SelectedSerialPort);
-                _serialPort.BaudRate = 9600; // Baud rate doesn't matter for control lines
-                _serialPort.DtrEnable = true; // Enable DTR for power
-                _serialPort.RtsEnable = true; // Enable RTS for power
-                _serialPort.PinChanged += SerialPort_PinChanged;
-                _serialPort.Open();
-
-                // Mark when we opened the device to enable grace period
-                _inputDeviceOpenedTime = DateTime.UtcNow;
-
-                // Reset previous states to ensure clean start
-                _previousLeftPaddleState = false;
-                _previousRightPaddleState = false;
-                _previousStraightKeyState = false;
-                _previousPttState = false;
-
-                // Update indicators to show current state (but don't trigger keying)
                 UpdateIndicatorsFromSerial();
             }
-            catch (Exception ex)
-            {
-                RadioStatus = $"Serial port error: {ex.Message}";
-                RadioStatusColor = Brushes.Orange;
-                HasRadioError = true;
-                _serialPort = null;
-            }
         }
-        else // MIDI
+        catch (Exception ex)
         {
-            // Open MIDI device
-            if (string.IsNullOrEmpty(SelectedMidiDevice) || SelectedMidiDevice.Contains("No MIDI") || SelectedMidiDevice.Contains("Error"))
-            {
-                RadioStatus = "No MIDI device selected";
-                RadioStatusColor = Brushes.Orange;
-                HasRadioError = true;
-                return;
-            }
-
-            try
-            {
-                _midiInput = new MidiPaddleInput();
-                _midiInput.SetNoteMappings(_settings.MidiNoteMappings);
-                _midiInput.PaddleStateChanged += MidiInput_PaddleStateChanged;
-                _midiInput.Open(SelectedMidiDevice);
-
-                // Mark when we opened the device to enable grace period
-                _inputDeviceOpenedTime = DateTime.UtcNow;
-
-                // Reset previous states to ensure clean start
-                _previousLeftPaddleState = false;
-                _previousRightPaddleState = false;
-                _previousStraightKeyState = false;
-                _previousPttState = false;
-            }
-            catch (Exception ex)
-            {
-                RadioStatus = $"MIDI device error: {ex.Message}";
-                RadioStatusColor = Brushes.Orange;
-                HasRadioError = true;
-                _midiInput = null;
-            }
+            RadioStatus = ex.Message;
+            RadioStatusColor = Brushes.Orange;
+            HasRadioError = true;
         }
     }
 
-    private void MidiInput_PaddleStateChanged(object sender, PaddleStateChangedEventArgs e)
+    private void InputDeviceManager_PaddleStateChanged(object sender, PaddleStateChangedEventArgs e)
     {
-        // Check if we're in the grace period after opening the input device
-        bool inGracePeriod = (DateTime.UtcNow - _inputDeviceOpenedTime).TotalMilliseconds < INPUT_GRACE_PERIOD_MS;
-        if (inGracePeriod)
-        {
-            if (DebugFlags.DEBUG_MIDI_HANDLER)
-                Console.WriteLine($"[MidiInput_PaddleStateChanged] In grace period - ignoring event");
-            return;
-        }
-
+        // Swap is now handled in InputDeviceManager
         bool leftPaddleState = e.LeftPaddle;
         bool rightPaddleState = e.RightPaddle;
         bool straightKeyState = e.StraightKey;
         bool pttState = e.PTT;
 
         if (DebugFlags.DEBUG_MIDI_HANDLER)
-            Console.WriteLine($"[MidiInput_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
-
-        // Apply swap if enabled (only affects paddles, not straight key)
-        if (SwapPaddles)
-        {
-            (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
-            if (DebugFlags.DEBUG_MIDI_HANDLER)
-                Console.WriteLine($"[MidiInput_PaddleStateChanged] After swap: L={leftPaddleState} R={rightPaddleState}");
-        }
+            Console.WriteLine($"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
 
         // Update indicators
         Dispatcher.UIThread.Post(() =>
@@ -741,97 +582,19 @@ public partial class MainWindowViewModel : ViewModelBase
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
 
-        // Handle keying based on mode and transmit slice mode
-        // In sidetone-only mode, _connectedRadio is null but we still want to key locally
-        if (_connectedRadio != null && _boundGuiClientHandle != 0)
-        {
-            if (_isTransmitModeCW)
-            {
-                // CW mode - use paddle/straight key keying
-                if (IsIambicMode)
-                {
-                    if (DebugFlags.DEBUG_MIDI_HANDLER)
-                        Console.WriteLine($"[MidiInput_PaddleStateChanged] CW/Iambic - calling keyer with L={leftPaddleState} R={rightPaddleState}");
-                    // Iambic mode - use paddle inputs
-                    _iambicKeyer?.UpdatePaddleState(leftPaddleState, rightPaddleState);
-                }
-                else
-                {
-                    // Straight key mode - use dedicated straight key input if changed,
-                    // otherwise fall back to left paddle (for backward compatibility)
-                    if (straightKeyState != _previousStraightKeyState)
-                    {
-                        SendCWKey(straightKeyState);
-                    }
-                    else if (leftPaddleState != _previousLeftPaddleState)
-                    {
-                        SendCWKey(leftPaddleState);
-                    }
-                }
-            }
-            else
-            {
-                // Non-CW mode - use PTT keying
-                if (pttState != _previousPttState)
-                {
-                    if (DebugFlags.DEBUG_MIDI_HANDLER)
-                        Console.WriteLine($"[MidiInput_PaddleStateChanged] Non-CW mode - sending PTT={pttState}");
-                    SendPTT(pttState);
-                }
-            }
-        }
-        else if (_isSidetoneOnlyMode)
-        {
-            // Sidetone-only mode - still run keyer logic, just no radio commands
-            if (IsIambicMode)
-            {
-                _iambicKeyer?.UpdatePaddleState(leftPaddleState, rightPaddleState);
-            }
-            else
-            {
-                // Straight key mode
-                if (straightKeyState != _previousStraightKeyState)
-                {
-                    SendCWKey(straightKeyState);
-                }
-                else if (leftPaddleState != _previousLeftPaddleState)
-                {
-                    SendCWKey(leftPaddleState);
-                }
-            }
-        }
-        else
-        {
-            if (DebugFlags.DEBUG_MIDI_HANDLER)
-                Console.WriteLine($"[MidiInput_PaddleStateChanged] Skipping keyer - radio not connected (radio={_connectedRadio != null}, handle={_boundGuiClientHandle})");
-        }
-
-        // Update previous states
-        _previousLeftPaddleState = leftPaddleState;
-        _previousRightPaddleState = rightPaddleState;
-        _previousStraightKeyState = straightKeyState;
-        _previousPttState = pttState;
-    }
-
-    private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
-    {
-        // HaliKey v1: CTS (left) + DCD (right)
-        if (e.EventType == SerialPinChange.CtsChanged || e.EventType == SerialPinChange.CDChanged)
-        {
-            UpdateSerialPinStates();
-        }
+        // Delegate keying logic to KeyingController
+        _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
     }
 
     private void UpdateIndicatorsFromSerial()
     {
-        if (_serialPort == null || !_serialPort.IsOpen)
+        if (_inputDeviceManager?.CurrentDeviceType != InputDeviceType.Serial)
             return;
 
         try
         {
             // HaliKey v1: CTS (left) + DCD (right)
-            bool leftPaddleState = _serialPort.CtsHolding;
-            bool rightPaddleState = _serialPort.CDHolding;
+            var (leftPaddleState, rightPaddleState) = _inputDeviceManager.GetCurrentSerialPinStates();
 
             // Apply swap if enabled
             if (SwapPaddles)
@@ -844,95 +607,6 @@ public partial class MainWindowViewModel : ViewModelBase
             LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
-        }
-        catch { }
-    }
-
-    private void UpdateSerialPinStates()
-    {
-        // Check if we're in the grace period after opening the input device
-        bool inGracePeriod = (DateTime.UtcNow - _inputDeviceOpenedTime).TotalMilliseconds < INPUT_GRACE_PERIOD_MS;
-        if (inGracePeriod)
-        {
-            // Ignore all pin state changes during grace period
-            return;
-        }
-
-        if (_serialPort == null || !_serialPort.IsOpen)
-            return;
-
-        try
-        {
-            // HaliKey v1: CTS (left) + DCD (right)
-            bool leftPaddleState = _serialPort.CtsHolding;
-            bool rightPaddleState = _serialPort.CDHolding;
-
-            // Apply swap if enabled
-            if (SwapPaddles)
-            {
-                (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
-            }
-
-            // Update left paddle indicator
-            LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
-
-            // Update right paddle indicator
-            RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
-
-            // Handle keying based on mode and transmit slice mode
-            if (_connectedRadio != null && _boundGuiClientHandle != 0)
-            {
-                if (_isTransmitModeCW)
-                {
-                    // CW mode - use paddle/straight key keying
-                    if (IsIambicMode)
-                    {
-                        // Iambic mode - call keyer logic
-                        _iambicKeyer?.UpdatePaddleState(leftPaddleState, rightPaddleState);
-                    }
-                    else
-                    {
-                        // Straight key mode - left paddle directly controls CW key
-                        if (leftPaddleState != _previousLeftPaddleState)
-                        {
-                            SendCWKey(leftPaddleState);
-                        }
-                    }
-                }
-                else
-                {
-                    // Non-CW mode - either paddle triggers PTT
-                    bool pttState = leftPaddleState || rightPaddleState;
-                    bool previousPttState = _previousLeftPaddleState || _previousRightPaddleState;
-
-                    if (pttState != previousPttState)
-                    {
-                        SendPTT(pttState);
-                    }
-                }
-            }
-            else if (_isSidetoneOnlyMode)
-            {
-                // Sidetone-only mode - still run keyer logic, just no radio commands
-                if (IsIambicMode)
-                {
-                    _iambicKeyer?.UpdatePaddleState(leftPaddleState, rightPaddleState);
-                }
-                else
-                {
-                    // Straight key mode
-                    if (leftPaddleState != _previousLeftPaddleState)
-                    {
-                        SendCWKey(leftPaddleState);
-                    }
-                }
-            }
-
-            // Update previous states
-            _previousLeftPaddleState = leftPaddleState;
-            _previousRightPaddleState = rightPaddleState;
         }
         catch { }
     }
@@ -958,6 +632,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 _connectedRadio = null;
                 ConnectButtonText = "Disconnect";
                 HasRadioError = false;
+
+                // Set keying controller to sidetone-only mode
+                _keyingController?.SetRadio(null, isSidetoneOnly: true);
 
                 // Open the selected input device
                 OpenInputDevice();
@@ -991,10 +668,10 @@ public partial class MainWindowViewModel : ViewModelBase
             uint targetClientHandle = SelectedRadioClient.GuiClient.ClientHandle;
             string targetStation = SelectedRadioClient.GuiClient.Station;
 
-            // For WAN radios, we need to request connection from WanServer first
+            // For WAN radios, we need to request connection from SmartLinkManager first
             if (_connectedRadio.IsWan)
             {
-                if (_wanServer == null || !_wanServer.IsConnected)
+                if (_smartLinkManager?.WanServer == null || !_smartLinkManager.WanServer.IsConnected)
                 {
                     RadioStatus = "Not connected to SmartLink server";
                     RadioStatusColor = Brushes.Red;
@@ -1003,27 +680,20 @@ public partial class MainWindowViewModel : ViewModelBase
                     return;
                 }
 
-                // Reset the event and subscribe to connect_ready event
-                _wanConnectionReadyEvent.Reset();
-                _wanServer.WanRadioConnectReady += WanServer_RadioConnectReady;
-
                 // Request connection to this radio
                 RadioStatus = "Requesting SmartLink connection...";
-                _wanServer.SendConnectMessageToRadio(_connectedRadio.Serial, HolePunchPort: 0);
+                var result = _smartLinkManager.RequestWanConnectionAsync(_connectedRadio.Serial, 10000).Result;
 
-                // Wait for connect_ready response (with timeout)
-                if (!_wanConnectionReadyEvent.WaitOne(10000))
+                if (!result.Success)
                 {
                     RadioStatus = "SmartLink connection request timed out";
                     RadioStatusColor = Brushes.Red;
                     HasRadioError = true;
-                    _wanServer.WanRadioConnectReady -= WanServer_RadioConnectReady;
                     _connectedRadio = null;
                     return;
                 }
 
-                // Unsubscribe from event
-                _wanServer.WanRadioConnectReady -= WanServer_RadioConnectReady;
+                _connectedRadio.WANConnectionHandle = result.WanConnectionHandle;
 
                 if (string.IsNullOrEmpty(_connectedRadio.WANConnectionHandle))
                 {
@@ -1085,9 +755,9 @@ public partial class MainWindowViewModel : ViewModelBase
             _boundGuiClientHandle = targetClientHandle;
             ConnectButtonText = "Disconnect";
 
-            // Reinitialize iambic keyer with the correct radio client handle
-            _iambicKeyer = new IambicKeyer(
-                _sidetoneGenerator,
+            // Reinitialize keying controller with the correct radio client handle
+            _keyingController = new KeyingController(_sidetoneGenerator);
+            _keyingController.Initialize(
                 _boundGuiClientHandle,
                 GetTimestamp,
                 (state, timestamp, handle) =>
@@ -1096,18 +766,32 @@ public partial class MainWindowViewModel : ViewModelBase
                         _connectedRadio.CWKey(state, timestamp, handle);
                 }
             );
-            _iambicKeyer.IsModeB = IsIambicModeB;
-            _iambicKeyer.EnableDebugLogging = DebugFlags.DEBUG_KEYER;
-            _iambicKeyer.SetWpm(CwSpeed);
+            _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+            _keyingController.EnableDebugLogging(DebugFlags.DEBUG_KEYER);
+            _keyingController.SetSpeed(CwSpeed);
 
             // Subscribe to radio property changes
             _connectedRadio.PropertyChanged += Radio_PropertyChanged;
 
             // Subscribe to transmit slice property changes and update initial mode
-            SubscribeToTransmitSlice();
+            _transmitSliceMonitor.AttachToRadio(_connectedRadio, _boundGuiClientHandle);
 
-            // Apply initial CW settings
-            ApplyCwSettings();
+            // Attach keying controller to radio
+            _keyingController?.SetRadio(_connectedRadio, isSidetoneOnly: false);
+            _keyingController?.SetTransmitMode(_transmitSliceMonitor.IsTransmitModeCW);
+
+            // Attach radio settings synchronizer and apply initial settings
+            _radioSettingsSynchronizer.AttachToRadio(_connectedRadio);
+            try
+            {
+                _radioSettingsSynchronizer.ApplyInitialSettingsFromRadio();
+            }
+            catch (Exception ex)
+            {
+                RadioStatus = ex.Message;
+                RadioStatusColor = Brushes.Orange;
+                HasRadioError = true;
+            }
 
             // Open the selected input device
             OpenInputDevice();
@@ -1122,20 +806,8 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Disconnect - clean up all keying state first
 
-            // Stop iambic keyer (sends key-up if active)
-            _iambicKeyer?.Stop();
-
-            // If straight key was active, send key-up
-            if (_previousStraightKeyState)
-            {
-                SendCWKey(false);
-            }
-
-            // If PTT was active, send PTT-off
-            if (_previousPttState)
-            {
-                SendPTT(false);
-            }
+            // Stop keying controller (sends key-up if active)
+            _keyingController?.Stop();
 
             // Ensure sidetone is stopped
             _sidetoneGenerator?.Stop();
@@ -1151,26 +823,20 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _connectedRadio.PropertyChanged -= Radio_PropertyChanged;
 
-                // Unsubscribe from monitored transmit slice if present
-                if (_monitoredTransmitSlice != null)
-                {
-                    _monitoredTransmitSlice.PropertyChanged -= TransmitSlice_PropertyChanged;
-                    _monitoredTransmitSlice = null;
-                }
+                // Detach from transmit slice monitor
+                _transmitSliceMonitor.Detach();
+
+                // Detach from radio settings synchronizer
+                _radioSettingsSynchronizer.DetachFromRadio();
 
                 _connectedRadio.Disconnect();
                 _connectedRadio = null;
             }
 
-            // Close input devices
-            CloseSerialPort();
-            CloseMidiDevice();
+            // Close input device
+            CloseInputDevice();
 
             _boundGuiClientHandle = 0;
-            _previousLeftPaddleState = false;
-            _previousRightPaddleState = false;
-            _previousStraightKeyState = false;
-            _previousPttState = false;
             _isSidetoneOnlyMode = false;
 
             // Clear any error status on manual disconnect
@@ -1181,11 +847,11 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdatePaddleLabels();
 
             // Re-establish SmartLink connection if authenticated (to refresh radio list)
-            if (_smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
+            if (_smartLinkManager != null && _smartLinkManager.IsAuthenticated)
             {
                 Task.Run(async () =>
                 {
-                    await ConnectToSmartLinkServerAsync();
+                    await _smartLinkManager.ConnectToServerAsync();
                     // Refresh radio list after SmartLink reconnects
                     Dispatcher.UIThread.Post(() => RefreshRadios());
                 });
@@ -1205,18 +871,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void Exit()
     {
         // Clean up all keying state before exit
-        _iambicKeyer?.Stop();
-
-        if (_previousStraightKeyState)
-        {
-            SendCWKey(false);
-        }
-
-        if (_previousPttState)
-        {
-            SendPTT(false);
-        }
-
+        _keyingController?.Stop();
         _sidetoneGenerator?.Stop();
 
         if (_connectedRadio != null)
@@ -1224,8 +879,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _connectedRadio.Disconnect();
         }
 
-        CloseSerialPort();
-        CloseMidiDevice();
+        // Close input device
+        _inputDeviceManager?.Dispose();
 
         // Dispose sidetone generator
         _sidetoneGenerator?.Dispose();
@@ -1234,51 +889,17 @@ public partial class MainWindowViewModel : ViewModelBase
         Environment.Exit(0);
     }
 
-    private void ApplyCwSettings()
-    {
-        if (_connectedRadio == null)
-            return;
-
-        // Read current settings from radio and update UI
-        try
-        {
-            _updatingFromRadio = true;
-            try
-            {
-                CwSpeed = _connectedRadio.CWSpeed;
-                CwPitch = _connectedRadio.CWPitch;
-                SidetoneVolume = _connectedRadio.TXCWMonitorGain;
-            }
-            finally
-            {
-                _updatingFromRadio = false;
-            }
-        }
-        catch (Exception ex)
-        {
-            RadioStatus = $"Settings error: {ex.Message}";
-            RadioStatusColor = Brushes.Orange;
-            HasRadioError = true;
-        }
-    }
 
     partial void OnCwSpeedChanged(int value)
     {
         // Update sidetone generator WPM for ramp calculations
         _sidetoneGenerator?.SetWpm(value);
 
-        // Update iambic keyer WPM for timing calculations
-        _iambicKeyer?.SetWpm(value);
+        // Update keying controller WPM for timing calculations
+        _keyingController?.SetSpeed(value);
 
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                _connectedRadio.CWSpeed = value;
-            }
-            catch { }
-        }
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncCwSpeedToRadio(value);
     }
 
     partial void OnCwPitchChanged(int value)
@@ -1286,15 +907,8 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update sidetone frequency
         _sidetoneGenerator?.SetFrequency(value);
 
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                _connectedRadio.CWPitch = value;
-            }
-            catch { }
-        }
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncCwPitchToRadio(value);
     }
 
     partial void OnSidetoneVolumeChanged(int value)
@@ -1302,47 +916,17 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update sidetone volume
         _sidetoneGenerator?.SetVolume(value);
 
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                _connectedRadio.TXCWMonitorGain = value;
-            }
-            catch { }
-        }
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncSidetoneVolumeToRadio(value);
     }
 
     partial void OnIsIambicModeBChanged(bool value)
     {
-        // Update keyer mode
-        if (_iambicKeyer != null)
-        {
-            _iambicKeyer.IsModeB = value;
-        }
+        // Update keying controller mode
+        _keyingController?.SetKeyingMode(IsIambicMode, value);
 
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                if (value)
-                {
-                    // Set Mode B - this sends "cw mode 1"
-                    _connectedRadio.CWIambicModeB = true;
-                    // Also explicitly clear Mode A
-                    _connectedRadio.CWIambicModeA = false;
-                }
-                else
-                {
-                    // Set Mode A - this sends "cw mode 0"
-                    _connectedRadio.CWIambicModeA = true;
-                    // Also explicitly clear Mode B
-                    _connectedRadio.CWIambicModeB = false;
-                }
-            }
-            catch { }
-        }
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncIambicModeBToRadio(value);
 
         // Update mode display when iambic type changes
         UpdatePaddleLabels();
@@ -1350,15 +934,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSwapPaddlesChanged(bool value)
     {
-        // Only send to radio if not updating from radio (prevent feedback loop)
-        if (_connectedRadio != null && !_updatingFromRadio)
-        {
-            try
-            {
-                _connectedRadio.CWSwapPaddles = value;
-            }
-            catch { }
-        }
+        // Update input device manager
+        _inputDeviceManager?.SetSwapPaddles(value);
+
+        // Sync to radio
+        _radioSettingsSynchronizer?.SyncSwapPaddlesToRadio(value);
     }
 
     private void OnRadioAdded(Radio radio)
@@ -1383,143 +963,13 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
 
-    private void SendCWKey(bool state)
+    private void TransmitSliceMonitor_ModeChanged(object sender, TransmitModeChangedEventArgs e)
     {
-        SendCWKey(state, null);
-    }
+        // Update keying controller
+        _keyingController?.SetTransmitMode(e.IsTransmitModeCW);
 
-    private void SendCWKey(bool state, int? durationMs)
-    {
-        // Control local sidetone
-        if (state)
-        {
-            if (durationMs.HasValue)
-                _sidetoneGenerator?.StartTone(durationMs.Value);
-            else
-                _sidetoneGenerator?.Start();
-        }
-        else
-        {
-            _sidetoneGenerator?.Stop();
-        }
-
-        // Send to radio
-        if (_connectedRadio != null && _boundGuiClientHandle != 0)
-        {
-            string timestamp = GetTimestamp();
-            _connectedRadio.CWKey(state, timestamp, _boundGuiClientHandle);
-        }
-    }
-
-    private void SendPTT(bool state)
-    {
-        // PTT does not use sidetone
-
-        // Send to radio
-        if (_connectedRadio != null)
-        {
-            _connectedRadio.Mox = state;
-        }
-    }
-
-    private Slice _monitoredTransmitSlice = null;
-
-    private Slice FindOurTransmitSlice()
-    {
-        if (_connectedRadio == null || _boundGuiClientHandle == 0)
-            return null;
-
-        foreach (var slice in _connectedRadio.SliceList)
-        {
-            if (slice.IsTransmitSlice && slice.ClientHandle == _boundGuiClientHandle)
-                return slice;
-        }
-
-        return null;
-    }
-
-    private void UpdateTransmitSliceMode()
-    {
-        var txSlice = FindOurTransmitSlice();
-
-        if (txSlice != null)
-        {
-            string mode = txSlice.DemodMode?.ToUpper() ?? "USB";
-            bool wasCW = _isTransmitModeCW;
-            _isTransmitModeCW = (mode == "CW");
-
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Slice {txSlice.Index} mode: {mode}, isCW: {_isTransmitModeCW}");
-
-            if (wasCW != _isTransmitModeCW)
-            {
-                if (DebugFlags.DEBUG_SLICE_MODE)
-                    Console.WriteLine($"[TransmitSliceMode] Mode changed from {(wasCW ? "CW" : "non-CW")} to {(_isTransmitModeCW ? "CW" : "non-CW")}");
-            }
-
-            // Update UI elements
-            UpdatePaddleLabels();
-        }
-        else
-        {
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] No transmit slice for our client, defaulting to CW mode");
-            _isTransmitModeCW = true; // Default to CW mode if no transmit slice
-
-            // Update UI elements
-            UpdatePaddleLabels();
-        }
-    }
-
-    private void SubscribeToTransmitSlice()
-    {
-        // Unsubscribe from old slice if present
-        if (_monitoredTransmitSlice != null)
-        {
-            _monitoredTransmitSlice.PropertyChanged -= TransmitSlice_PropertyChanged;
-            _monitoredTransmitSlice = null;
-        }
-
-        // Debug: Check radio and slices
-        if (DebugFlags.DEBUG_SLICE_MODE && _connectedRadio != null)
-        {
-            Console.WriteLine($"[TransmitSliceMode] Connected radio has {_connectedRadio.SliceList.Count} slices");
-            Console.WriteLine($"[TransmitSliceMode] Our bound ClientHandle: {_boundGuiClientHandle}");
-            Console.WriteLine($"[TransmitSliceMode] Radio's internal ClientHandle: {_connectedRadio.ClientHandle}");
-
-            foreach (var slice in _connectedRadio.SliceList)
-            {
-                Console.WriteLine($"[TransmitSliceMode]   Slice {slice.Index}: IsTransmitSlice={slice.IsTransmitSlice}, ClientHandle={slice.ClientHandle}, Mode={slice.DemodMode}");
-            }
-        }
-
-        // Subscribe to new slice using our own finder
-        var txSlice = FindOurTransmitSlice();
-        if (txSlice != null)
-        {
-            _monitoredTransmitSlice = txSlice;
-            _monitoredTransmitSlice.PropertyChanged += TransmitSlice_PropertyChanged;
-
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Subscribed to slice {_monitoredTransmitSlice.Index}");
-        }
-        else
-        {
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] No transmit slice found for our client");
-        }
-
-        UpdateTransmitSliceMode();
-    }
-
-    private void TransmitSlice_PropertyChanged(object sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == "DemodMode")
-        {
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] DemodMode property changed");
-            UpdateTransmitSliceMode();
-        }
+        // Update UI when transmit mode changes
+        Dispatcher.UIThread.Post(() => UpdatePaddleLabels());
     }
 
     private void UpdatePaddleLabels()
@@ -1554,10 +1004,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 RightPaddleVisible = false;
             }
         }
-        else if (!_isTransmitModeCW)
+        else if (!_transmitSliceMonitor.IsTransmitModeCW)
         {
             // PTT mode (non-CW radio modes)
-            var txSlice = FindOurTransmitSlice();
+            var txSlice = _transmitSliceMonitor.TransmitSlice;
             string radioMode = txSlice?.DemodMode?.ToUpper() ?? "Unknown";
             modeStr = $"{radioMode} (PTT)";
 
@@ -1592,245 +1042,66 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void Radio_PropertyChanged(object sender, PropertyChangedEventArgs e)
     {
-        // Handle TransmitSlice changes (needs to be done outside UI thread)
-        if (e.PropertyName == "TransmitSlice")
-        {
-            if (DebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Radio TransmitSlice property changed");
-            SubscribeToTransmitSlice();
-            return;
-        }
-
-        // Dispatch all UI updates to the UI thread
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (e.PropertyName == "CWSpeed")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null && CwSpeed != _connectedRadio.CWSpeed)
-                {
-                    _updatingFromRadio = true;
-                    try
-                    {
-                        CwSpeed = _connectedRadio.CWSpeed;
-                    }
-                    finally
-                    {
-                        _updatingFromRadio = false;
-                    }
-                }
-            }
-            else if (e.PropertyName == "CWPitch")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null && CwPitch != _connectedRadio.CWPitch)
-                {
-                    _updatingFromRadio = true;
-                    try
-                    {
-                        CwPitch = _connectedRadio.CWPitch;
-                    }
-                    finally
-                    {
-                        _updatingFromRadio = false;
-                    }
-                }
-            }
-            else if (e.PropertyName == "TXCWMonitorGain")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null && SidetoneVolume != _connectedRadio.TXCWMonitorGain)
-                {
-                    _updatingFromRadio = true;
-                    try
-                    {
-                        SidetoneVolume = _connectedRadio.TXCWMonitorGain;
-                    }
-                    finally
-                    {
-                        _updatingFromRadio = false;
-                    }
-                }
-            }
-            else if (e.PropertyName == "CWIambic")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null && IsIambicMode != _connectedRadio.CWIambic)
-                {
-                    _updatingFromRadio = true;
-                    try
-                    {
-                        IsIambicMode = _connectedRadio.CWIambic;
-                    }
-                    finally
-                    {
-                        _updatingFromRadio = false;
-                    }
-                }
-            }
-            else if (e.PropertyName == "CWIambicModeB" || e.PropertyName == "CWIambicModeA")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null)
-                {
-                    bool shouldBeModeB = _connectedRadio.CWIambicModeB;
-                    if (IsIambicModeB != shouldBeModeB)
-                    {
-                        _updatingFromRadio = true;
-                        try
-                        {
-                            IsIambicModeB = shouldBeModeB;
-                        }
-                        finally
-                        {
-                            _updatingFromRadio = false;
-                        }
-                    }
-                }
-            }
-            else if (e.PropertyName == "CWSwapPaddles")
-            {
-                // Update our local property from the radio
-                if (_connectedRadio != null && SwapPaddles != _connectedRadio.CWSwapPaddles)
-                {
-                    _updatingFromRadio = true;
-                    try
-                    {
-                        SwapPaddles = _connectedRadio.CWSwapPaddles;
-                    }
-                    finally
-                    {
-                        _updatingFromRadio = false;
-                    }
-                }
-            }
-        });
+        // This is now mainly handled by RadioSettingsSynchronizer
+        // Keep this for any non-settings radio property changes if needed in the future
     }
 
-    #region SmartLink Methods
-
-    private void InitializeSmartLink()
+    private void RadioSettingsSynchronizer_SettingChanged(object sender, RadioSettingChangedEventArgs e)
     {
-        // Initialize SmartLink authentication service
-        var clientIdProvider = new ConfigFileClientIdProvider();
-        _smartLinkAuth = new SmartLinkAuthService(clientIdProvider);
-
-        SmartLinkAvailable = _smartLinkAuth.IsAvailable;
-
-        if (!SmartLinkAvailable)
+        // Update UI properties from radio settings changes
+        switch (e.PropertyName)
         {
-            SmartLinkStatus = "No client_id configured";
-            return;
-        }
+            case "CWSpeed":
+                if (e.Value is int cwSpeed && CwSpeed != cwSpeed)
+                    CwSpeed = cwSpeed;
+                break;
 
-        _smartLinkAuth.AuthStateChanged += SmartLinkAuth_AuthStateChanged;
-        _smartLinkAuth.ErrorOccurred += SmartLinkAuth_ErrorOccurred;
+            case "CWPitch":
+                if (e.Value is int cwPitch && CwPitch != cwPitch)
+                    CwPitch = cwPitch;
+                break;
 
-        // Try to restore session from saved refresh token
-        if (!string.IsNullOrEmpty(_settings.SmartLinkRefreshToken))
-        {
-            Task.Run(async () =>
-            {
-                var success = await _smartLinkAuth.RestoreSessionAsync(_settings.SmartLinkRefreshToken);
-                if (success)
-                {
-                    await ConnectToSmartLinkServerAsync();
-                }
-            });
+            case "TXCWMonitorGain":
+                if (e.Value is int sidetoneVolume && SidetoneVolume != sidetoneVolume)
+                    SidetoneVolume = sidetoneVolume;
+                break;
+
+            case "CWIambic":
+                if (e.Value is bool cwIambic && IsIambicMode != cwIambic)
+                    IsIambicMode = cwIambic;
+                break;
+
+            case "CWIambicModeB":
+                if (e.Value is bool cwIambicModeB && IsIambicModeB != cwIambicModeB)
+                    IsIambicModeB = cwIambicModeB;
+                break;
+
+            case "CWSwapPaddles":
+                if (e.Value is bool swapPaddles && SwapPaddles != swapPaddles)
+                    SwapPaddles = swapPaddles;
+                break;
         }
     }
 
-    private void SmartLinkAuth_AuthStateChanged(object sender, SmartLinkAuthState state)
+    #region SmartLink Event Handlers
+
+    private void SmartLinkManager_StatusChanged(object sender, SmartLinkStatusChangedEventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
         {
-            SmartLinkAuthenticated = (state == SmartLinkAuthState.Authenticated);
-
-            switch (state)
-            {
-                case SmartLinkAuthState.NotAuthenticated:
-                    SmartLinkStatus = "Not logged in";
-                    SmartLinkButtonText = "Login to SmartLink";
-                    break;
-                case SmartLinkAuthState.Authenticating:
-                    SmartLinkStatus = "Authenticating...";
-                    SmartLinkButtonText = "Authenticating...";
-                    break;
-                case SmartLinkAuthState.Authenticated:
-                    SmartLinkStatus = "Authenticated";
-                    SmartLinkButtonText = "Logout from SmartLink";
-
-                    // Save refresh token only if Remember Me is enabled
-                    if (_settings.RememberMeSmartLink)
-                    {
-                        var refreshToken = _smartLinkAuth.GetRefreshToken();
-                        if (!string.IsNullOrEmpty(refreshToken))
-                        {
-                            _settings.SmartLinkRefreshToken = refreshToken;
-                            _settings.Save();
-                        }
-                    }
-                    else
-                    {
-                        // Clear any existing refresh token if Remember Me is disabled
-                        _settings.SmartLinkRefreshToken = null;
-                        _settings.Save();
-                    }
-                    break;
-                case SmartLinkAuthState.Error:
-                    SmartLinkStatus = "Authentication error";
-                    SmartLinkButtonText = "Retry Login";
-                    break;
-            }
+            SmartLinkStatus = e.Status;
+            SmartLinkAuthenticated = e.IsAuthenticated;
+            SmartLinkButtonText = e.ButtonText;
         });
     }
 
-    private void SmartLinkAuth_ErrorOccurred(object sender, string error)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            Console.WriteLine($"SmartLink error: {error}");
-            SmartLinkStatus = $"Error: {error}";
-        });
-    }
-
-    private Task ConnectToSmartLinkServerAsync()
-    {
-        if (_wanServer == null)
-        {
-            _wanServer = new WanServer();
-            WanServer.WanRadioRadioListRecieved += WanServer_WanRadioListReceived;
-            _wanServer.WanApplicationRegistrationInvalid += WanServer_RegistrationInvalid;
-        }
-
-        if (!_wanServer.IsConnected)
-        {
-            _wanServer.Connect();
-
-            if (_wanServer.IsConnected)
-            {
-                var token = _smartLinkAuth.GetIdToken();
-                var platform = Environment.OSVersion.Platform.ToString();
-                _wanServer.SendRegisterApplicationMessageToServer("NetKeyer", platform, token);
-
-                SmartLinkStatus = "Connected to SmartLink";
-            }
-            else
-            {
-                SmartLinkStatus = "Failed to connect to SmartLink server";
-            }
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private void WanServer_WanRadioListReceived(System.Collections.Generic.List<Radio> radios)
+    private void SmartLinkManager_WanRadiosDiscovered(object sender, WanRadiosDiscoveredEventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
         {
             // Add SmartLink radios to the radio list
             // They will be marked with IsWan = true
-            foreach (var radio in radios)
+            foreach (var radio in e.Radios)
             {
                 lock (radio.GuiClientsLockObj)
                 {
@@ -1897,31 +1168,18 @@ public partial class MainWindowViewModel : ViewModelBase
         });
     }
 
-    private void WanServer_RegistrationInvalid()
+    private void SmartLinkManager_RegistrationInvalid(object sender, EventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
         {
             SmartLinkStatus = "Registration invalid - please log in again";
-            _smartLinkAuth?.Logout();
-
-            // Clear saved refresh token
-            _settings.SmartLinkRefreshToken = null;
-            _settings.Save();
-
-            // Disconnect from WAN server
-            _wanServer?.Disconnect();
         });
     }
 
-    private void WanServer_RadioConnectReady(string wan_connectionhandle, string serial)
+    private void SmartLinkManager_WanRadioConnectReady(object sender, WanConnectionReadyEventArgs e)
     {
-        // This is called when the SmartLink server responds with "radio connect_ready"
-        // Store the handle in the radio object
-        if (_connectedRadio != null && _connectedRadio.Serial == serial)
-        {
-            _connectedRadio.WANConnectionHandle = wan_connectionhandle;
-            _wanConnectionReadyEvent.Set(); // Signal that we're ready to connect
-        }
+        // This event is handled internally by SmartLinkManager
+        // We don't need to do anything here in the ViewModel
     }
 
     [RelayCommand]
@@ -1936,12 +1194,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (SmartLinkAuthenticated)
         {
             // Logout
-            _smartLinkAuth?.Logout();
-            _wanServer?.Disconnect();
-
-            // Clear saved refresh token
-            _settings.SmartLinkRefreshToken = null;
-            _settings.Save();
+            _smartLinkManager?.Logout();
 
             // Clear SmartLink radios from list
             var smartLinkRadios = RadioClientSelections.Where(s => s.Radio?.IsWan == true).ToList();
@@ -1986,14 +1239,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Attempt login
             SmartLinkStatus = "Authenticating...";
-            var success = await _smartLinkAuth.LoginAsync(username, password);
+            var success = await _smartLinkManager.LoginAsync(username, password);
 
-            if (success)
-            {
-                // Connect to SmartLink server
-                await ConnectToSmartLinkServerAsync();
-            }
-            else
+            if (!success)
             {
                 SmartLinkStatus = "Login failed - check credentials";
             }
