@@ -576,8 +576,11 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update indicators
         Dispatcher.UIThread.Post(() =>
         {
-            LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
+            // In straight key mode, either paddle should trigger the key indicator
+            bool keyState = IsIambicMode ? leftPaddleState : (leftPaddleState || rightPaddleState);
+
+            LeftPaddleIndicatorColor = keyState ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = keyState ? "ON" : "OFF";
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
@@ -603,8 +606,11 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             // Update indicators only
-            LeftPaddleIndicatorColor = leftPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = leftPaddleState ? "ON" : "OFF";
+            // In straight key mode, either paddle should trigger the key indicator
+            bool keyState = IsIambicMode ? leftPaddleState : (leftPaddleState || rightPaddleState);
+
+            LeftPaddleIndicatorColor = keyState ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = keyState ? "ON" : "OFF";
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         }
