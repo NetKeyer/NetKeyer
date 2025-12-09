@@ -33,6 +33,7 @@ public class SmartLinkManager
     private WanServer _wanServer;
     private readonly ManualResetEvent _wanConnectionReadyEvent = new ManualResetEvent(false);
     private UserSettings _settings;
+    private List<Radio> _cachedWanRadios = new List<Radio>();
 
     public bool IsAvailable { get; private set; }
     public bool IsAuthenticated => _smartLinkAuth?.AuthState == SmartLinkAuthState.Authenticated;
@@ -91,6 +92,9 @@ public class SmartLinkManager
     {
         _smartLinkAuth?.Logout();
         _wanServer?.Disconnect();
+
+        // Clear cached WAN radios
+        _cachedWanRadios.Clear();
 
         // Clear saved refresh token
         _settings.SmartLinkRefreshToken = null;
@@ -169,6 +173,12 @@ public class SmartLinkManager
         }
     }
 
+    public List<Radio> GetCachedWanRadios()
+    {
+        // Return a copy of the cached radios to avoid external modification
+        return new List<Radio>(_cachedWanRadios);
+    }
+
     private void SmartLinkAuth_AuthStateChanged(object sender, SmartLinkAuthState state)
     {
         string status;
@@ -227,6 +237,9 @@ public class SmartLinkManager
 
     private void WanServer_WanRadioListReceived(List<Radio> radios)
     {
+        // Cache the WAN radios for later retrieval
+        _cachedWanRadios = radios ?? new List<Radio>();
+
         WanRadiosDiscovered?.Invoke(this, new WanRadiosDiscoveredEventArgs { Radios = radios });
     }
 
