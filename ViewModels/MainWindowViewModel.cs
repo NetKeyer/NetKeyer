@@ -145,6 +145,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _loadingSettings = false; // Prevent saving while loading
     private bool _isTransmitModeCW = true; // Track if transmit slice is in CW mode
     private bool _isSidetoneOnlyMode = false; // Track if we're in sidetone-only mode (no radio)
+    private bool _userExplicitlySelectedSidetoneOnly = false; // Track if user explicitly selected sidetone-only vs. implicit fallback
     private DateTime _inputDeviceOpenedTime = DateTime.MinValue; // Track when input device was opened
     private const int INPUT_GRACE_PERIOD_MS = 100; // Ignore paddle events for this many ms after opening device
 
@@ -266,9 +267,27 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!_loadingSettings && _settings != null && value != null)
         {
-            _settings.SelectedRadioSerial = value.Radio?.Serial;
-            _settings.SelectedGuiClientStation = value.GuiClient?.Station;
-            _settings.Save();
+            // Check if user is explicitly selecting sidetone-only
+            bool isSidetoneOnly = (value.DisplayName == SIDETONE_ONLY_OPTION);
+
+            if (isSidetoneOnly)
+            {
+                // User explicitly selected sidetone-only
+                _userExplicitlySelectedSidetoneOnly = true;
+
+                // Clear persisted radio settings
+                _settings.SelectedRadioSerial = null;
+                _settings.SelectedGuiClientStation = null;
+                _settings.Save();
+            }
+            else
+            {
+                // User selected a real radio - save it
+                _userExplicitlySelectedSidetoneOnly = false;
+                _settings.SelectedRadioSerial = value.Radio?.Serial;
+                _settings.SelectedGuiClientStation = value.GuiClient?.Station;
+                _settings.Save();
+            }
         }
     }
 
@@ -369,19 +388,38 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         // Restore previously selected radio/client if available
+        _loadingSettings = true;
+
+        // Try to restore saved selection
+        RadioClientSelection restoredSelection = null;
         if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedRadioSerial))
         {
-            _loadingSettings = true;
-            var savedSelection = RadioClientSelections.FirstOrDefault(s =>
+            restoredSelection = RadioClientSelections.FirstOrDefault(s =>
                 s.Radio?.Serial == _settings.SelectedRadioSerial &&
                 s.GuiClient?.Station == _settings.SelectedGuiClientStation);
-
-            if (savedSelection != null)
-            {
-                SelectedRadioClient = savedSelection;
-            }
-            _loadingSettings = false;
         }
+
+        if (restoredSelection != null)
+        {
+            // Saved radio is available - select it
+            SelectedRadioClient = restoredSelection;
+        }
+        else
+        {
+            // Saved radio not available OR no saved selection - default to sidetone-only
+            var sidetoneOption = RadioClientSelections.FirstOrDefault(s =>
+                s.DisplayName == SIDETONE_ONLY_OPTION);
+
+            if (sidetoneOption != null)
+            {
+                SelectedRadioClient = sidetoneOption;
+
+                // This is an implicit fallback, not an explicit user choice
+                _userExplicitlySelectedSidetoneOnly = false;
+            }
+        }
+
+        _loadingSettings = false;
     }
 
     [RelayCommand]
