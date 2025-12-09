@@ -380,11 +380,14 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        // If SmartLink is connected, request updated radio list
-        if (_wanServer != null && _wanServer.IsConnected && _smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
+        // If SmartLink is authenticated, ensure connection and request radio list
+        if (_smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
         {
-            // The WanRadioRadioListRecieved event handler will add SmartLink radios to the list
-            // Note: This happens automatically when WanServer is connected
+            // Reconnect to SmartLink server if needed (will trigger radio list refresh)
+            Task.Run(async () =>
+            {
+                await ConnectToSmartLinkServerAsync();
+            });
         }
 
         // Restore previously selected radio/client if available
@@ -1177,8 +1180,21 @@ public partial class MainWindowViewModel : ViewModelBase
             // Update paddle labels after disconnection
             UpdatePaddleLabels();
 
-            // Refresh radio list to show current availability
-            RefreshRadios();
+            // Re-establish SmartLink connection if authenticated (to refresh radio list)
+            if (_smartLinkAuth != null && _smartLinkAuth.AuthState == SmartLinkAuthState.Authenticated)
+            {
+                Task.Run(async () =>
+                {
+                    await ConnectToSmartLinkServerAsync();
+                    // Refresh radio list after SmartLink reconnects
+                    Dispatcher.UIThread.Post(() => RefreshRadios());
+                });
+            }
+            else
+            {
+                // Not using SmartLink, just refresh radio list immediately
+                RefreshRadios();
+            }
 
             // Switch back to setup page
             CurrentPage = PageType.Setup;
