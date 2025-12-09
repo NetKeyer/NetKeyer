@@ -7,8 +7,8 @@
         x:Class="NetKeyer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="NetKeyer - FlexRadio CW Keyer"
-        Width="600" Height="550"
-        MinWidth="500" MinHeight="450">
+        Width="600" Height="600"
+        MinWidth="500" MinHeight="500">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
@@ -142,12 +142,15 @@
                 <!-- Paddle Status -->
                 <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Paddle Status" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="Key Status" FontWeight="Bold" FontSize="14"/>
 
                         <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
-                            <!-- Left Paddle Indicator -->
+                            <!-- Left Paddle/Key/PTT Indicator -->
                             <StackPanel Spacing="3">
-                                <TextBlock Text="Left Paddle" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding LeftPaddleLabelText}"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"/>
                                 <Border Width="80" Height="40"
                                         Background="{Binding LeftPaddleIndicatorColor}"
                                         BorderBrush="DarkGray"
@@ -162,9 +165,12 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- Right Paddle Indicator -->
-                            <StackPanel Spacing="3">
-                                <TextBlock Text="Right Paddle" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            <!-- Right Paddle Indicator (conditional) -->
+                            <StackPanel Spacing="3" IsVisible="{Binding RightPaddleVisible}">
+                                <TextBlock Text="Right Paddle"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"/>
                                 <Border Width="80" Height="40"
                                         Background="{Binding RightPaddleIndicatorColor}"
                                         BorderBrush="DarkGray"
@@ -182,8 +188,27 @@
                     </StackPanel>
                 </Border>
 
-                <!-- CW Settings Section -->
+                <!-- Radio Mode Indicator -->
                 <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding ModeDisplay}"
+                                   FontWeight="Bold"
+                                   FontSize="14"
+                                   HorizontalAlignment="Center"/>
+
+                        <!-- Mode switching instructions (conditional) -->
+                        <TextBlock Text="{Binding ModeInstructions}"
+                                   FontSize="11"
+                                   Foreground="Orange"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Center"
+                                   IsVisible="{Binding !!ModeInstructions}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- CW Settings Section -->
+                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                        IsVisible="{Binding CwSettingsVisible}">
                     <StackPanel Spacing="6">
                         <TextBlock Text="CW Settings" FontWeight="Bold" FontSize="14"/>
 
