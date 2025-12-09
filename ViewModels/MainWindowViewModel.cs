@@ -394,10 +394,42 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        // If SmartLink is authenticated, ensure connection and request radio list
+        // If SmartLink is authenticated, add cached WAN radios and ensure connection
         if (_smartLinkManager != null && _smartLinkManager.IsAuthenticated)
         {
-            // Reconnect to SmartLink server if needed (will trigger radio list refresh)
+            // Add cached WAN radios immediately (if available)
+            var cachedRadios = _smartLinkManager.GetCachedWanRadios();
+            foreach (var radio in cachedRadios)
+            {
+                lock (radio.GuiClientsLockObj)
+                {
+                    if (radio.GuiClients != null && radio.GuiClients.Count > 0)
+                    {
+                        foreach (var guiClient in radio.GuiClients)
+                        {
+                            var selection = new RadioClientSelection
+                            {
+                                Radio = radio,
+                                GuiClient = guiClient,
+                                DisplayName = $"[SmartLink] {radio.Nickname} ({radio.Model}) - {guiClient.Station} [{guiClient.Program}]"
+                            };
+                            RadioClientSelections.Add(selection);
+                        }
+                    }
+                    else
+                    {
+                        var selection = new RadioClientSelection
+                        {
+                            Radio = radio,
+                            GuiClient = null,
+                            DisplayName = $"[SmartLink] {radio.Nickname} ({radio.Model}) - No Stations"
+                        };
+                        RadioClientSelections.Add(selection);
+                    }
+                }
+            }
+
+            // Reconnect to SmartLink server if needed (will trigger radio list refresh for updates)
             Task.Run(async () =>
             {
                 await _smartLinkManager.ConnectToServerAsync();
