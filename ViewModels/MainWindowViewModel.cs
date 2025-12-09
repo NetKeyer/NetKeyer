@@ -1079,8 +1079,31 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         else
         {
-            // Disconnect
+            // Disconnect - clean up all keying state first
+
+            // Stop iambic keyer (sends key-up if active)
             _iambicKeyer?.Stop();
+
+            // If straight key was active, send key-up
+            if (_previousStraightKeyState)
+            {
+                SendCWKey(false);
+            }
+
+            // If PTT was active, send PTT-off
+            if (_previousPttState)
+            {
+                SendPTT(false);
+            }
+
+            // Ensure sidetone is stopped
+            _sidetoneGenerator?.Stop();
+
+            // Reset paddle indicators to OFF state
+            LeftPaddleIndicatorColor = Brushes.Black;
+            RightPaddleIndicatorColor = Brushes.Black;
+            LeftPaddleStateText = "OFF";
+            RightPaddleStateText = "OFF";
 
             // Unsubscribe from radio property changes
             if (_connectedRadio != null)
@@ -1105,6 +1128,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _boundGuiClientHandle = 0;
             _previousLeftPaddleState = false;
             _previousRightPaddleState = false;
+            _previousStraightKeyState = false;
+            _previousPttState = false;
             _isSidetoneOnlyMode = false;
 
             // Clear any error status on manual disconnect
@@ -1122,6 +1147,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void Exit()
     {
+        // Clean up all keying state before exit
+        _iambicKeyer?.Stop();
+
+        if (_previousStraightKeyState)
+        {
+            SendCWKey(false);
+        }
+
+        if (_previousPttState)
+        {
+            SendPTT(false);
+        }
+
+        _sidetoneGenerator?.Stop();
+
         if (_connectedRadio != null)
         {
             _connectedRadio.Disconnect();
