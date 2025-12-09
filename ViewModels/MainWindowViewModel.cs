@@ -169,6 +169,22 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _smartLinkButtonText = "Login to SmartLink";
 
+    // Mode differentiation properties
+    [ObservableProperty]
+    private string _modeDisplay = "Disconnected";  // Combined mode string
+
+    [ObservableProperty]
+    private string _modeInstructions = "";  // Instructions for mode switching
+
+    [ObservableProperty]
+    private bool _cwSettingsVisible = true;  // Control CW settings visibility
+
+    [ObservableProperty]
+    private string _leftPaddleLabelText = "Left Paddle";  // Dynamic left label
+
+    [ObservableProperty]
+    private bool _rightPaddleVisible = true;  // Hide right paddle when appropriate
+
     public MainWindowViewModel()
     {
         // Load user settings
@@ -291,6 +307,9 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             catch { }
         }
+
+        // Update paddle labels when mode changes
+        UpdatePaddleLabels();
     }
 
     private const string SIDETONE_ONLY_OPTION = "No radio (sidetone only)";
@@ -904,6 +923,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 // Switch to operating page
                 CurrentPage = PageType.Operating;
+
+                // Update paddle labels for sidetone-only mode
+                UpdatePaddleLabels();
                 return;
             }
 
@@ -1051,6 +1073,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Switch to operating page
             CurrentPage = PageType.Operating;
+
+            // Update paddle labels after connection
+            UpdatePaddleLabels();
         }
         else
         {
@@ -1085,6 +1110,9 @@ public partial class MainWindowViewModel : ViewModelBase
             // Clear any error status on manual disconnect
             HasRadioError = false;
             ConnectButtonText = "Connect";
+
+            // Update paddle labels after disconnection
+            UpdatePaddleLabels();
 
             // Switch back to setup page
             CurrentPage = PageType.Setup;
@@ -1218,6 +1246,9 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             catch { }
         }
+
+        // Update mode display when iambic type changes
+        UpdatePaddleLabels();
     }
 
     partial void OnSwapPaddlesChanged(bool value)
@@ -1328,12 +1359,18 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (DebugFlags.DEBUG_SLICE_MODE)
                     Console.WriteLine($"[TransmitSliceMode] Mode changed from {(wasCW ? "CW" : "non-CW")} to {(_isTransmitModeCW ? "CW" : "non-CW")}");
             }
+
+            // Update UI elements
+            UpdatePaddleLabels();
         }
         else
         {
             if (DebugFlags.DEBUG_SLICE_MODE)
                 Console.WriteLine($"[TransmitSliceMode] No transmit slice for our client, defaulting to CW mode");
             _isTransmitModeCW = true; // Default to CW mode if no transmit slice
+
+            // Update UI elements
+            UpdatePaddleLabels();
         }
     }
 
@@ -1386,6 +1423,74 @@ public partial class MainWindowViewModel : ViewModelBase
                 Console.WriteLine($"[TransmitSliceMode] DemodMode property changed");
             UpdateTransmitSliceMode();
         }
+    }
+
+    private void UpdatePaddleLabels()
+    {
+        // Build combined mode display string
+        string modeStr;
+
+        if (_connectedRadio == null && !_isSidetoneOnlyMode)
+        {
+            // Disconnected
+            modeStr = "Disconnected";
+            LeftPaddleLabelText = "Left Paddle";
+            RightPaddleVisible = true;
+            ModeInstructions = "";
+            CwSettingsVisible = true;
+        }
+        else if (_isSidetoneOnlyMode)
+        {
+            // Sidetone-only mode
+            modeStr = "Sidetone Only";
+            CwSettingsVisible = true;
+            ModeInstructions = "";
+
+            if (IsIambicMode)
+            {
+                LeftPaddleLabelText = "Left Paddle";
+                RightPaddleVisible = true;
+            }
+            else
+            {
+                LeftPaddleLabelText = "Key";
+                RightPaddleVisible = false;
+            }
+        }
+        else if (!_isTransmitModeCW)
+        {
+            // PTT mode (non-CW radio modes)
+            var txSlice = FindOurTransmitSlice();
+            string radioMode = txSlice?.DemodMode?.ToUpper() ?? "Unknown";
+            modeStr = $"{radioMode} (PTT)";
+
+            LeftPaddleLabelText = "PTT";
+            RightPaddleVisible = false;
+            CwSettingsVisible = false;
+            ModeInstructions = $"Switch radio to CW mode to activate CW keying";
+        }
+        else
+        {
+            // CW mode
+            if (IsIambicMode)
+            {
+                string iambicType = IsIambicModeB ? "Mode B" : "Mode A";
+                modeStr = $"CW (Iambic {iambicType})";
+                LeftPaddleLabelText = "Left Paddle";
+                RightPaddleVisible = true;
+            }
+            else
+            {
+                modeStr = "CW (Straight Key)";
+                LeftPaddleLabelText = "Key";
+                RightPaddleVisible = false;
+            }
+
+            CwSettingsVisible = true;
+            ModeInstructions = "";
+        }
+
+        ModeDisplay = modeStr;
     }
 
     private void Radio_PropertyChanged(object sender, PropertyChangedEventArgs e)
