@@ -7,8 +7,8 @@
         x:Class="NetKeyer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="NetKeyer - FlexRadio CW Keyer"
-        Width="600" Height="600"
-        MinWidth="500" MinHeight="500">
+        Width="600" Height="620"
+        MinWidth="500" MinHeight="520">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
@@ -43,6 +43,7 @@
                                 <Button Content="{Binding SmartLinkButtonText}"
                                         Command="{Binding ToggleSmartLinkCommand}"
                                         Width="180"
+                                        HorizontalContentAlignment="Center"
                                         Padding="4"/>
                                 <TextBlock Text="{Binding SmartLinkStatus}"
                                            VerticalAlignment="Center"
@@ -65,6 +66,7 @@
                                 <Button Content="Refresh"
                                         Command="{Binding RefreshRadiosCommand}"
                                         Width="70"
+                                        HorizontalContentAlignment="Center"
                                         Padding="4"/>
                             </StackPanel>
 
@@ -107,6 +109,7 @@
                                     <Button Content="Refresh"
                                             Command="{Binding RefreshSerialPortsCommand}"
                                             Width="70"
+                                            HorizontalContentAlignment="Center"
                                             Padding="4"/>
                                 </StackPanel>
                             </StackPanel>
@@ -122,6 +125,7 @@
                                     <Button Content="Refresh"
                                             Command="{Binding RefreshMidiDevicesCommand}"
                                             Width="70"
+                                            HorizontalContentAlignment="Center"
                                             Padding="4"/>
                                 </StackPanel>
 
@@ -129,6 +133,7 @@
                                     <Button Content="Configure MIDI Notes..."
                                             Command="{Binding ConfigureMidiNotesCommand}"
                                             Width="180"
+                                            HorizontalContentAlignment="Center"
                                             Padding="4"/>
                                     <TextBlock Text="Configure which MIDI notes control paddles, straight key, and PTT"
                                                FontSize="10"

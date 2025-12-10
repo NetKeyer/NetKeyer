@@ -45,6 +45,7 @@
                     <Button Content="Add"
                             Command="{Binding AddNoteCommand}"
                             Width="60"
+                            HorizontalContentAlignment="Center"
                             Padding="5"/>
                     <TextBlock Text="(MIDI note 0-127)"
                                VerticalAlignment="Center"
@@ -151,15 +152,18 @@
             <Button Content="Reset to Defaults"
                     Command="{Binding ResetToDefaultsCommand}"
                     Width="130"
+                    HorizontalContentAlignment="Center"
                     Padding="6"/>
             <Button Name="CancelButton"
                     Content="Cancel"
                     Width="80"
+                    HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
             <Button Name="OkButton"
                     Content="OK"
                     Width="80"
+                    HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="OkButton_Click"
                     IsDefault="True"/>
