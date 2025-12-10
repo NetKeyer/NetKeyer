@@ -26,8 +26,6 @@ public class IambicKeyer
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
     private bool _lastElementWasDit = true; // Track what was actually sent last
-    private bool _nextElementDitPaddle = false;  // Paddle state when next element was decided
-    private bool _nextElementDahPaddle = false;
     private DateTime _lastStateChange = DateTime.UtcNow;
 
     private enum KeyerState
@@ -195,9 +193,10 @@ public class IambicKeyer
             if (_enableDebugLogging)
                 Console.WriteLine($"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
 
-            // Copy decision-time paddle states to "at start" states
-            _ditPaddleAtStart = _nextElementDitPaddle;
-            _dahPaddleAtStart = _nextElementDahPaddle;
+            // Capture paddle states at ACTUAL element start time (not decision time)
+            // This is critical for Mode B completion logic to work correctly
+            _ditPaddleAtStart = _currentLeftPaddleState;
+            _dahPaddleAtStart = _currentRightPaddleState;
 
             // Send radio key-down
             SendRadioKey(true);
@@ -282,10 +281,6 @@ public class IambicKeyer
         {
             bool isDit = (nextDuration.Value == _ditLength);
 
-            // Record paddle states at element start
-            _ditPaddleAtStart = _currentLeftPaddleState;
-            _dahPaddleAtStart = _currentRightPaddleState;
-
             // Clear latches
             _iambicDitLatched = false;
             _iambicDahLatched = false;
@@ -296,7 +291,7 @@ public class IambicKeyer
             if (_enableDebugLogging)
                 Console.WriteLine($"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
 
-            // Start tone (OnToneStart will fire and send radio key-down)
+            // Start tone (OnToneStart will fire, capture paddle states, and send radio key-down)
             // OnToneComplete will handle queueing the silence that follows
             _sidetoneGenerator?.StartTone(nextDuration.Value);
         }
@@ -322,10 +317,6 @@ public class IambicKeyer
     /// </summary>
     private int? DetermineNextToneDuration()
     {
-        // Capture paddle states at decision time (when we decide what to send)
-        _nextElementDitPaddle = _currentLeftPaddleState;
-        _nextElementDahPaddle = _currentRightPaddleState;
-
         bool sendDit = false;
         bool sendDah = false;
 
