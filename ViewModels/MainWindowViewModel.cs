@@ -580,11 +580,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // Reset keying controller state to ensure clean start
             _keyingController?.ResetState();
 
-            // Update indicators to show current state (but don't trigger keying) - only for serial
-            if (InputType == InputDeviceType.Serial)
-            {
-                UpdateIndicatorsFromSerial();
-            }
+            // InputDeviceManager will emit an initial PaddleStateChanged event with current state
         }
         catch (Exception ex)
         {
@@ -608,45 +604,38 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update indicators
         Dispatcher.UIThread.Post(() =>
         {
-            // In straight key mode, either paddle should trigger the key indicator
-            bool keyState = IsIambicMode ? leftPaddleState : (leftPaddleState || rightPaddleState);
+            bool leftIndicatorState;
 
-            LeftPaddleIndicatorColor = keyState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = keyState ? "ON" : "OFF";
+            // Check transmit mode first (CW vs PTT), then keying mode (iambic vs straight)
+            if (!(_transmitSliceMonitor.IsTransmitModeCW || _isSidetoneOnlyMode))
+            {
+                // PTT mode (non-CW radio modes) - use PTT state
+                // (InputDeviceManager sets this to OR of both paddles for serial input)
+                leftIndicatorState = pttState;
+            }
+            else if (IsIambicMode)
+            {
+                // CW iambic mode - left paddle indicator
+                leftIndicatorState = leftPaddleState;
+            }
+            else
+            {
+                // CW straight key mode - use straight key state
+                // (InputDeviceManager sets this to OR of both paddles for serial input)
+                leftIndicatorState = straightKeyState;
+            }
+
+            if (DebugFlags.DEBUG_MIDI_HANDLER)
+                Console.WriteLine($"[Indicator Update] IsIambic={IsIambicMode} IsCW={_transmitSliceMonitor.IsTransmitModeCW} Sidetone={_isSidetoneOnlyMode} | L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState} | LeftInd={leftIndicatorState}");
+
+            LeftPaddleIndicatorColor = leftIndicatorState ? Brushes.LimeGreen : Brushes.Black;
+            LeftPaddleStateText = leftIndicatorState ? "ON" : "OFF";
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
 
         // Delegate keying logic to KeyingController
         _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
-    }
-
-    private void UpdateIndicatorsFromSerial()
-    {
-        if (_inputDeviceManager?.CurrentDeviceType != InputDeviceType.Serial)
-            return;
-
-        try
-        {
-            // HaliKey v1: CTS (left) + DCD (right)
-            var (leftPaddleState, rightPaddleState) = _inputDeviceManager.GetCurrentSerialPinStates();
-
-            // Apply swap if enabled
-            if (SwapPaddles)
-            {
-                (leftPaddleState, rightPaddleState) = (rightPaddleState, leftPaddleState);
-            }
-
-            // Update indicators only
-            // In straight key mode, either paddle should trigger the key indicator
-            bool keyState = IsIambicMode ? leftPaddleState : (leftPaddleState || rightPaddleState);
-
-            LeftPaddleIndicatorColor = keyState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = keyState ? "ON" : "OFF";
-            RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
-        }
-        catch { }
     }
 
     private string GetTimestamp()
