@@ -8,6 +8,7 @@ namespace NetKeyer.Audio
     /// PortAudio-based sidetone generator using streaming audio with SidetoneProvider.
     /// Used on Linux/macOS for low-latency audio output with shaped waveforms.
     /// Uses ALSA backend on Linux and CoreAudio on macOS for optimal latency.
+    /// Automatically follows default audio device changes on macOS.
     /// </summary>
     public class SidetoneGenerator : ISidetoneGenerator
     {
@@ -18,6 +19,7 @@ namespace NetKeyer.Audio
         private SidetoneProvider _sidetoneProvider;
         private float[] _readBuffer;
         private readonly object _lock = new object();
+        private CoreAudioDeviceMonitor _deviceMonitor;
 
         public event Action OnSilenceComplete;
         public event Action OnToneStart;
@@ -43,35 +45,14 @@ namespace NetKeyer.Audio
                 // Allocate read buffer for callback
                 _readBuffer = new float[BUFFER_SAMPLES];
 
-                // Get default output device info for latency
-                var deviceInfo = PortAudio.GetDeviceInfo(PortAudio.DefaultOutputDevice);
+                // Initialize the audio stream
+                InitializeStream();
 
-                // Configure stream parameters for output
-                var streamParams = new StreamParameters
+                // Set up device change monitoring on macOS
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 {
-                    device = PortAudio.DefaultOutputDevice,
-                    channelCount = 1, // Mono
-                    sampleFormat = SampleFormat.Float32,
-                    suggestedLatency = deviceInfo.defaultLowOutputLatency,
-                    hostApiSpecificStreamInfo = IntPtr.Zero
-                };
-
-                // Open stream with callback
-                _stream = new Stream(
-                    inParams: null,
-                    outParams: streamParams,
-                    sampleRate: SAMPLE_RATE,
-                    framesPerBuffer: BUFFER_SAMPLES,
-                    streamFlags: StreamFlags.ClipOff,
-                    callback: StreamCallback,
-                    userData: null
-                );
-
-                // Start the stream
-                _stream.Start();
-
-                Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
-                                  $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
+                    _deviceMonitor = new CoreAudioDeviceMonitor(OnDefaultDeviceChanged);
+                }
             }
             catch (Exception ex)
             {
@@ -79,6 +60,39 @@ namespace NetKeyer.Audio
                 Dispose();
                 throw;
             }
+        }
+
+        private void InitializeStream()
+        {
+            // Get default output device info for latency
+            var deviceInfo = PortAudio.GetDeviceInfo(PortAudio.DefaultOutputDevice);
+
+            // Configure stream parameters for output
+            var streamParams = new StreamParameters
+            {
+                device = PortAudio.DefaultOutputDevice,
+                channelCount = 1, // Mono
+                sampleFormat = SampleFormat.Float32,
+                suggestedLatency = deviceInfo.defaultLowOutputLatency,
+                hostApiSpecificStreamInfo = IntPtr.Zero
+            };
+
+            // Open stream with callback
+            _stream = new Stream(
+                inParams: null,
+                outParams: streamParams,
+                sampleRate: SAMPLE_RATE,
+                framesPerBuffer: BUFFER_SAMPLES,
+                streamFlags: StreamFlags.ClipOff,
+                callback: StreamCallback,
+                userData: null
+            );
+
+            // Start the stream
+            _stream.Start();
+
+            Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
+                              $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
         }
 
         private StreamCallbackResult StreamCallback(
@@ -106,6 +120,39 @@ namespace NetKeyer.Audio
                     Console.WriteLine($"PortAudio callback error: {ex.Message}");
                     return StreamCallbackResult.Abort;
                 }
+            }
+        }
+
+        private void OnDefaultDeviceChanged()
+        {
+            if (_disposed)
+                return;
+
+            try
+            {
+                Console.WriteLine("Default audio device changed, reinitializing PortAudio...");
+
+                lock (_lock)
+                {
+                    // Stop and close the old stream
+                    if (_stream != null)
+                    {
+                        if (!_stream.IsStopped)
+                        {
+                            _stream.Stop();
+                        }
+                        _stream.Close();
+                        _stream.Dispose();
+                        _stream = null;
+                    }
+
+                    // Reinitialize with the new default device
+                    InitializeStream();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to switch to new default audio device: {ex.Message}");
             }
         }
 
@@ -159,6 +206,13 @@ namespace NetKeyer.Audio
                 return;
 
             _disposed = true;
+
+            // Dispose device monitor on macOS
+            if (_deviceMonitor != null)
+            {
+                _deviceMonitor.Dispose();
+                _deviceMonitor = null;
+            }
 
             // Stop and close stream
             if (_stream != null)
