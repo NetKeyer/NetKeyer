@@ -14,302 +14,316 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <ScrollViewer>
-        <StackPanel Margin="10" Spacing="8">
+    <DockPanel>
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
+                <MenuItem Header="_About NetKeyer..." Command="{Binding ShowAboutCommand}"/>
+            </MenuItem>
+        </Menu>
 
-            <!-- Setup Page -->
-            <StackPanel Spacing="8" IsVisible="{Binding IsSetupPage}">
+        <!-- Main Content -->
+        <ScrollViewer>
+            <StackPanel Margin="10" Spacing="8">
 
-                <!-- SmartLink Section -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
-                        IsVisible="{Binding SmartLinkAvailable}">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="SmartLink" FontWeight="Bold" FontSize="14"/>
+                <!-- Setup Page -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsSetupPage}">
 
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Button Content="{Binding SmartLinkButtonText}"
-                                    Command="{Binding ToggleSmartLinkCommand}"
-                                    Width="180"
-                                    Padding="4"/>
-                            <TextBlock Text="{Binding SmartLinkStatus}"
-                                       VerticalAlignment="Center"
-                                       FontSize="12"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Radio Selection -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="Radio Selection" FontWeight="Bold" FontSize="14"/>
-
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <ComboBox Name="RadioComboBox"
-                                      ItemsSource="{Binding RadioClientSelections}"
-                                      SelectedItem="{Binding SelectedRadioClient}"
-                                      Width="450"
-                                      PlaceholderText="Select a radio and station..."/>
-                            <Button Content="Refresh"
-                                    Command="{Binding RefreshRadiosCommand}"
-                                    Width="70"
-                                    Padding="4"/>
-                        </StackPanel>
-
-                        <!-- Status - only shown on error -->
-                        <TextBlock Text="{Binding RadioStatus}"
-                                   Foreground="{Binding RadioStatusColor}"
-                                   IsVisible="{Binding HasRadioError}"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Input Device Selection -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="Input Device Selection" FontWeight="Bold" FontSize="14"/>
-
-                        <!-- Input Type Selector -->
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="Input Type:" FontSize="12"/>
-                            <StackPanel Orientation="Horizontal" Spacing="15">
-                                <RadioButton Content="Serial Port (HaliKey v1)"
-                                             GroupName="InputType"
-                                             IsChecked="{Binding IsSerialInput}"
-                                             Padding="2"/>
-                                <RadioButton Content="MIDI (HaliKey MIDI, CTR2)"
-                                             GroupName="InputType"
-                                             IsChecked="{Binding IsMidiInput}"
-                                             Padding="2"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Serial Port Settings -->
-                        <StackPanel Spacing="6" IsVisible="{Binding IsSerialInput}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="Port:" VerticalAlignment="Center" Width="110"/>
-                                <ComboBox ItemsSource="{Binding SerialPorts}"
-                                          SelectedItem="{Binding SelectedSerialPort}"
-                                          Width="280"
-                                          PlaceholderText="Select a port..."/>
-                                <Button Content="Refresh"
-                                        Command="{Binding RefreshSerialPortsCommand}"
-                                        Width="70"
-                                        Padding="4"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- MIDI Device Settings -->
-                        <StackPanel Spacing="6" IsVisible="{Binding IsMidiInput}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="MIDI Device:" VerticalAlignment="Center" Width="100"/>
-                                <ComboBox ItemsSource="{Binding MidiDevices}"
-                                          SelectedItem="{Binding SelectedMidiDevice}"
-                                          Width="280"
-                                          PlaceholderText="Select a MIDI device..."/>
-                                <Button Content="Refresh"
-                                        Command="{Binding RefreshMidiDevicesCommand}"
-                                        Width="70"
-                                        Padding="4"/>
-                            </StackPanel>
+                    <!-- SmartLink Section -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                            IsVisible="{Binding SmartLinkAvailable}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="SmartLink" FontWeight="Bold" FontSize="14"/>
 
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="Configure MIDI Notes..."
-                                        Command="{Binding ConfigureMidiNotesCommand}"
+                                <Button Content="{Binding SmartLinkButtonText}"
+                                        Command="{Binding ToggleSmartLinkCommand}"
                                         Width="180"
                                         Padding="4"/>
-                                <TextBlock Text="Configure which MIDI notes control paddles, straight key, and PTT"
-                                           FontSize="10"
-                                           Foreground="Gray"
-                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding SmartLinkStatus}"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"/>
                             </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
+                    </Border>
 
-                <!-- Connect Button -->
-                <Button Content="Connect"
-                        Command="{Binding ToggleConnectionCommand}"
-                        HorizontalAlignment="Center"
-                        HorizontalContentAlignment="Center"
-                        Width="120"
-                        Padding="6"
-                        Margin="0,5,0,0"/>
-            </StackPanel>
+                    <!-- Radio Selection -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Radio Selection" FontWeight="Bold" FontSize="14"/>
 
-            <!-- Operating Page -->
-            <StackPanel Spacing="8" IsVisible="{Binding IsOperatingPage}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <ComboBox Name="RadioComboBox"
+                                          ItemsSource="{Binding RadioClientSelections}"
+                                          SelectedItem="{Binding SelectedRadioClient}"
+                                          Width="450"
+                                          PlaceholderText="Select a radio and station..."/>
+                                <Button Content="Refresh"
+                                        Command="{Binding RefreshRadiosCommand}"
+                                        Width="70"
+                                        Padding="4"/>
+                            </StackPanel>
 
-                <!-- Paddle Status -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="Key Status" FontWeight="Bold" FontSize="14"/>
+                            <!-- Status - only shown on error -->
+                            <TextBlock Text="{Binding RadioStatus}"
+                                       Foreground="{Binding RadioStatusColor}"
+                                       IsVisible="{Binding HasRadioError}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
 
-                        <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
-                            <!-- Left Paddle/Key/PTT Indicator -->
+                    <!-- Input Device Selection -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Input Device Selection" FontWeight="Bold" FontSize="14"/>
+
+                            <!-- Input Type Selector -->
                             <StackPanel Spacing="3">
-                                <TextBlock Text="{Binding LeftPaddleLabelText}"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           HorizontalAlignment="Center"/>
-                                <Border Width="80" Height="40"
-                                        Background="{Binding LeftPaddleIndicatorColor}"
-                                        BorderBrush="DarkGray"
-                                        BorderThickness="2"
-                                        CornerRadius="3">
-                                    <TextBlock Text="{Binding LeftPaddleStateText}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               Foreground="White"
-                                               FontWeight="Bold"
-                                               FontSize="14"/>
-                                </Border>
+                                <TextBlock Text="Input Type:" FontSize="12"/>
+                                <StackPanel Orientation="Horizontal" Spacing="15">
+                                    <RadioButton Content="Serial Port (HaliKey v1)"
+                                                 GroupName="InputType"
+                                                 IsChecked="{Binding IsSerialInput}"
+                                                 Padding="2"/>
+                                    <RadioButton Content="MIDI (HaliKey MIDI, CTR2)"
+                                                 GroupName="InputType"
+                                                 IsChecked="{Binding IsMidiInput}"
+                                                 Padding="2"/>
+                                </StackPanel>
                             </StackPanel>
 
-                            <!-- Right Paddle Indicator (conditional) -->
-                            <StackPanel Spacing="3" IsVisible="{Binding RightPaddleVisible}">
-                                <TextBlock Text="Right Paddle"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           HorizontalAlignment="Center"/>
-                                <Border Width="80" Height="40"
-                                        Background="{Binding RightPaddleIndicatorColor}"
-                                        BorderBrush="DarkGray"
-                                        BorderThickness="2"
-                                        CornerRadius="3">
-                                    <TextBlock Text="{Binding RightPaddleStateText}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               Foreground="White"
-                                               FontWeight="Bold"
-                                               FontSize="14"/>
-                                </Border>
+                            <!-- Serial Port Settings -->
+                            <StackPanel Spacing="6" IsVisible="{Binding IsSerialInput}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Port:" VerticalAlignment="Center" Width="110"/>
+                                    <ComboBox ItemsSource="{Binding SerialPorts}"
+                                              SelectedItem="{Binding SelectedSerialPort}"
+                                              Width="280"
+                                              PlaceholderText="Select a port..."/>
+                                    <Button Content="Refresh"
+                                            Command="{Binding RefreshSerialPortsCommand}"
+                                            Width="70"
+                                            Padding="4"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- MIDI Device Settings -->
+                            <StackPanel Spacing="6" IsVisible="{Binding IsMidiInput}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="MIDI Device:" VerticalAlignment="Center" Width="100"/>
+                                    <ComboBox ItemsSource="{Binding MidiDevices}"
+                                              SelectedItem="{Binding SelectedMidiDevice}"
+                                              Width="280"
+                                              PlaceholderText="Select a MIDI device..."/>
+                                    <Button Content="Refresh"
+                                            Command="{Binding RefreshMidiDevicesCommand}"
+                                            Width="70"
+                                            Padding="4"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Content="Configure MIDI Notes..."
+                                            Command="{Binding ConfigureMidiNotesCommand}"
+                                            Width="180"
+                                            Padding="4"/>
+                                    <TextBlock Text="Configure which MIDI notes control paddles, straight key, and PTT"
+                                               FontSize="10"
+                                               Foreground="Gray"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
+                    </Border>
 
-                <!-- Radio Mode Indicator -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="{Binding ModeDisplay}"
-                                   FontWeight="Bold"
-                                   FontSize="14"
-                                   HorizontalAlignment="Center"/>
-
-                        <!-- Mode switching instructions (conditional) -->
-                        <TextBlock Text="{Binding ModeInstructions}"
-                                   FontSize="11"
-                                   Foreground="Orange"
-                                   TextWrapping="Wrap"
-                                   HorizontalAlignment="Center"
-                                   IsVisible="{Binding !!ModeInstructions}"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- CW Settings Section -->
-                <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
-                        IsVisible="{Binding CwSettingsVisible}">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="CW Settings" FontWeight="Bold" FontSize="14"/>
-
-                        <!-- Speed -->
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Speed (WPM):" Width="100" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding CwSpeed}" Width="25" VerticalAlignment="Center"/>
-                            <Slider Minimum="5" Maximum="60"
-                                    Value="{Binding CwSpeed}"
-                                    TickFrequency="5"
-                                    Width="250"
-                                    VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Sidetone Volume -->
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Sidetone:" Width="100" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding SidetoneVolume}" Width="25" VerticalAlignment="Center"/>
-                            <Slider Minimum="0" Maximum="100"
-                                    Value="{Binding SidetoneVolume}"
-                                    TickFrequency="10"
-                                    Width="250"
-                                    VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Pitch -->
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Pitch (Hz):" Width="100" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding CwPitch}" Width="25" VerticalAlignment="Center"/>
-                            <Slider Minimum="300" Maximum="1000"
-                                    Value="{Binding CwPitch}"
-                                    TickFrequency="50"
-                                    Width="250"
-                                    VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <!-- Mode Selection -->
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="Keyer Mode:" FontSize="12"/>
-                            <StackPanel Orientation="Horizontal" Spacing="15">
-                                <RadioButton Content="Iambic"
-                                             GroupName="KeyerMode"
-                                             IsChecked="{Binding IsIambicMode}"
-                                             Padding="2"/>
-                                <RadioButton Content="Straight Key"
-                                             GroupName="KeyerMode"
-                                             IsChecked="{Binding !IsIambicMode}"
-                                             Padding="2"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Iambic Mode Selection (A vs B) -->
-                        <StackPanel Spacing="3">
-                            <TextBlock Text="Iambic Type:" FontSize="12"/>
-                            <StackPanel Orientation="Horizontal" Spacing="15">
-                                <RadioButton Content="Mode A"
-                                             GroupName="IambicType"
-                                             IsChecked="{Binding !IsIambicModeB}"
-                                             IsEnabled="{Binding IsIambicMode}"
-                                             Padding="2"/>
-                                <RadioButton Content="Mode B"
-                                             GroupName="IambicType"
-                                             IsChecked="{Binding IsIambicModeB}"
-                                             IsEnabled="{Binding IsIambicMode}"
-                                             Padding="2"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Swap Paddles -->
-                        <CheckBox Content="Swap Paddles (Left ↔ Right)"
-                                  IsChecked="{Binding SwapPaddles}"
-                                  Padding="2"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Disconnect and Exit Buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
-                    <Button Content="Disconnect"
+                    <!-- Connect Button -->
+                    <Button Content="Connect"
                             Command="{Binding ToggleConnectionCommand}"
+                            HorizontalAlignment="Center"
                             HorizontalContentAlignment="Center"
                             Width="120"
-                            Padding="6"/>
-                    <Button Content="Exit"
-                            Command="{Binding ExitCommand}"
-                            HorizontalContentAlignment="Center"
-                            Width="100"
-                            Padding="6"/>
+                            Padding="6"
+                            Margin="0,5,0,0"/>
                 </StackPanel>
+
+                <!-- Operating Page -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsOperatingPage}">
+
+                    <!-- Paddle Status -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Key Status" FontWeight="Bold" FontSize="14"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
+                                <!-- Left Paddle/Key/PTT Indicator -->
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="{Binding LeftPaddleLabelText}"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               HorizontalAlignment="Center"/>
+                                    <Border Width="80" Height="40"
+                                            Background="{Binding LeftPaddleIndicatorColor}"
+                                            BorderBrush="DarkGray"
+                                            BorderThickness="2"
+                                            CornerRadius="3">
+                                        <TextBlock Text="{Binding LeftPaddleStateText}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="White"
+                                                   FontWeight="Bold"
+                                                   FontSize="14"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Right Paddle Indicator (conditional) -->
+                                <StackPanel Spacing="3" IsVisible="{Binding RightPaddleVisible}">
+                                    <TextBlock Text="Right Paddle"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               HorizontalAlignment="Center"/>
+                                    <Border Width="80" Height="40"
+                                            Background="{Binding RightPaddleIndicatorColor}"
+                                            BorderBrush="DarkGray"
+                                            BorderThickness="2"
+                                            CornerRadius="3">
+                                        <TextBlock Text="{Binding RightPaddleStateText}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="White"
+                                                   FontWeight="Bold"
+                                                   FontSize="14"/>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Radio Mode Indicator -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding ModeDisplay}"
+                                       FontWeight="Bold"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"/>
+
+                            <!-- Mode switching instructions (conditional) -->
+                            <TextBlock Text="{Binding ModeInstructions}"
+                                       FontSize="11"
+                                       Foreground="Orange"
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Center"
+                                       IsVisible="{Binding !!ModeInstructions}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CW Settings Section -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                            IsVisible="{Binding CwSettingsVisible}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="CW Settings" FontWeight="Bold" FontSize="14"/>
+
+                            <!-- Speed -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Speed (WPM):" Width="100" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CwSpeed}" Width="25" VerticalAlignment="Center"/>
+                                <Slider Minimum="5" Maximum="60"
+                                        Value="{Binding CwSpeed}"
+                                        TickFrequency="5"
+                                        Width="250"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Sidetone Volume -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Sidetone:" Width="100" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding SidetoneVolume}" Width="25" VerticalAlignment="Center"/>
+                                <Slider Minimum="0" Maximum="100"
+                                        Value="{Binding SidetoneVolume}"
+                                        TickFrequency="10"
+                                        Width="250"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Pitch -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Pitch (Hz):" Width="100" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CwPitch}" Width="25" VerticalAlignment="Center"/>
+                                <Slider Minimum="300" Maximum="1000"
+                                        Value="{Binding CwPitch}"
+                                        TickFrequency="50"
+                                        Width="250"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Mode Selection -->
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Keyer Mode:" FontSize="12"/>
+                                <StackPanel Orientation="Horizontal" Spacing="15">
+                                    <RadioButton Content="Iambic"
+                                                 GroupName="KeyerMode"
+                                                 IsChecked="{Binding IsIambicMode}"
+                                                 Padding="2"/>
+                                    <RadioButton Content="Straight Key"
+                                                 GroupName="KeyerMode"
+                                                 IsChecked="{Binding !IsIambicMode}"
+                                                 Padding="2"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Iambic Mode Selection (A vs B) -->
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Iambic Type:" FontSize="12"/>
+                                <StackPanel Orientation="Horizontal" Spacing="15">
+                                    <RadioButton Content="Mode A"
+                                                 GroupName="IambicType"
+                                                 IsChecked="{Binding !IsIambicModeB}"
+                                                 IsEnabled="{Binding IsIambicMode}"
+                                                 Padding="2"/>
+                                    <RadioButton Content="Mode B"
+                                                 GroupName="IambicType"
+                                                 IsChecked="{Binding IsIambicModeB}"
+                                                 IsEnabled="{Binding IsIambicMode}"
+                                                 Padding="2"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Swap Paddles -->
+                            <CheckBox Content="Swap Paddles (Left ↔ Right)"
+                                      IsChecked="{Binding SwapPaddles}"
+                                      Padding="2"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Disconnect and Exit Buttons -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
+                        <Button Content="Disconnect"
+                                Command="{Binding ToggleConnectionCommand}"
+                                HorizontalContentAlignment="Center"
+                                Width="120"
+                                Padding="6"/>
+                        <Button Content="Exit"
+                                Command="{Binding ExitCommand}"
+                                HorizontalContentAlignment="Center"
+                                Width="100"
+                                Padding="6"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Exit Button (Setup page only) -->
+                <Button Content="Exit"
+                        Command="{Binding ExitCommand}"
+                        IsVisible="{Binding IsSetupPage}"
+                        HorizontalAlignment="Center"
+                        HorizontalContentAlignment="Center"
+                        Width="100"
+                        Padding="6"
+                        Margin="0,5,0,0"/>
+
             </StackPanel>
-
-            <!-- Exit Button (Setup page only) -->
-            <Button Content="Exit"
-                    Command="{Binding ExitCommand}"
-                    IsVisible="{Binding IsSetupPage}"
-                    HorizontalAlignment="Center"
-                    HorizontalContentAlignment="Center"
-                    Width="100"
-                    Padding="6"
-                    Margin="0,5,0,0"/>
-
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </DockPanel>
 
 </Window>

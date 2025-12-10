@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
+using NetKeyer.Helpers;
 using NetKeyer.Keying;
 using NetKeyer.Midi;
 using NetKeyer.Models;
@@ -914,6 +915,26 @@ public partial class MainWindowViewModel : ViewModelBase
 
         API.CloseSession();
         Environment.Exit(0);
+    }
+
+    [RelayCommand]
+    private void OpenDocumentation()
+    {
+        UrlHelper.OpenUrl("https://github.com/NetKeyer/NetKeyer#usage");
+    }
+
+    [RelayCommand]
+    private async Task ShowAbout()
+    {
+        var aboutWindow = new Views.AboutWindow();
+
+        // Get the main window
+        var mainWindow = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
+        if (mainWindow != null)
+        {
+            await aboutWindow.ShowDialog(mainWindow);
+        }
     }
 
 
