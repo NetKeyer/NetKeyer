@@ -67,11 +67,13 @@
             <Button Name="CancelButton"
                     Content="Cancel"
                     Width="80"
+                    HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
             <Button Name="LoginButton"
                     Content="Login"
                     Width="80"
+                    HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="LoginButton_Click"
                     IsDefault="True"/>
