@@ -94,16 +94,11 @@ public class KeyingController
                 }
                 else
                 {
-                    // Straight key mode - use dedicated straight key input if changed,
-                    // otherwise fall back to either paddle (for backward compatibility)
+                    // Straight key mode - use straight key input
+                    // (InputDeviceManager sets this to OR of both paddles for serial input)
                     if (straightKey != _previousStraightKeyState)
                     {
                         SendCWKey(straightKey);
-                    }
-                    else if (leftPaddle != _previousLeftPaddleState || rightPaddle != _previousRightPaddleState)
-                    {
-                        // Either paddle can trigger the straight key
-                        SendCWKey(leftPaddle || rightPaddle);
                     }
                 }
             }
@@ -125,15 +120,11 @@ public class KeyingController
             }
             else
             {
-                // Straight key mode
+                // Straight key mode - use straight key input
+                // (InputDeviceManager sets this to OR of both paddles for serial input)
                 if (straightKey != _previousStraightKeyState)
                 {
                     SendCWKey(straightKey);
-                }
-                else if (leftPaddle != _previousLeftPaddleState || rightPaddle != _previousRightPaddleState)
-                {
-                    // Either paddle can trigger the straight key
-                    SendCWKey(leftPaddle || rightPaddle);
                 }
             }
         }

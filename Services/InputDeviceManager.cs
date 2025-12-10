@@ -131,6 +131,28 @@ public class InputDeviceManager : IDisposable
 
             // Mark when we opened the device to enable grace period
             _inputDeviceOpenedTime = DateTime.UtcNow;
+
+            // Emit initial state event with current pin states
+            // This ensures indicators update immediately when device is opened
+            bool leftPaddle = _serialPort.CtsHolding;
+            bool rightPaddle = _serialPort.CDHolding;
+
+            // Apply swap if enabled
+            if (_swapPaddles)
+            {
+                (leftPaddle, rightPaddle) = (rightPaddle, leftPaddle);
+            }
+
+            // For serial input, set StraightKey and PTT to the OR of both paddles
+            bool anyPaddle = leftPaddle || rightPaddle;
+
+            PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
+            {
+                LeftPaddle = leftPaddle,
+                RightPaddle = rightPaddle,
+                StraightKey = anyPaddle,
+                PTT = anyPaddle
+            });
         }
         catch (Exception ex)
         {
@@ -213,22 +235,6 @@ public class InputDeviceManager : IDisposable
         _swapPaddles = swap;
     }
 
-    public (bool LeftPaddle, bool RightPaddle) GetCurrentSerialPinStates()
-    {
-        if (_serialPort == null || !_serialPort.IsOpen)
-            return (false, false);
-
-        try
-        {
-            // HaliKey v1: CTS (left) + DCD (right)
-            return (_serialPort.CtsHolding, _serialPort.CDHolding);
-        }
-        catch
-        {
-            return (false, false);
-        }
-    }
-
     private void SerialPort_PinChanged(object sender, SerialPinChangedEventArgs e)
     {
         // Check if we're in the grace period after opening the input device
@@ -253,13 +259,17 @@ public class InputDeviceManager : IDisposable
                     (leftPaddle, rightPaddle) = (rightPaddle, leftPaddle);
                 }
 
-                // Emit unified PaddleStateChanged event (serial doesn't have separate straight key/PTT)
+                // Emit unified PaddleStateChanged event
+                // For serial input, set StraightKey and PTT to the OR of both paddles
+                // This allows any paddle to trigger straight key or PTT mode
+                bool anyPaddle = leftPaddle || rightPaddle;
+
                 PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                 {
                     LeftPaddle = leftPaddle,
                     RightPaddle = rightPaddle,
-                    StraightKey = false,
-                    PTT = false
+                    StraightKey = anyPaddle,
+                    PTT = anyPaddle
                 });
             }
             catch { }
