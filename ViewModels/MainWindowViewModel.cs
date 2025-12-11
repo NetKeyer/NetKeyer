@@ -290,29 +290,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRadioClientChanged(RadioClientSelection value)
     {
-        if (!_loadingSettings && _settings != null && value != null)
+        if (!_loadingSettings && value != null)
         {
-            // Check if user is explicitly selecting sidetone-only
+            // Track if user explicitly selected sidetone-only (vs. auto-selected as fallback)
             bool isSidetoneOnly = (value.DisplayName == SIDETONE_ONLY_OPTION);
+            _userExplicitlySelectedSidetoneOnly = isSidetoneOnly;
 
-            if (isSidetoneOnly)
-            {
-                // User explicitly selected sidetone-only
-                _userExplicitlySelectedSidetoneOnly = true;
-
-                // Clear persisted radio settings
-                _settings.SelectedRadioSerial = null;
-                _settings.SelectedGuiClientStation = null;
-                _settings.Save();
-            }
-            else
-            {
-                // User selected a real radio - save it
-                _userExplicitlySelectedSidetoneOnly = false;
-                _settings.SelectedRadioSerial = value.Radio?.Serial;
-                _settings.SelectedGuiClientStation = value.GuiClient?.Station;
-                _settings.Save();
-            }
+            // DO NOT save to settings here - wait until connection
         }
     }
 
@@ -440,33 +424,37 @@ public partial class MainWindowViewModel : ViewModelBase
         // Restore previously selected radio/client if available
         _loadingSettings = true;
 
-        // Try to restore saved selection
-        RadioClientSelection restoredSelection = null;
+        RadioClientSelection defaultSelection = null;
+
+        // PRIORITY 1: Try to restore saved selection (if exists and available)
         if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedRadioSerial))
         {
-            restoredSelection = RadioClientSelections.FirstOrDefault(s =>
+            defaultSelection = RadioClientSelections.FirstOrDefault(s =>
                 s.Radio?.Serial == _settings.SelectedRadioSerial &&
                 s.GuiClient?.Station == _settings.SelectedGuiClientStation);
         }
 
-        if (restoredSelection != null)
+        // PRIORITY 2: If saved not available, select first real radio (skip sidetone-only)
+        if (defaultSelection == null)
         {
-            // Saved radio is available - select it
-            SelectedRadioClient = restoredSelection;
+            defaultSelection = RadioClientSelections.FirstOrDefault(s =>
+                s.Radio != null && s.GuiClient != null);  // First real radio with GUI client
         }
-        else
+
+        // PRIORITY 3: If no real radios exist, fall back to sidetone-only
+        if (defaultSelection == null)
         {
-            // Saved radio not available OR no saved selection - default to sidetone-only
-            var sidetoneOption = RadioClientSelections.FirstOrDefault(s =>
+            defaultSelection = RadioClientSelections.FirstOrDefault(s =>
                 s.DisplayName == SIDETONE_ONLY_OPTION);
+        }
 
-            if (sidetoneOption != null)
-            {
-                SelectedRadioClient = sidetoneOption;
+        // Apply the selected default
+        if (defaultSelection != null)
+        {
+            SelectedRadioClient = defaultSelection;
 
-                // This is an implicit fallback, not an explicit user choice
-                _userExplicitlySelectedSidetoneOnly = false;
-            }
+            // Implicit fallback (auto-selected) - not an explicit user choice
+            _userExplicitlySelectedSidetoneOnly = false;
         }
 
         _loadingSettings = false;
@@ -670,6 +658,16 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Switch to operating page
                 CurrentPage = PageType.Operating;
 
+                // SAVE PERSISTENCE: Handle sidetone-only connection
+                if (_userExplicitlySelectedSidetoneOnly)
+                {
+                    // User explicitly selected sidetone-only - clear persisted radio preference
+                    _settings.SelectedRadioSerial = null;
+                    _settings.SelectedGuiClientStation = null;
+                    _settings.Save();
+                }
+                // else: Implicit fallback to sidetone-only (no radios available) - keep existing saved preference
+
                 // Update paddle labels for sidetone-only mode
                 UpdatePaddleLabels();
                 return;
@@ -820,6 +818,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 RadioStatusColor = Brushes.Orange;
                 HasRadioError = true;
             }
+
+            // SAVE PERSISTENCE: Save connected radio to settings
+            _settings.SelectedRadioSerial = _connectedRadio.Serial;
+            _settings.SelectedGuiClientStation = targetStation;
+            _settings.Save();
 
             // Open the selected input device
             OpenInputDevice();
@@ -1196,8 +1199,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             // Restore previously selected radio/client if it's a SmartLink radio
-            // (and not already selected)
-            if (SelectedRadioClient == null || SelectedRadioClient.Radio == null)
+            // (and not already connected to a real radio)
+            if (SelectedRadioClient == null || SelectedRadioClient.DisplayName == SIDETONE_ONLY_OPTION)
             {
                 if (_settings != null && !string.IsNullOrEmpty(_settings.SelectedRadioSerial))
                 {
@@ -1209,6 +1212,7 @@ public partial class MainWindowViewModel : ViewModelBase
                     if (savedSelection != null)
                     {
                         SelectedRadioClient = savedSelection;
+                        _userExplicitlySelectedSidetoneOnly = false;  // Restored saved radio
                     }
                     _loadingSettings = false;
                 }
