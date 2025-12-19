@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NetKeyer.ViewModels"
+        x:Class="NetKeyer.Views.AudioDeviceDialog"
+        x:DataType="vm:AudioDeviceDialogViewModel"
+        Title="Audio Output Device Selection"
+        Width="500" Height="220"
+        MinWidth="400" MinHeight="180"
+        WindowStartupLocation="CenterOwner"
+        CanResize="false">
+
+    <Grid Margin="15" RowDefinitions="Auto,*,Auto">
+
+        <!-- Title and Instructions -->
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,15">
+            <TextBlock Text="Audio Output Device Selection"
+                       FontSize="18"
+                       FontWeight="Bold"/>
+            <TextBlock Text="Select the audio output device for sidetone. Changes take effect immediately."
+                       FontSize="12"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Device Selection -->
+        <Border Grid.Row="1"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Padding="12"
+                CornerRadius="3">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Audio Output Device:"
+                           FontWeight="SemiBold"
+                           FontSize="13"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <ComboBox ItemsSource="{Binding AudioDevices}"
+                              SelectedItem="{Binding SelectedAudioDevice}"
+                              Width="320"
+                              PlaceholderText="Select an audio device..."/>
+                    <Button Content="Refresh"
+                            Command="{Binding RefreshAudioDevicesCommand}"
+                            Width="80"
+                            HorizontalContentAlignment="Center"
+                            Padding="6"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,15,0,0">
+            <Button Name="CancelButton"
+                    Content="Cancel"
+                    Width="80"
+                    HorizontalContentAlignment="Center"
+                    Padding="6"
+                    Click="CancelButton_Click"/>
+            <Button Name="OkButton"
+                    Content="OK"
+                    Width="80"
+                    HorizontalContentAlignment="Center"
+                    Padding="6"
+                    Click="OkButton_Click"
+                    IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

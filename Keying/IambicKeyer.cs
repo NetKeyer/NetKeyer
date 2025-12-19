@@ -13,7 +13,7 @@ public class IambicKeyer
     private readonly object _lock = new object();
     private readonly Func<string> _getTimestamp;
     private readonly Action<bool, string, uint> _sendRadioKey;
-    private readonly ISidetoneGenerator _sidetoneGenerator;
+    private ISidetoneGenerator _sidetoneGenerator;
     private readonly uint _radioClientHandle;
 
     private bool _enableDebugLogging = true;
@@ -180,6 +180,37 @@ public class IambicKeyer
             _iambicDahLatched = false;
             _ditPaddleAtStart = false;
             _dahPaddleAtStart = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the sidetone generator. Useful when changing audio output device.
+    /// </summary>
+    public void UpdateSidetoneGenerator(ISidetoneGenerator sidetoneGenerator)
+    {
+        lock (_lock)
+        {
+            if (sidetoneGenerator == null)
+                throw new ArgumentNullException(nameof(sidetoneGenerator));
+
+            // Unsubscribe from old generator events
+            if (_sidetoneGenerator != null)
+            {
+                _sidetoneGenerator.OnSilenceComplete -= OnSilenceComplete;
+                _sidetoneGenerator.OnToneStart -= OnToneStart;
+                _sidetoneGenerator.OnToneComplete -= OnToneComplete;
+            }
+
+            // Update to new generator
+            _sidetoneGenerator = sidetoneGenerator;
+
+            // Subscribe to new generator events
+            _sidetoneGenerator.OnSilenceComplete += OnSilenceComplete;
+            _sidetoneGenerator.OnToneStart += OnToneStart;
+            _sidetoneGenerator.OnToneComplete += OnToneComplete;
+
+            if (_enableDebugLogging)
+                Console.WriteLine($"[IambicKeyer] Sidetone generator updated");
         }
     }
 
