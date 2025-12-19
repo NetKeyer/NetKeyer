@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
@@ -51,6 +52,9 @@ public class RadioClientSelection
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    // On macOS, we use the native menu bar, so hide the in-window menu
+    public bool IsMenuBarInWindow => !RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSetupPage), nameof(IsOperatingPage))]
     private PageType _currentPage = PageType.Setup;
