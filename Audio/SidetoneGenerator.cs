@@ -18,18 +18,22 @@ namespace NetKeyer.Audio
         private SidetoneProvider _sidetoneProvider;
         private float[] _readBuffer;
         private readonly object _lock = new object();
+        private string _selectedDeviceName;
 
         public event Action OnSilenceComplete;
         public event Action OnToneStart;
         public event Action OnToneComplete;
         public event Action OnBecomeIdle;
 
-        public SidetoneGenerator()
+        public SidetoneGenerator(string deviceId = null)
         {
             try
             {
                 // Initialize PortAudio
                 PortAudio.Initialize();
+
+                // Store device name (null/empty means use default)
+                _selectedDeviceName = deviceId;
 
                 // Create the sidetone provider
                 _sidetoneProvider = new SidetoneProvider();
@@ -43,35 +47,8 @@ namespace NetKeyer.Audio
                 // Allocate read buffer for callback
                 _readBuffer = new float[BUFFER_SAMPLES];
 
-                // Get default output device info for latency
-                var deviceInfo = PortAudio.GetDeviceInfo(PortAudio.DefaultOutputDevice);
-
-                // Configure stream parameters for output
-                var streamParams = new StreamParameters
-                {
-                    device = PortAudio.DefaultOutputDevice,
-                    channelCount = 1, // Mono
-                    sampleFormat = SampleFormat.Float32,
-                    suggestedLatency = deviceInfo.defaultLowOutputLatency,
-                    hostApiSpecificStreamInfo = IntPtr.Zero
-                };
-
-                // Open stream with callback
-                _stream = new Stream(
-                    inParams: null,
-                    outParams: streamParams,
-                    sampleRate: SAMPLE_RATE,
-                    framesPerBuffer: BUFFER_SAMPLES,
-                    streamFlags: StreamFlags.ClipOff,
-                    callback: StreamCallback,
-                    userData: null
-                );
-
-                // Start the stream
-                _stream.Start();
-
-                Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
-                                  $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
+                // Initialize the audio stream
+                InitializeStream();
             }
             catch (Exception ex)
             {
@@ -79,6 +56,60 @@ namespace NetKeyer.Audio
                 Dispose();
                 throw;
             }
+        }
+
+        private void InitializeStream()
+        {
+            // Use specified device or default
+            int device = FindPortAudioDeviceIndex(_selectedDeviceName);
+            var deviceInfo = PortAudio.GetDeviceInfo(device);
+
+            // Configure stream parameters for output
+            var streamParams = new StreamParameters
+            {
+                device = device,
+                channelCount = 1, // Mono
+                sampleFormat = SampleFormat.Float32,
+                suggestedLatency = deviceInfo.defaultLowOutputLatency,
+                hostApiSpecificStreamInfo = IntPtr.Zero
+            };
+
+            // Open stream with callback
+            _stream = new Stream(
+                inParams: null,
+                outParams: streamParams,
+                sampleRate: SAMPLE_RATE,
+                framesPerBuffer: BUFFER_SAMPLES,
+                streamFlags: StreamFlags.ClipOff,
+                callback: StreamCallback,
+                userData: null
+            );
+
+            // Start the stream
+            _stream.Start();
+
+            Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
+                              $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
+        }
+
+        private int FindPortAudioDeviceIndex(string deviceName)
+        {
+            // If null/empty or "System Default", use default
+            if (string.IsNullOrEmpty(deviceName) || deviceName == "System Default")
+                return PortAudio.DefaultOutputDevice;
+
+            // Search for device by name
+            int deviceCount = PortAudio.DeviceCount;
+            for (int i = 0; i < deviceCount; i++)
+            {
+                var deviceInfo = PortAudio.GetDeviceInfo(i);
+                if (deviceInfo.maxOutputChannels > 0 && deviceInfo.name == deviceName)
+                    return i;
+            }
+
+            // Device not found, fall back to default
+            Console.WriteLine($"PortAudio device '{deviceName}' not found, using default");
+            return PortAudio.DefaultOutputDevice;
         }
 
         private StreamCallbackResult StreamCallback(
@@ -115,6 +146,7 @@ namespace NetKeyer.Audio
                 }
             }
         }
+
 
         public void SetFrequency(int frequencyHz)
         {

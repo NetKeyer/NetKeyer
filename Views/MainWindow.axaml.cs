@@ -37,6 +37,21 @@ public partial class MainWindow : Window
         fileSubMenu.Add(exitItem);
         fileMenu.Menu = fileSubMenu;
 
+        // Settings menu
+        var settingsMenu = new NativeMenuItem("Settings");
+        var settingsSubMenu = new NativeMenu();
+
+        var audioDeviceItem = new NativeMenuItem("Audio Output Device...");
+        audioDeviceItem.Click += (s, e) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+            {
+                vm.SelectAudioDeviceCommand?.Execute(null);
+            }
+        };
+        settingsSubMenu.Add(audioDeviceItem);
+        settingsMenu.Menu = settingsSubMenu;
+
         // Help menu
         var helpMenu = new NativeMenuItem("Help");
         var helpSubMenu = new NativeMenu();
@@ -65,6 +80,7 @@ public partial class MainWindow : Window
         
         // Add menus to the native menu bar
         nativeMenu.Add(fileMenu);
+        nativeMenu.Add(settingsMenu);
         nativeMenu.Add(helpMenu);
         
         // Set the native menu for this window

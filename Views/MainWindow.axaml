@@ -20,6 +20,9 @@
             <MenuItem Header="_File">
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
             </MenuItem>
+            <MenuItem Header="_Settings">
+                <MenuItem Header="_Audio Output Device..." Command="{Binding SelectAudioDeviceCommand}"/>
+            </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
                 <MenuItem Header="_About NetKeyer..." Command="{Binding ShowAboutCommand}"/>
