@@ -15,8 +15,8 @@
     </Design.DataContext>
 
     <DockPanel>
-        <!-- Menu Bar -->
-        <Menu DockPanel.Dock="Top">
+        <!-- Menu Bar (hidden on macOS, where we use the native menu bar) -->
+        <Menu DockPanel.Dock="Top" IsVisible="{Binding IsMenuBarInWindow}">
             <MenuItem Header="_File">
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
             </MenuItem>
