@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <NoWarn>$(NoWarn);CS0169;CS0649;CS0067;CS8618;CS8602;CS8603;CS8604;CS0436</NoWarn>
+    <NoWarn>$(NoWarn);CS0169;CS0649;CS0067;CS8618;CS8602;CS8603;CS8604;CS0436;CS8632</NoWarn>
     <!-- macOS bundle configuration -->
     <CFBundleName>NetKeyer</CFBundleName>
     <CFBundleDisplayName>NetKeyer</CFBundleDisplayName>
