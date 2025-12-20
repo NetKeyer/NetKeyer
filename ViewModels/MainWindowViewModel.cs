@@ -35,6 +35,9 @@ file static class DebugFlags
     public const bool DEBUG_SLICE_MODE = false; // Set to true to enable transmit slice mode debug logging
 }
 
+// Suppress unreachable code warnings for debug logging when debug flags = false
+#pragma warning disable CS0162
+
 public enum PageType
 {
     Setup,

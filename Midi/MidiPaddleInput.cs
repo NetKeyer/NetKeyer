@@ -12,6 +12,8 @@ namespace NetKeyer.Midi
         private const byte NOTE_OFF = 0x80;
         private const bool DEBUG_MIDI = false; // Set to true to enable MIDI debug logging
 
+#pragma warning disable CS0162 // Suppress unreachable code warnings for debug logging when DEBUG_MIDI = false
+
         private IMidiAccess _access;
         private IMidiInput _inputPort;
         private bool _leftPaddleState = false;

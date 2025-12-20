@@ -10,6 +10,9 @@ file static class TransmitSliceDebugFlags
     public const bool DEBUG_SLICE_MODE = false; // Set to true to enable transmit slice mode debug logging
 }
 
+// Suppress unreachable code warnings for debug logging when DEBUG_SLICE_MODE = false
+#pragma warning disable CS0162
+
 public class TransmitModeChangedEventArgs : EventArgs
 {
     public bool IsTransmitModeCW { get; set; }
