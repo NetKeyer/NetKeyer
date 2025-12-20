@@ -50,6 +50,17 @@ public partial class MainWindow : Window
             }
         };
         settingsSubMenu.Add(audioDeviceItem);
+
+        var midiNoteMappingItem = new NativeMenuItem("MIDI Note Mapping...");
+        midiNoteMappingItem.Click += (s, e) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+            {
+                vm.ConfigureMidiNotesCommand?.Execute(null);
+            }
+        };
+        settingsSubMenu.Add(midiNoteMappingItem);
+
         settingsMenu.Menu = settingsSubMenu;
 
         // Help menu

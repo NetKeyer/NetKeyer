@@ -22,6 +22,7 @@
             </MenuItem>
             <MenuItem Header="_Settings">
                 <MenuItem Header="_Audio Output Device..." Command="{Binding SelectAudioDeviceCommand}"/>
+                <MenuItem Header="_MIDI Note Mapping..." Command="{Binding ConfigureMidiNotesCommand}"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
@@ -130,18 +131,6 @@
                                             Width="70"
                                             HorizontalContentAlignment="Center"
                                             Padding="4"/>
-                                </StackPanel>
-
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button Content="Configure MIDI Notes..."
-                                            Command="{Binding ConfigureMidiNotesCommand}"
-                                            Width="180"
-                                            HorizontalContentAlignment="Center"
-                                            Padding="4"/>
-                                    <TextBlock Text="Configure which MIDI notes control paddles, straight key, and PTT"
-                                               FontSize="10"
-                                               Foreground="Gray"
-                                               VerticalAlignment="Center"/>
                                 </StackPanel>
                             </StackPanel>
                         </StackPanel>
