@@ -93,11 +93,18 @@ namespace NetKeyer.Audio
             {
                 try
                 {
+                    // Ensure buffer is large enough for requested frames
+                    int frames = (int)frameCount;
+                    if (_readBuffer == null || _readBuffer.Length < frames)
+                    {
+                        _readBuffer = new float[frames];
+                    }
+
                     // Read samples from SidetoneProvider
-                    _sidetoneProvider.Read(_readBuffer, 0, (int)frameCount);
+                    _sidetoneProvider.Read(_readBuffer, 0, frames);
 
                     // Copy to output buffer
-                    Marshal.Copy(_readBuffer, 0, output, (int)frameCount);
+                    Marshal.Copy(_readBuffer, 0, output, frames);
 
                     return StreamCallbackResult.Continue;
                 }
