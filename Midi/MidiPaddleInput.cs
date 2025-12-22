@@ -21,6 +21,7 @@ namespace NetKeyer.Midi
         private bool _straightKeyState = false;
         private bool _pttState = false;
         private byte _lastStatusByte = 0; // Track last status byte for running status
+        private bool _inSysEx = false; // Track if we're in the middle of a multi-packet SysEx message
 
         private List<MidiNoteMapping> _noteMappings;
 
@@ -102,6 +103,7 @@ namespace NetKeyer.Midi
             _straightKeyState = false;
             _pttState = false;
             _lastStatusByte = 0;
+            _inSysEx = false;
         }
 
         private void OnMidiMessageReceived(object sender, MidiReceivedEventArgs e)
@@ -135,18 +137,104 @@ namespace NetKeyer.Midi
                     {
                         // New status byte
                         statusByte = data[pos];
-                        _lastStatusByte = statusByte;
                         dataStart = pos + 1;
                         if (DEBUG_MIDI)
                             Console.WriteLine($"[MIDI] Status byte 0x{statusByte:X2} at pos {pos}");
+
+                        // Check if this is a System message (0xF0-0xFF)
+                        if (statusByte >= 0xF0)
+                        {
+                            if (statusByte == 0xF0)
+                            {
+                                // System Exclusive start - enter SysEx mode
+                                if (DEBUG_MIDI)
+                                    Console.WriteLine($"[MIDI] SysEx start, entering SysEx mode");
+
+                                _inSysEx = true;
+                                _lastStatusByte = 0; // Clear running status during SysEx
+
+                                // Skip until we find 0xF7 or run out of data
+                                int sysexStart = pos;
+                                pos++;
+                                while (pos < end && data[pos] != 0xF7)
+                                {
+                                    pos++;
+                                }
+
+                                if (pos < end && data[pos] == 0xF7)
+                                {
+                                    // Found end of SysEx in this packet
+                                    pos++; // Skip past 0xF7
+                                    _inSysEx = false;
+                                    if (DEBUG_MIDI)
+                                        Console.WriteLine($"[MIDI] SysEx complete, skipped {pos - sysexStart} bytes, exiting SysEx mode");
+                                }
+                                else
+                                {
+                                    // SysEx continues in next packet
+                                    if (DEBUG_MIDI)
+                                        Console.WriteLine($"[MIDI] SysEx incomplete, skipped {pos - sysexStart} bytes, waiting for more data");
+                                }
+                                continue;
+                            }
+                            else if (statusByte == 0xF7)
+                            {
+                                // End of SysEx
+                                if (DEBUG_MIDI)
+                                    Console.WriteLine($"[MIDI] SysEx end (0xF7), exiting SysEx mode");
+                                _inSysEx = false;
+                                pos++;
+                                continue;
+                            }
+                            else
+                            {
+                                // Other system messages (timing, song position, etc.) - ignore
+                                if (DEBUG_MIDI)
+                                    Console.WriteLine($"[MIDI] System message 0x{statusByte:X2}, ignoring");
+
+                                // System messages cancel SysEx mode
+                                _inSysEx = false;
+                                _lastStatusByte = 0;
+
+                                int systemDataSize = MidiEvent.FixedDataSize(statusByte);
+                                pos = dataStart + systemDataSize;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            // Channel message - exit SysEx mode if we were in it, and save for running status
+                            _inSysEx = false;
+                            _lastStatusByte = statusByte;
+                        }
                     }
                     else
                     {
+                        // Data byte (< 0x80)
+
+                        // If we're in SysEx mode, skip all data bytes until we see a status byte
+                        if (_inSysEx)
+                        {
+                            if (DEBUG_MIDI)
+                                Console.WriteLine($"[MIDI] SysEx data byte 0x{data[pos]:X2}, skipping");
+                            pos++;
+                            continue;
+                        }
+
                         // Running status - reuse last status byte
                         statusByte = _lastStatusByte;
                         dataStart = pos;
                         if (DEBUG_MIDI)
                             Console.WriteLine($"[MIDI] Running status, reusing 0x{statusByte:X2}");
+
+                        // If we don't have a valid running status, skip this byte
+                        if (statusByte == 0)
+                        {
+                            if (DEBUG_MIDI)
+                                Console.WriteLine($"[MIDI ERROR] No valid running status, skipping byte 0x{data[pos]:X2}");
+                            pos++;
+                            continue;
+                        }
                     }
 
                     // Get the number of data bytes for this message type
