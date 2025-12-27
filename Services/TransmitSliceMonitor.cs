@@ -1,17 +1,9 @@
 using System;
 using System.ComponentModel;
 using Flex.Smoothlake.FlexLib;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.Services;
-
-// Debug flags
-file static class TransmitSliceDebugFlags
-{
-    public const bool DEBUG_SLICE_MODE = false; // Set to true to enable transmit slice mode debug logging
-}
-
-// Suppress unreachable code warnings for debug logging when DEBUG_SLICE_MODE = false
-#pragma warning disable CS0162
 
 public class TransmitModeChangedEventArgs : EventArgs
 {
@@ -94,13 +86,11 @@ public class TransmitSliceMonitor
             bool wasCW = _isTransmitModeCW;
             _isTransmitModeCW = (mode == "CW");
 
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Slice {txSlice.Index} mode: {mode}, isCW: {_isTransmitModeCW}");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Slice {txSlice.Index} mode: {mode}, isCW: {_isTransmitModeCW}");
 
             if (wasCW != _isTransmitModeCW)
             {
-                if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                    Console.WriteLine($"[TransmitSliceMode] Mode changed from {(wasCW ? "CW" : "non-CW")} to {(_isTransmitModeCW ? "CW" : "non-CW")}");
+                DebugLogger.Log("slice", $"[TransmitSliceMode] Mode changed from {(wasCW ? "CW" : "non-CW")} to {(_isTransmitModeCW ? "CW" : "non-CW")}");
 
                 // Notify listeners
                 TransmitModeChanged?.Invoke(this, new TransmitModeChangedEventArgs { IsTransmitModeCW = _isTransmitModeCW });
@@ -108,8 +98,7 @@ public class TransmitSliceMonitor
         }
         else
         {
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] No transmit slice for our client, defaulting to CW mode");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] No transmit slice for our client, defaulting to CW mode");
 
             bool wasCW = _isTransmitModeCW;
             _isTransmitModeCW = true; // Default to CW mode if no transmit slice
@@ -128,15 +117,15 @@ public class TransmitSliceMonitor
         DetachFromSlice();
 
         // Debug: Check radio and slices
-        if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE && _connectedRadio != null)
+        if (_connectedRadio != null)
         {
-            Console.WriteLine($"[TransmitSliceMode] Connected radio has {_connectedRadio.SliceList.Count} slices");
-            Console.WriteLine($"[TransmitSliceMode] Our bound ClientHandle: {_boundGuiClientHandle}");
-            Console.WriteLine($"[TransmitSliceMode] Radio's internal ClientHandle: {_connectedRadio.ClientHandle}");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Connected radio has {_connectedRadio.SliceList.Count} slices");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Our bound ClientHandle: {_boundGuiClientHandle}");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Radio's internal ClientHandle: {_connectedRadio.ClientHandle}");
 
             foreach (var slice in _connectedRadio.SliceList)
             {
-                Console.WriteLine($"[TransmitSliceMode]   Slice {slice.Index}: IsTransmitSlice={slice.IsTransmitSlice}, ClientHandle={slice.ClientHandle}, Mode={slice.DemodMode}");
+                DebugLogger.Log("slice", $"[TransmitSliceMode]   Slice {slice.Index}: IsTransmitSlice={slice.IsTransmitSlice}, ClientHandle={slice.ClientHandle}, Mode={slice.DemodMode}");
             }
         }
 
@@ -147,13 +136,11 @@ public class TransmitSliceMonitor
             _monitoredTransmitSlice = txSlice;
             _monitoredTransmitSlice.PropertyChanged += TransmitSlice_PropertyChanged;
 
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Subscribed to slice {_monitoredTransmitSlice.Index}");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Subscribed to slice {_monitoredTransmitSlice.Index}");
         }
         else
         {
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] No transmit slice found for our client");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] No transmit slice found for our client");
         }
 
         UpdateTransmitSliceMode();
@@ -163,8 +150,7 @@ public class TransmitSliceMonitor
     {
         if (e.PropertyName == "DemodMode")
         {
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] DemodMode property changed");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] DemodMode property changed");
             UpdateTransmitSliceMode();
         }
     }
@@ -174,8 +160,7 @@ public class TransmitSliceMonitor
         // Handle TransmitSlice changes (needs to be done outside UI thread)
         if (e.PropertyName == "TransmitSlice")
         {
-            if (TransmitSliceDebugFlags.DEBUG_SLICE_MODE)
-                Console.WriteLine($"[TransmitSliceMode] Radio TransmitSlice property changed");
+            DebugLogger.Log("slice", $"[TransmitSliceMode] Radio TransmitSlice property changed");
             SubscribeToTransmitSlice();
         }
     }

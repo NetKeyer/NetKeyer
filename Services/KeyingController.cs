@@ -15,6 +15,10 @@ public class KeyingController
     private bool _isSidetoneOnlyMode = false;
     private bool _isIambicMode = true;
 
+    // Initialization parameters
+    private Func<string> _timestampGenerator;
+    private Action<bool, string, uint> _cwKeyCallback;
+
     // Track previous paddle states for edge detection
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
@@ -29,6 +33,8 @@ public class KeyingController
     public void Initialize(uint guiClientHandle, Func<string> timestampGenerator, Action<bool, string, uint> cwKeyCallback)
     {
         _boundGuiClientHandle = guiClientHandle;
+        _timestampGenerator = timestampGenerator;
+        _cwKeyCallback = cwKeyCallback;
 
         // Initialize iambic keyer
         _iambicKeyer = new IambicKeyer(
@@ -43,6 +49,14 @@ public class KeyingController
     {
         _connectedRadio = radio;
         _isSidetoneOnlyMode = isSidetoneOnly;
+    }
+
+    public void SetSidetoneGenerator(ISidetoneGenerator sidetoneGenerator)
+    {
+        _sidetoneGenerator = sidetoneGenerator;
+
+        // Update iambic keyer's sidetone generator without recreating the keyer
+        _iambicKeyer?.UpdateSidetoneGenerator(_sidetoneGenerator);
     }
 
     public void SetTransmitMode(bool isCW)
@@ -69,14 +83,6 @@ public class KeyingController
     public void SetSpeed(int wpm)
     {
         _iambicKeyer?.SetWpm(wpm);
-    }
-
-    public void EnableDebugLogging(bool enable)
-    {
-        if (_iambicKeyer != null)
-        {
-            _iambicKeyer.EnableDebugLogging = enable;
-        }
     }
 
     public void HandlePaddleStateChange(bool leftPaddle, bool rightPaddle, bool straightKey, bool ptt)

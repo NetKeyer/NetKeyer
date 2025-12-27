@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Commons.Music.Midi;
+using NetKeyer.Helpers;
 using NetKeyer.Models;
 
 namespace NetKeyer.Midi
@@ -10,9 +11,6 @@ namespace NetKeyer.Midi
     {
         private const byte NOTE_ON = 0x90;
         private const byte NOTE_OFF = 0x80;
-        private const bool DEBUG_MIDI = false; // Set to true to enable MIDI debug logging
-
-#pragma warning disable CS0162 // Suppress unreachable code warnings for debug logging when DEBUG_MIDI = false
 
         private IMidiAccess _access;
         private IMidiInput _inputPort;
@@ -117,11 +115,8 @@ namespace NetKeyer.Midi
                 if (length == 0)
                     return;
 
-                if (DEBUG_MIDI)
-                {
-                    var relevantBytes = data.Skip(start).Take(length);
-                    Console.WriteLine($"[MIDI Raw] data.Length={data.Length} start={start} length={length} data=[{string.Join(" ", relevantBytes.Select(b => $"{b:X2}"))}]");
-                }
+                var relevantBytes = data.Skip(start).Take(length);
+                DebugLogger.Log("midi", $"[MIDI Raw] data.Length={data.Length} start={start} length={length} data=[{string.Join(" ", relevantBytes.Select(b => $"{b:X2}"))}]");
 
                 // Parse all MIDI messages in the buffer
                 int pos = start;
@@ -138,8 +133,7 @@ namespace NetKeyer.Midi
                         // New status byte
                         statusByte = data[pos];
                         dataStart = pos + 1;
-                        if (DEBUG_MIDI)
-                            Console.WriteLine($"[MIDI] Status byte 0x{statusByte:X2} at pos {pos}");
+                        DebugLogger.Log("midi", $"[MIDI] Status byte 0x{statusByte:X2} at pos {pos}");
 
                         // Check if this is a System message (0xF0-0xFF)
                         if (statusByte >= 0xF0)
@@ -147,8 +141,7 @@ namespace NetKeyer.Midi
                             if (statusByte == 0xF0)
                             {
                                 // System Exclusive start - enter SysEx mode
-                                if (DEBUG_MIDI)
-                                    Console.WriteLine($"[MIDI] SysEx start, entering SysEx mode");
+                                DebugLogger.Log("midi", $"[MIDI] SysEx start, entering SysEx mode");
 
                                 _inSysEx = true;
                                 _lastStatusByte = 0; // Clear running status during SysEx
@@ -166,22 +159,19 @@ namespace NetKeyer.Midi
                                     // Found end of SysEx in this packet
                                     pos++; // Skip past 0xF7
                                     _inSysEx = false;
-                                    if (DEBUG_MIDI)
-                                        Console.WriteLine($"[MIDI] SysEx complete, skipped {pos - sysexStart} bytes, exiting SysEx mode");
+                                    DebugLogger.Log("midi", $"[MIDI] SysEx complete, skipped {pos - sysexStart} bytes, exiting SysEx mode");
                                 }
                                 else
                                 {
                                     // SysEx continues in next packet
-                                    if (DEBUG_MIDI)
-                                        Console.WriteLine($"[MIDI] SysEx incomplete, skipped {pos - sysexStart} bytes, waiting for more data");
+                                    DebugLogger.Log("midi", $"[MIDI] SysEx incomplete, skipped {pos - sysexStart} bytes, waiting for more data");
                                 }
                                 continue;
                             }
                             else if (statusByte == 0xF7)
                             {
                                 // End of SysEx
-                                if (DEBUG_MIDI)
-                                    Console.WriteLine($"[MIDI] SysEx end (0xF7), exiting SysEx mode");
+                                DebugLogger.Log("midi", $"[MIDI] SysEx end (0xF7), exiting SysEx mode");
                                 _inSysEx = false;
                                 pos++;
                                 continue;
@@ -189,8 +179,7 @@ namespace NetKeyer.Midi
                             else
                             {
                                 // Other system messages (timing, song position, etc.) - ignore
-                                if (DEBUG_MIDI)
-                                    Console.WriteLine($"[MIDI] System message 0x{statusByte:X2}, ignoring");
+                                DebugLogger.Log("midi", $"[MIDI] System message 0x{statusByte:X2}, ignoring");
 
                                 // System messages cancel SysEx mode
                                 _inSysEx = false;
@@ -215,8 +204,7 @@ namespace NetKeyer.Midi
                         // If we're in SysEx mode, skip all data bytes until we see a status byte
                         if (_inSysEx)
                         {
-                            if (DEBUG_MIDI)
-                                Console.WriteLine($"[MIDI] SysEx data byte 0x{data[pos]:X2}, skipping");
+                            DebugLogger.Log("midi", $"[MIDI] SysEx data byte 0x{data[pos]:X2}, skipping");
                             pos++;
                             continue;
                         }
@@ -224,14 +212,12 @@ namespace NetKeyer.Midi
                         // Running status - reuse last status byte
                         statusByte = _lastStatusByte;
                         dataStart = pos;
-                        if (DEBUG_MIDI)
-                            Console.WriteLine($"[MIDI] Running status, reusing 0x{statusByte:X2}");
+                        DebugLogger.Log("midi", $"[MIDI] Running status, reusing 0x{statusByte:X2}");
 
                         // If we don't have a valid running status, skip this byte
                         if (statusByte == 0)
                         {
-                            if (DEBUG_MIDI)
-                                Console.WriteLine($"[MIDI ERROR] No valid running status, skipping byte 0x{data[pos]:X2}");
+                            DebugLogger.Log("midi", $"[MIDI ERROR] No valid running status, skipping byte 0x{data[pos]:X2}");
                             pos++;
                             continue;
                         }
@@ -239,8 +225,7 @@ namespace NetKeyer.Midi
 
                     // Get the number of data bytes for this message type
                     int dataSize = MidiEvent.FixedDataSize(statusByte);
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Message requires {dataSize} data bytes");
+                    DebugLogger.Log("midi", $"[MIDI] Message requires {dataSize} data bytes");
 
                     // Make sure we have enough data
                     if (dataStart + dataSize > end)
@@ -257,8 +242,7 @@ namespace NetKeyer.Midi
                         byte note = data[dataStart];
                         byte velocity = dataSize >= 2 ? data[dataStart + 1] : (byte)0;
 
-                        if (DEBUG_MIDI)
-                            Console.WriteLine($"[MIDI Event] StatusByte=0x{statusByte:X2} Note={note} Velocity={velocity}");
+                        DebugLogger.Log("midi", $"[MIDI Event] StatusByte=0x{statusByte:X2} Note={note} Velocity={velocity}");
 
                         if (messageType == NOTE_ON)
                         {
@@ -274,8 +258,7 @@ namespace NetKeyer.Midi
                     pos = dataStart + dataSize;
                 }
 
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] OnMidiMessageReceived complete");
+                DebugLogger.Log("midi", $"[MIDI] OnMidiMessageReceived complete");
             }
             catch (Exception ex)
             {
@@ -286,15 +269,13 @@ namespace NetKeyer.Midi
 
         private void HandleNoteEvent(int noteNumber, bool isOn)
         {
-            if (DEBUG_MIDI)
-                Console.WriteLine($"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
+            DebugLogger.Log("midi", $"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
 
             // Find all mappings for this note
             var mapping = _noteMappings?.FirstOrDefault(m => m.NoteNumber == noteNumber);
             if (mapping == null)
             {
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] Ignoring unmapped note {noteNumber}");
+                DebugLogger.Log("midi", $"[MIDI] Ignoring unmapped note {noteNumber}");
                 return;
             }
 
@@ -306,8 +287,7 @@ namespace NetKeyer.Midi
                 // Handle note OFF when we didn't see note ON
                 if (!isOn && !_leftPaddleState)
                 {
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Left paddle OFF without ON - treating as brief press/release");
+                    DebugLogger.Log("midi", $"[MIDI] Left paddle OFF without ON - treating as brief press/release");
                     _leftPaddleState = true;
                     stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
@@ -323,8 +303,7 @@ namespace NetKeyer.Midi
                 {
                     _leftPaddleState = isOn;
                     stateChanged = true;
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Left paddle -> {isOn}");
+                    DebugLogger.Log("midi", $"[MIDI] Left paddle -> {isOn}");
                 }
             }
 
@@ -333,8 +312,7 @@ namespace NetKeyer.Midi
                 // Handle note OFF when we didn't see note ON
                 if (!isOn && !_rightPaddleState)
                 {
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Right paddle OFF without ON - treating as brief press/release");
+                    DebugLogger.Log("midi", $"[MIDI] Right paddle OFF without ON - treating as brief press/release");
                     _rightPaddleState = true;
                     stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
@@ -350,8 +328,7 @@ namespace NetKeyer.Midi
                 {
                     _rightPaddleState = isOn;
                     stateChanged = true;
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Right paddle -> {isOn}");
+                    DebugLogger.Log("midi", $"[MIDI] Right paddle -> {isOn}");
                 }
             }
 
@@ -361,8 +338,7 @@ namespace NetKeyer.Midi
                 {
                     _straightKeyState = isOn;
                     stateChanged = true;
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] Straight key -> {isOn}");
+                    DebugLogger.Log("midi", $"[MIDI] Straight key -> {isOn}");
                 }
             }
 
@@ -372,16 +348,14 @@ namespace NetKeyer.Midi
                 {
                     _pttState = isOn;
                     stateChanged = true;
-                    if (DEBUG_MIDI)
-                        Console.WriteLine($"[MIDI] PTT -> {isOn}");
+                    DebugLogger.Log("midi", $"[MIDI] PTT -> {isOn}");
                 }
             }
 
             // Fire event if any state changed
             if (stateChanged)
             {
-                if (DEBUG_MIDI)
-                    Console.WriteLine($"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
+                DebugLogger.Log("midi", $"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
                 PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                 {
                     LeftPaddle = _leftPaddleState,

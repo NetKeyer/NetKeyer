@@ -1,6 +1,7 @@
 using System;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.Audio
 {
@@ -20,6 +21,8 @@ namespace NetKeyer.Audio
         private int _wpm = 20;
         private MMDeviceEnumerator _deviceEnumerator;
         private DeviceNotificationClient _notificationClient;
+        private string _selectedDeviceId = null;  // null or empty = default
+        private MMDevice _selectedDevice;
 
         // Use absolute minimum latency - WASAPI minimum is typically 3ms in shared mode
         private const int SAMPLE_RATE = 48000;
@@ -30,10 +33,13 @@ namespace NetKeyer.Audio
         public event Action OnToneComplete;
         public event Action OnBecomeIdle;
 
-        public WasapiSidetoneGenerator()
+        public WasapiSidetoneGenerator(string deviceId = null)
         {
             try
             {
+                // Store selected device ID
+                _selectedDeviceId = deviceId;
+
                 // Create custom sidetone provider
                 _sidetoneProvider = new SidetoneProvider();
                 _sidetoneProvider.SetFrequency(_frequency);
@@ -48,7 +54,7 @@ namespace NetKeyer.Audio
 
                 // Set up device change monitoring
                 _deviceEnumerator = new MMDeviceEnumerator();
-                _notificationClient = new DeviceNotificationClient(OnDefaultDeviceChanged);
+                _notificationClient = new DeviceNotificationClient(OnDefaultDeviceChanged, OnDeviceStateChangedCallback);
                 _deviceEnumerator.RegisterEndpointNotificationCallback(_notificationClient);
 
                 // Initialize WASAPI output
@@ -58,7 +64,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize WASAPI audio: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to initialize WASAPI audio: {ex.Message}");
                 Dispose();
                 throw;
             }
@@ -66,14 +72,52 @@ namespace NetKeyer.Audio
 
         private void InitializeWasapiOut()
         {
+            MMDevice device;
+
+            if (string.IsNullOrEmpty(_selectedDeviceId) || _selectedDeviceId == "System Default")
+            {
+                // Use system default
+                device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            }
+            else
+            {
+                // Find device by friendly name
+                device = FindDeviceByName(_selectedDeviceId);
+                if (device == null)
+                {
+                    DebugLogger.Log("audio", $"Device '{_selectedDeviceId}' not found, falling back to default");
+                    device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    _selectedDeviceId = null; // Reset to default
+                }
+            }
+
+            _selectedDevice = device;
+
             // Initialize WASAPI in shared mode with minimal latency
             // Note: Exclusive mode would be even lower latency but may not be available
             _wasapiOut = new WasapiOut(
+                device,
                 AudioClientShareMode.Shared,
+                true,
                 LATENCY_MS
             );
 
             _wasapiOut.Init(_sidetoneProvider);
+        }
+
+        private MMDevice FindDeviceByName(string friendlyName)
+        {
+#if WINDOWS
+            using var enumerator = new MMDeviceEnumerator();
+            var collection = enumerator.EnumerateAudioEndpoints(DataFlow.Render, DeviceState.Active);
+
+            foreach (var device in collection)
+            {
+                if (device.FriendlyName == friendlyName)
+                    return device;
+            }
+#endif
+            return null;
         }
 
         private void OnProviderBecomeIdle()
@@ -97,7 +141,7 @@ namespace NetKeyer.Audio
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to stop WASAPI on idle: {ex.Message}");
+                    DebugLogger.Log("audio", $"Failed to stop WASAPI on idle: {ex.Message}");
                 }
             });
 
@@ -109,6 +153,10 @@ namespace NetKeyer.Audio
         {
             if (_disposed)
                 return;
+
+            // Only respond to default device changes if user selected "System Default"
+            if (!string.IsNullOrEmpty(_selectedDeviceId) && _selectedDeviceId != "System Default")
+                return; // User selected specific device, ignore default changes
 
             try
             {
@@ -131,7 +179,24 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to switch to new default audio device: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to switch to new default audio device: {ex.Message}");
+            }
+        }
+
+        private void OnDeviceStateChangedCallback(string deviceId, DeviceState newState)
+        {
+            if (_disposed)
+                return;
+
+            // Check if our selected device was disconnected or disabled
+            if (_selectedDevice != null && _selectedDevice.ID == deviceId)
+            {
+                if (newState != DeviceState.Active)
+                {
+                    DebugLogger.Log("audio", $"Selected device '{_selectedDeviceId}' disconnected, falling back to default");
+                    _selectedDeviceId = null; // Fall back to default
+                    OnDefaultDeviceChanged(); // Reinitialize with default device
+                }
             }
         }
 
@@ -187,7 +252,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -211,7 +276,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to stop WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to stop WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -238,7 +303,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start timed WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start timed WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -260,7 +325,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start silence+tone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start silence+tone: {ex.Message}");
             }
         }
 
@@ -275,7 +340,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to queue silence: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to queue silence: {ex.Message}");
             }
         }
 
@@ -317,10 +382,12 @@ namespace NetKeyer.Audio
     internal class DeviceNotificationClient : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
     {
         private readonly Action _onDefaultDeviceChanged;
+        private readonly Action<string, DeviceState> _onDeviceStateChanged;
 
-        public DeviceNotificationClient(Action onDefaultDeviceChanged)
+        public DeviceNotificationClient(Action onDefaultDeviceChanged, Action<string, DeviceState> onDeviceStateChanged = null)
         {
             _onDefaultDeviceChanged = onDefaultDeviceChanged;
+            _onDeviceStateChanged = onDeviceStateChanged;
         }
 
         public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
@@ -335,7 +402,10 @@ namespace NetKeyer.Audio
         // These other events we don't need to handle
         public void OnDeviceAdded(string pwstrDeviceId) { }
         public void OnDeviceRemoved(string pwstrDeviceId) { }
-        public void OnDeviceStateChanged(string deviceId, DeviceState newState) { }
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState)
+        {
+            _onDeviceStateChanged?.Invoke(deviceId, newState);
+        }
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) { }
     }
 }

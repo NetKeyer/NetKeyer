@@ -16,6 +16,9 @@ namespace NetKeyer.Models
         public string SelectedMidiDevice { get; set; }
         public string InputType { get; set; } = "Serial";
 
+        // Audio output device selection (empty string = use system default)
+        public string SelectedAudioDeviceId { get; set; } = "";
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 
