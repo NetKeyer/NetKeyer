@@ -141,6 +141,11 @@ public class IambicKeyer
                     _iambicDahLatched = true;
                     DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (in InterElementSpace)");
                 }
+                if (!ditPaddle && !dahPaddle)
+                {
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Canceling any queued tones (in InterElementSpace)");
+                    _sidetoneGenerator?.Stop();
+                }
             }
         }
     }
@@ -313,6 +318,8 @@ public class IambicKeyer
 
             _keyerState = KeyerState.Idle;
             _lastStateChange = DateTime.UtcNow;
+            _iambicDitLatched = false;
+            _iambicDahLatched = false;
             _ditPaddleAtStart = false;
             _dahPaddleAtStart = false;
         }
