@@ -85,14 +85,6 @@ public class KeyingController
         _iambicKeyer?.SetWpm(wpm);
     }
 
-    public void EnableDebugLogging(bool enable)
-    {
-        if (_iambicKeyer != null)
-        {
-            _iambicKeyer.EnableDebugLogging = enable;
-        }
-    }
-
     public void HandlePaddleStateChange(bool leftPaddle, bool rightPaddle, bool straightKey, bool ptt)
     {
         // Handle keying based on mode and transmit slice mode

@@ -28,17 +28,6 @@ public enum InputDeviceType
     MIDI
 }
 
-// Debug flags
-file static class DebugFlags
-{
-    public const bool DEBUG_KEYER = false; // Set to true to enable iambic keyer debug logging
-    public const bool DEBUG_MIDI_HANDLER = false; // Set to true to enable MIDI handler debug logging
-    public const bool DEBUG_SLICE_MODE = false; // Set to true to enable transmit slice mode debug logging
-}
-
-// Suppress unreachable code warnings for debug logging when debug flags = false
-#pragma warning disable CS0162
-
 public enum PageType
 {
     Setup,
@@ -279,7 +268,6 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         );
         _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
-        _keyingController.EnableDebugLogging(DebugFlags.DEBUG_KEYER);
         _keyingController.SetSpeed(CwSpeed);
 
         // Initialize transmit slice monitor
@@ -345,12 +333,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedAudioDeviceChanged(AudioDeviceInfo value)
     {
-        Console.WriteLine($"[OnSelectedAudioDeviceChanged] Called with device: {value?.DisplayName ?? "null"}");
-        Console.WriteLine($"[OnSelectedAudioDeviceChanged] _loadingSettings={_loadingSettings}, _settings={(_settings != null ? "not null" : "null")}");
+        DebugLogger.Log("audio", $"[OnSelectedAudioDeviceChanged] Called with device: {value?.DisplayName ?? "null"}");
+        DebugLogger.Log("audio", $"[OnSelectedAudioDeviceChanged] _loadingSettings={_loadingSettings}, _settings={(_settings != null ? "not null" : "null")}");
 
         if (!_loadingSettings && _settings != null && value != null)
         {
-            Console.WriteLine($"[OnSelectedAudioDeviceChanged] Saving device ID {value.DeviceId} and reinitializing");
+            DebugLogger.Log("audio", $"[OnSelectedAudioDeviceChanged] Saving device ID {value.DeviceId} and reinitializing");
             _settings.SelectedAudioDeviceId = value.DeviceId;
             _settings.Save();
 
@@ -359,7 +347,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         else
         {
-            Console.WriteLine("[OnSelectedAudioDeviceChanged] Skipping due to flags or null values");
+            DebugLogger.Log("audio", "[OnSelectedAudioDeviceChanged] Skipping due to flags or null values");
         }
     }
 
@@ -584,7 +572,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RefreshAudioDevices()
     {
-        Console.WriteLine("[RefreshAudioDevices] Starting...");
+        DebugLogger.Log("audio", "[RefreshAudioDevices] Starting...");
         _loadingSettings = true;
         AudioDevices.Clear();
 
@@ -598,7 +586,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 AudioDevices.Add(new AudioDeviceInfo { DeviceId = deviceId, Name = name });
             }
 
-            Console.WriteLine($"[RefreshAudioDevices] Total devices in collection: {AudioDevices.Count}");
+            DebugLogger.Log("audio", $"[RefreshAudioDevices] Total devices in collection: {AudioDevices.Count}");
 
             // Restore previously selected device if available
             if (_settings != null)
@@ -607,20 +595,20 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (savedDevice != null)
                 {
                     SelectedAudioDevice = savedDevice;
-                    Console.WriteLine($"[RefreshAudioDevices] Restored saved device: {savedDevice.DisplayName}");
+                    DebugLogger.Log("audio", $"[RefreshAudioDevices] Restored saved device: {savedDevice.DisplayName}");
                 }
                 else
                 {
                     // Default to "System Default"
                     SelectedAudioDevice = AudioDevices.FirstOrDefault(d => string.IsNullOrEmpty(d.DeviceId));
-                    Console.WriteLine("[RefreshAudioDevices] Using System Default");
+                    DebugLogger.Log("audio", "[RefreshAudioDevices] Using System Default");
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[RefreshAudioDevices] EXCEPTION: {ex.GetType().Name}: {ex.Message}");
-            Console.WriteLine($"[RefreshAudioDevices] Stack trace: {ex.StackTrace}");
+            DebugLogger.Log("audio", $"[RefreshAudioDevices] EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            DebugLogger.Log("audio", $"[RefreshAudioDevices] Stack trace: {ex.StackTrace}");
             // Add default option on error
             if (AudioDevices.Count == 0)
             {
@@ -633,7 +621,7 @@ public partial class MainWindowViewModel : ViewModelBase
             SelectedAudioDevice = AudioDevices[0];
         }
 
-        Console.WriteLine("[RefreshAudioDevices] Complete");
+        DebugLogger.Log("audio", "[RefreshAudioDevices] Complete");
         _loadingSettings = false;
     }
 
@@ -687,28 +675,28 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (dialog.DeviceChanged)
         {
-            Console.WriteLine($"[SelectAudioDevice] Device changed to ID: {dialog.SelectedDeviceId}");
+            DebugLogger.Log("audio", $"[SelectAudioDevice] Device changed to ID: {dialog.SelectedDeviceId}");
 
             // Update the selected device - this will trigger OnSelectedAudioDeviceChanged
             // which handles saving settings and reinitializing the sidetone generator
             var newDeviceId = dialog.SelectedDeviceId;
 
-            Console.WriteLine($"[SelectAudioDevice] AudioDevices count: {AudioDevices.Count}");
+            DebugLogger.Log("audio", $"[SelectAudioDevice] AudioDevices count: {AudioDevices.Count}");
             var deviceInfo = AudioDevices.FirstOrDefault(d => d.DeviceId == newDeviceId);
 
             if (deviceInfo != null)
             {
-                Console.WriteLine($"[SelectAudioDevice] Found device in collection: {deviceInfo.DisplayName}");
+                DebugLogger.Log("audio", $"[SelectAudioDevice] Found device in collection: {deviceInfo.DisplayName}");
                 SelectedAudioDevice = deviceInfo;
             }
             else
             {
-                Console.WriteLine($"[SelectAudioDevice] Device not found in AudioDevices collection!");
+                DebugLogger.Log("audio", $"[SelectAudioDevice] Device not found in AudioDevices collection!");
             }
         }
         else
         {
-            Console.WriteLine("[SelectAudioDevice] DeviceChanged is false");
+            DebugLogger.Log("audio", "[SelectAudioDevice] DeviceChanged is false");
         }
     }
 
@@ -759,8 +747,7 @@ public partial class MainWindowViewModel : ViewModelBase
         bool straightKeyState = e.StraightKey;
         bool pttState = e.PTT;
 
-        if (DebugFlags.DEBUG_MIDI_HANDLER)
-            Console.WriteLine($"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
+        DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
 
         // Update indicators
         Dispatcher.UIThread.Post(() =>
@@ -786,8 +773,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 leftIndicatorState = straightKeyState;
             }
 
-            if (DebugFlags.DEBUG_MIDI_HANDLER)
-                Console.WriteLine($"[Indicator Update] IsIambic={IsIambicMode} IsCW={_transmitSliceMonitor.IsTransmitModeCW} Sidetone={_isSidetoneOnlyMode} | L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState} | LeftInd={leftIndicatorState}");
+            DebugLogger.Log("input", $"[Indicator Update] IsIambic={IsIambicMode} IsCW={_transmitSliceMonitor.IsTransmitModeCW} Sidetone={_isSidetoneOnlyMode} | L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState} | LeftInd={leftIndicatorState}");
 
             LeftPaddleIndicatorColor = leftIndicatorState ? Brushes.LimeGreen : Brushes.Black;
             LeftPaddleStateText = leftIndicatorState ? "ON" : "OFF";
@@ -965,7 +951,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             );
             _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
-            _keyingController.EnableDebugLogging(DebugFlags.DEBUG_KEYER);
             _keyingController.SetSpeed(CwSpeed);
 
             // Subscribe to radio property changes

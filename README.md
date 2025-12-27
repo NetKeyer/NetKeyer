@@ -130,6 +130,50 @@ Default mappings (compatible with HaliKey MIDI and CTR2):
 - Check MIDI note mappings match your device
 - Use "Configure MIDI Notes..." to adjust mappings
 
+### Debug Logging
+
+NetKeyer supports detailed debug logging controlled by the `NETKEYER_DEBUG` environment variable. This can help diagnose issues with specific subsystems.
+
+**Available Debug Categories**:
+
+| Category | Description |
+|----------|-------------|
+| `keyer` | Iambic keyer state machine (paddle state, element timing, mode transitions) |
+| `midi` | MIDI input parsing and raw event processing |
+| `input` | Input abstraction layer (paddle state changes, indicator updates) |
+| `slice` | Transmit slice mode monitoring (CW vs PTT mode detection) |
+| `sidetone` | Audio sidetone provider (tone/silence state machine, timing) |
+| `audio` | Audio device management (initialization, enumeration, selection) |
+
+**Usage Examples**:
+
+```bash
+# Enable all debug output
+NETKEYER_DEBUG=all dotnet run
+
+# Enable specific categories
+NETKEYER_DEBUG=keyer,midi dotnet run
+
+# Enable audio device debugging
+NETKEYER_DEBUG=audio dotnet run
+
+# Enable all MIDI-related categories using wildcard
+NETKEYER_DEBUG=midi* dotnet run
+
+# Multiple categories and wildcards
+NETKEYER_DEBUG=keyer,audio,sidetone dotnet run
+
+# No debug output (default)
+dotnet run
+```
+
+**Common Debugging Scenarios**:
+
+- **Paddle not working**: Use `NETKEYER_DEBUG=input,keyer` to see paddle state changes and keyer logic
+- **MIDI issues**: Use `NETKEYER_DEBUG=midi,input` to see raw MIDI events and parsed paddle states
+- **Audio problems**: Use `NETKEYER_DEBUG=audio,sidetone` to see device initialization and tone generation
+- **Radio connection issues**: Use `NETKEYER_DEBUG=slice` to see transmit mode detection
+
 ---
 
 ## Developer Information

@@ -1,5 +1,6 @@
 using System;
 using NetKeyer.Audio;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.Keying;
 
@@ -16,7 +17,6 @@ public class IambicKeyer
     private ISidetoneGenerator _sidetoneGenerator;
     private readonly uint _radioClientHandle;
 
-    private bool _enableDebugLogging = true;
     private bool _iambicDitLatched = false;
     private bool _iambicDahLatched = false;
     private bool _ditPaddleAtStart = false;
@@ -39,15 +39,6 @@ public class IambicKeyer
     /// Gets or sets whether to use Mode B (true) or Mode A (false).
     /// </summary>
     public bool IsModeB { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets whether debug logging is enabled.
-    /// </summary>
-    public bool EnableDebugLogging
-    {
-        get => _enableDebugLogging;
-        set => _enableDebugLogging = value;
-    }
 
     /// <summary>
     /// Creates a new iambic keyer instance.
@@ -99,8 +90,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] UpdatePaddleState: L={leftPaddle} R={rightPaddle} State={_keyerState}");
+            DebugLogger.Log("keyer", $"[IambicKeyer] UpdatePaddleState: L={leftPaddle} R={rightPaddle} State={_keyerState}");
 
             // Safety check: if state machine has been stuck for >1 second, force reset
             if (_keyerState != KeyerState.Idle)
@@ -108,8 +98,7 @@ public class IambicKeyer
                 var elapsed = (DateTime.UtcNow - _lastStateChange).TotalMilliseconds;
                 if (elapsed > 1000)
                 {
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] State timeout detected - forcing reset from {_keyerState}");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] State timeout detected - forcing reset from {_keyerState}");
                     Stop();
                 }
             }
@@ -130,14 +119,12 @@ public class IambicKeyer
                 if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DIT latch");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch");
                 }
                 if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DAH latch");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch");
                 }
             }
             // If in inter-element space and paddle pressed, it will be picked up by OnSilenceComplete
@@ -147,14 +134,12 @@ public class IambicKeyer
                 if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DIT latch (in InterElementSpace)");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (in InterElementSpace)");
                 }
                 if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Setting DAH latch (in InterElementSpace)");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (in InterElementSpace)");
                 }
             }
         }
@@ -167,8 +152,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] Stop called, going to Idle");
+            DebugLogger.Log("keyer", $"[IambicKeyer] Stop called, going to Idle");
 
             // Send radio key-up if needed
             SendRadioKey(false);
@@ -209,8 +193,7 @@ public class IambicKeyer
             _sidetoneGenerator.OnToneStart += OnToneStart;
             _sidetoneGenerator.OnToneComplete += OnToneComplete;
 
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] Sidetone generator updated");
+            DebugLogger.Log("keyer", $"[IambicKeyer] Sidetone generator updated");
         }
     }
 
@@ -221,8 +204,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
+            DebugLogger.Log("keyer", $"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
 
             // Capture paddle states at ACTUAL element start time (not decision time)
             // This is critical for Mode B completion logic to work correctly
@@ -243,8 +225,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnToneComplete: Tone ended, checking if we should queue next tone");
+            DebugLogger.Log("keyer", $"[IambicKeyer] OnToneComplete: Tone ended, checking if we should queue next tone");
 
             // Send radio key-up
             SendRadioKey(false);
@@ -260,8 +241,7 @@ public class IambicKeyer
             {
                 bool isDit = (nextToneDuration.Value == _ditLength);
 
-                if (_enableDebugLogging)
-                    Console.WriteLine($"[IambicKeyer] Queueing next {(isDit ? "dit" : "dah")} ({nextToneDuration.Value}ms) to follow the silence");
+                DebugLogger.Log("keyer", $"[IambicKeyer] Queueing next {(isDit ? "dit" : "dah")} ({nextToneDuration.Value}ms) to follow the silence");
 
                 // Clear latches (paddle states already captured in DetermineNextToneDuration)
                 _iambicDitLatched = false;
@@ -276,8 +256,7 @@ public class IambicKeyer
             else
             {
                 // No next tone, but we still need the inter-element silence
-                if (_enableDebugLogging)
-                    Console.WriteLine($"[IambicKeyer] No next element, queueing final silence before idle");
+                DebugLogger.Log("keyer", $"[IambicKeyer] No next element, queueing final silence before idle");
 
                 // Queue silence with no following tone
                 _sidetoneGenerator?.QueueSilence(_ditLength);
@@ -292,8 +271,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] OnSilenceComplete: Silence ended, starting next element");
+            DebugLogger.Log("keyer", $"[IambicKeyer] OnSilenceComplete: Silence ended, starting next element");
 
             _lastStateChange = DateTime.UtcNow;
             StartNextElement();
@@ -319,8 +297,7 @@ public class IambicKeyer
             // Track what we're sending
             _lastElementWasDit = isDit;
 
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
+            DebugLogger.Log("keyer", $"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
 
             // Start tone (OnToneStart will fire, capture paddle states, and send radio key-down)
             // OnToneComplete will handle queueing the silence that follows
@@ -329,8 +306,7 @@ public class IambicKeyer
         else
         {
             // Nothing to send, go idle
-            if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] No element to send, going idle");
+            DebugLogger.Log("keyer", $"[IambicKeyer] No element to send, going idle");
 
             // Send key-up as a safety measure (should already be off, but this ensures it)
             SendRadioKey(false);
