@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
+using NetKeyer.Helpers;
 using PortAudioSharp;
 
 namespace NetKeyer.Audio
@@ -21,19 +22,19 @@ namespace NetKeyer.Audio
             {
                 try
                 {
-                    Console.WriteLine($"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}");
+                    DebugLogger.Log("audio", $"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}");
                     return new WasapiSidetoneGenerator(deviceId);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"WASAPI initialization failed, falling back to PortAudio: {ex.Message}");
+                    DebugLogger.Log("audio", $"WASAPI initialization failed, falling back to PortAudio: {ex.Message}");
                     // Fall back to PortAudio if WASAPI fails
                     return new SidetoneGenerator(deviceId);
                 }
             }
 
             // On Linux/macOS, use PortAudio
-            Console.WriteLine("Initializing PortAudio sidetone generator");
+            DebugLogger.Log("audio", "Initializing PortAudio sidetone generator");
             return new SidetoneGenerator(deviceId);
         }
 

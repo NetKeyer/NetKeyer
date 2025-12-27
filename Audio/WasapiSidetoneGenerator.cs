@@ -1,6 +1,7 @@
 using System;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.Audio
 {
@@ -63,7 +64,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize WASAPI audio: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to initialize WASAPI audio: {ex.Message}");
                 Dispose();
                 throw;
             }
@@ -84,7 +85,7 @@ namespace NetKeyer.Audio
                 device = FindDeviceByName(_selectedDeviceId);
                 if (device == null)
                 {
-                    Console.WriteLine($"Device '{_selectedDeviceId}' not found, falling back to default");
+                    DebugLogger.Log("audio", $"Device '{_selectedDeviceId}' not found, falling back to default");
                     device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                     _selectedDeviceId = null; // Reset to default
                 }
@@ -140,7 +141,7 @@ namespace NetKeyer.Audio
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to stop WASAPI on idle: {ex.Message}");
+                    DebugLogger.Log("audio", $"Failed to stop WASAPI on idle: {ex.Message}");
                 }
             });
 
@@ -178,7 +179,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to switch to new default audio device: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to switch to new default audio device: {ex.Message}");
             }
         }
 
@@ -192,7 +193,7 @@ namespace NetKeyer.Audio
             {
                 if (newState != DeviceState.Active)
                 {
-                    Console.WriteLine($"Selected device '{_selectedDeviceId}' disconnected, falling back to default");
+                    DebugLogger.Log("audio", $"Selected device '{_selectedDeviceId}' disconnected, falling back to default");
                     _selectedDeviceId = null; // Fall back to default
                     OnDefaultDeviceChanged(); // Reinitialize with default device
                 }
@@ -251,7 +252,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -275,7 +276,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to stop WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to stop WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -302,7 +303,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start timed WASAPI sidetone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start timed WASAPI sidetone: {ex.Message}");
             }
         }
 
@@ -324,7 +325,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to start silence+tone: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to start silence+tone: {ex.Message}");
             }
         }
 
@@ -339,7 +340,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to queue silence: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to queue silence: {ex.Message}");
             }
         }
 

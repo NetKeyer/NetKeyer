@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using NetKeyer.Helpers;
 using PortAudioSharp;
 
 namespace NetKeyer.Audio
@@ -52,7 +53,7 @@ namespace NetKeyer.Audio
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize PortAudio: {ex.Message}");
+                DebugLogger.Log("audio", $"Failed to initialize PortAudio: {ex.Message}");
                 Dispose();
                 throw;
             }
@@ -88,7 +89,7 @@ namespace NetKeyer.Audio
             // Start the stream
             _stream.Start();
 
-            Console.WriteLine($"PortAudio initialized: device={deviceInfo.name}, " +
+            DebugLogger.Log("audio", $"PortAudio initialized: device={deviceInfo.name}, " +
                               $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
         }
 
@@ -108,7 +109,7 @@ namespace NetKeyer.Audio
             }
 
             // Device not found, fall back to default
-            Console.WriteLine($"PortAudio device '{deviceName}' not found, using default");
+            DebugLogger.Log("audio", $"PortAudio device '{deviceName}' not found, using default");
             return PortAudio.DefaultOutputDevice;
         }
 
@@ -141,7 +142,7 @@ namespace NetKeyer.Audio
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"PortAudio callback error: {ex.Message}");
+                    DebugLogger.Log("audio", $"PortAudio callback error: {ex.Message}");
                     return StreamCallbackResult.Abort;
                 }
             }
@@ -213,7 +214,7 @@ namespace NetKeyer.Audio
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error disposing PortAudio stream: {ex.Message}");
+                    DebugLogger.Log("audio", $"Error disposing PortAudio stream: {ex.Message}");
                 }
                 _stream = null;
             }
