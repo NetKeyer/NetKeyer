@@ -21,8 +21,8 @@ public class IambicKeyer
     private bool _iambicDahLatched = false;
     private bool _ditPaddleAtStart = false;
     private bool _dahPaddleAtStart = false;
-    private bool _currentLeftPaddleState = false;
-    private bool _currentRightPaddleState = false;
+    private bool _currentDitPaddleState = false;
+    private bool _currentDahPaddleState = false;
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
     private bool _lastElementWasDit = true; // Track what was actually sent last
@@ -95,12 +95,12 @@ public class IambicKeyer
     /// Updates the keyer with current paddle states.
     /// Call this whenever paddle state changes.
     /// </summary>
-    public void UpdatePaddleState(bool leftPaddle, bool rightPaddle)
+    public void UpdatePaddleState(bool ditPaddle, bool dahPaddle)
     {
         lock (_lock)
         {
             if (_enableDebugLogging)
-                Console.WriteLine($"[IambicKeyer] UpdatePaddleState: L={leftPaddle} R={rightPaddle} State={_keyerState}");
+                Console.WriteLine($"[IambicKeyer] UpdatePaddleState: L={ditPaddle} R={dahPaddle} State={_keyerState}");
 
             // Safety check: if state machine has been stuck for >1 second, force reset
             if (_keyerState != KeyerState.Idle)
@@ -115,11 +115,11 @@ public class IambicKeyer
             }
 
             // Update current paddle states
-            _currentLeftPaddleState = leftPaddle;
-            _currentRightPaddleState = rightPaddle;
+            _currentDitPaddleState = ditPaddle;
+            _currentDahPaddleState = dahPaddle;
 
             // If keyer is idle and at least one paddle is pressed, start sending
-            if (_keyerState == KeyerState.Idle && (leftPaddle || rightPaddle))
+            if (_keyerState == KeyerState.Idle && (ditPaddle || dahPaddle))
             {
                 StartNextElement();
             }
@@ -127,13 +127,13 @@ public class IambicKeyer
             else if (_keyerState == KeyerState.TonePlaying)
             {
                 // A paddle is "newly pressed" if it wasn't already pressed at element start
-                if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
+                if (ditPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
                     if (_enableDebugLogging)
                         Console.WriteLine($"[IambicKeyer] Setting DIT latch");
                 }
-                if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
+                if (dahPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
                     if (_enableDebugLogging)
@@ -144,17 +144,24 @@ public class IambicKeyer
             // Just update latches here
             else if (_keyerState == KeyerState.InterElementSpace)
             {
-                if (leftPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
+                if (ditPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
                     if (_enableDebugLogging)
                         Console.WriteLine($"[IambicKeyer] Setting DIT latch (in InterElementSpace)");
                 }
-                if (rightPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
+                if (dahPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
                     if (_enableDebugLogging)
                         Console.WriteLine($"[IambicKeyer] Setting DAH latch (in InterElementSpace)");
+                }
+                if (!ditPaddle && !dahPaddle)
+                {
+                    // We've released both paddles during an interelement space. Cancel any timed tones.
+                    if (_enableDebugLogging)
+                        Console.WriteLine($"[IambicKeyer] Canceling any queued tones (in InterElementSpace)");
+                    _sidetoneGenerator?.Stop();
                 }
             }
         }
@@ -195,8 +202,8 @@ public class IambicKeyer
 
             // Capture paddle states at ACTUAL element start time (not decision time)
             // This is critical for Mode B completion logic to work correctly
-            _ditPaddleAtStart = _currentLeftPaddleState;
-            _dahPaddleAtStart = _currentRightPaddleState;
+            _ditPaddleAtStart = _currentDitPaddleState;
+            _dahPaddleAtStart = _currentDahPaddleState;
 
             // Send radio key-down
             SendRadioKey(true);
@@ -306,6 +313,8 @@ public class IambicKeyer
 
             _keyerState = KeyerState.Idle;
             _lastStateChange = DateTime.UtcNow;
+            _iambicDitLatched = false;
+            _iambicDahLatched = false;
             _ditPaddleAtStart = false;
             _dahPaddleAtStart = false;
         }
@@ -324,15 +333,15 @@ public class IambicKeyer
         if (_lastElementWasDit || _keyerState == KeyerState.Idle)
         {
             // After dit (or from idle): Priority 1 = opposite (dah), Priority 2 = same (dit), Priority 3 (ModeB) = opposite squeeze
-            if (_currentRightPaddleState || _iambicDahLatched)
+            if (_currentDahPaddleState || _iambicDahLatched)
             {
                 sendDah = true;
             }
-            else if (_currentLeftPaddleState)
+            else if (_currentDitPaddleState)
             {
                 sendDit = true;
             }
-            else if (IsModeB && _dahPaddleAtStart && !_currentRightPaddleState)
+            else if (IsModeB && _dahPaddleAtStart && !_currentDahPaddleState)
             {
                 // Mode B: squeeze - dah was held at start but now released
                 sendDah = true;
@@ -341,15 +350,15 @@ public class IambicKeyer
         else // was sending dah
         {
             // After dah: Priority 1 = opposite (dit), Priority 2 = same (dah), Priority 3 (ModeB) = opposite squeeze
-            if (_currentLeftPaddleState || _iambicDitLatched)
+            if (_currentDitPaddleState || _iambicDitLatched)
             {
                 sendDit = true;
             }
-            else if (_currentRightPaddleState)
+            else if (_currentDahPaddleState)
             {
                 sendDah = true;
             }
-            else if (IsModeB && _ditPaddleAtStart && !_currentLeftPaddleState)
+            else if (IsModeB && _ditPaddleAtStart && !_currentDitPaddleState)
             {
                 // Mode B: squeeze - dit was held at start but now released
                 sendDit = true;
@@ -357,7 +366,7 @@ public class IambicKeyer
         }
 
         // Handle special case: both paddles pressed from idle = dit first
-        if (_keyerState == KeyerState.Idle && _currentLeftPaddleState && _currentRightPaddleState)
+        if (_keyerState == KeyerState.Idle && _currentDitPaddleState && _currentDahPaddleState)
         {
             sendDit = true;
             sendDah = false;

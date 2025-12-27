@@ -248,18 +248,28 @@ namespace NetKeyer.Audio
         {
             lock (_lockObject)
             {
-                if (_state == PlaybackState.Silent)
+                if (_indefiniteTone)
                 {
+                    if (_state == PlaybackState.Silent)
+                    {
+                        if (_enableDebugLogging)
+                            Console.WriteLine($"[SidetoneProvider] Stop called but already silent");
+                        return;
+                    }
                     if (_enableDebugLogging)
-                        Console.WriteLine($"[SidetoneProvider] Stop called but already silent");
-                    return;
+                        Console.WriteLine($"[SidetoneProvider] Stopping tone, transitioning to ramp-down");
+                    // Immediate transition to ramp-down
+                    _state = PlaybackState.RampDown;
+                    _patchPosition = 0;
+                } else // Timed tones
+                {
+                    if (_state == PlaybackState.TimedSilence)
+                    {
+                        if (_enableDebugLogging)
+                            Console.WriteLine($"[SidetoneProvider] Stopping a Timed Silence");
+                        _queuedToneDurationMs = null;
+                    }
                 }
-
-                if (_enableDebugLogging)
-                    Console.WriteLine($"[SidetoneProvider] Stopping tone, transitioning to ramp-down");
-                // Immediate transition to ramp-down
-                _state = PlaybackState.RampDown;
-                _patchPosition = 0;
             }
         }
 
