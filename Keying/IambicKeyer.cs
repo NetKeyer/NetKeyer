@@ -90,8 +90,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            if (_enableDebugLogging)
-                DebugLogger.Log("keyer", $"[IambicKeyer] UpdatePaddleState: L={ditPaddle} R={dahPaddle} State={_keyerState}");
+            DebugLogger.Log("keyer", $"[IambicKeyer] UpdatePaddleState: L={ditPaddle} R={dahPaddle} State={_keyerState}");
 
             // Safety check: if state machine has been stuck for >1 second, force reset
             if (_keyerState != KeyerState.Idle)
@@ -145,8 +144,7 @@ public class IambicKeyer
                 if (!ditPaddle && !dahPaddle)
                 {
                     // We've released both paddles during an interelement space. Cancel any timed tones.
-                    if (_enableDebugLogging)
-                        Console.WriteLine($"[IambicKeyer] Canceling any queued tones (in InterElementSpace)");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Canceling any queued tones (in InterElementSpace)");
                     _sidetoneGenerator?.Stop();
                 }
             }
