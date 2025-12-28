@@ -134,6 +134,17 @@ Default mappings (compatible with HaliKey MIDI and CTR2):
 
 NetKeyer supports detailed debug logging controlled by the `NETKEYER_DEBUG` environment variable. This can help diagnose issues with specific subsystems.
 
+**Log File Location**:
+
+Debug messages are automatically written to a log file in the NetKeyer application data folder:
+- **Windows**: `%APPDATA%\NetKeyer\debug.log`
+- **Linux**: `~/.config/NetKeyer/debug.log`
+- **macOS**: `~/Library/Application Support/NetKeyer/debug.log`
+
+You can easily access the log folder via **Help → View Debug Log...** in the application menu.
+
+**Note**: On Windows, GUI applications don't show console output when run outside a debugger. Debug messages are always written to the log file, making them accessible even when the console isn't visible.
+
 **Available Debug Categories**:
 
 | Category | Description |
@@ -147,6 +158,7 @@ NetKeyer supports detailed debug logging controlled by the `NETKEYER_DEBUG` envi
 
 **Usage Examples**:
 
+**Linux/macOS**:
 ```bash
 # Enable all debug output
 NETKEYER_DEBUG=all dotnet run
@@ -154,16 +166,29 @@ NETKEYER_DEBUG=all dotnet run
 # Enable specific categories
 NETKEYER_DEBUG=keyer,midi dotnet run
 
-# Enable audio device debugging
-NETKEYER_DEBUG=audio dotnet run
-
 # Enable all MIDI-related categories using wildcard
 NETKEYER_DEBUG=midi* dotnet run
+```
 
-# Multiple categories and wildcards
-NETKEYER_DEBUG=keyer,audio,sidetone dotnet run
+**Windows PowerShell**:
+```powershell
+# Enable all debug output
+$env:NETKEYER_DEBUG="all"
+dotnet run
 
-# No debug output (default)
+# Enable specific categories
+$env:NETKEYER_DEBUG="keyer,midi"
+dotnet run
+```
+
+**Windows CMD**:
+```cmd
+# Enable all debug output
+set NETKEYER_DEBUG=all
+dotnet run
+
+# Enable specific categories
+set NETKEYER_DEBUG=keyer,midi
 dotnet run
 ```
 

@@ -26,6 +26,7 @@
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
+                <MenuItem Header="_View Debug Log..." Command="{Binding OpenDebugLogCommand}"/>
                 <MenuItem Header="_About NetKeyer..." Command="{Binding ShowAboutCommand}"/>
             </MenuItem>
         </Menu>

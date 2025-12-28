@@ -1097,6 +1097,18 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void OpenDebugLog()
+    {
+        var logFilePath = Helpers.DebugLogger.LogFilePath;
+        var logFolder = System.IO.Path.GetDirectoryName(logFilePath);
+
+        if (!string.IsNullOrEmpty(logFolder))
+        {
+            UrlHelper.OpenFolder(logFolder);
+        }
+    }
+
 
     partial void OnCwSpeedChanged(int value)
     {
