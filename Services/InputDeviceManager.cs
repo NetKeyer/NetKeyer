@@ -124,8 +124,6 @@ public class InputDeviceManager : IDisposable
         {
             _serialPort = new SerialPort(portName);
             _serialPort.BaudRate = 9600; // Baud rate doesn't matter for control lines
-            _serialPort.DtrEnable = true; // Enable DTR for power
-            _serialPort.RtsEnable = true; // Enable RTS for power
             _serialPort.PinChanged += SerialPort_PinChanged;
             _serialPort.Open();
 
@@ -135,7 +133,7 @@ public class InputDeviceManager : IDisposable
             // Emit initial state event with current pin states
             // This ensures indicators update immediately when device is opened
             bool leftPaddle = _serialPort.CtsHolding;
-            bool rightPaddle = _serialPort.CDHolding;
+            bool rightPaddle = _serialPort.DsrHolding;
 
             // Apply swap if enabled
             if (_swapPaddles)
@@ -244,14 +242,14 @@ public class InputDeviceManager : IDisposable
             return;
         }
 
-        // HaliKey v1: CTS (left) + DCD (right)
-        if (e.EventType == SerialPinChange.CtsChanged || e.EventType == SerialPinChange.CDChanged)
+        // HaliKey v1: CTS (left) + DSR (right)
+        if (e.EventType == SerialPinChange.CtsChanged || e.EventType == SerialPinChange.DsrChanged)
         {
             try
             {
                 // Read current pin states
                 bool leftPaddle = _serialPort.CtsHolding;
-                bool rightPaddle = _serialPort.CDHolding;
+                bool rightPaddle = _serialPort.DsrHolding;
 
                 // Apply swap if enabled
                 if (_swapPaddles)
