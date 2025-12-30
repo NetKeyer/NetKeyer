@@ -20,6 +20,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      shell: pwsh
+      run: |
+        if (Test-Path "secret-provider/SecretClientIdProvider.cs") {
+          Copy-Item "secret-provider/SecretClientIdProvider.cs" "SmartLink/"
+          Write-Host "Secret provider included in build"
+        } else {
+          Write-Host "Secret provider not available, building without it"
+        }
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -102,6 +120,23 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      run: |
+        if [ -f "secret-provider/SecretClientIdProvider.cs" ]; then
+          cp secret-provider/SecretClientIdProvider.cs SmartLink/
+          echo "Secret provider included in build"
+        else
+          echo "Secret provider not available, building without it"
+        fi
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -167,6 +202,23 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      run: |
+        if [ -f "secret-provider/SecretClientIdProvider.cs" ]; then
+          cp secret-provider/SecretClientIdProvider.cs SmartLink/
+          echo "Secret provider included in build"
+        else
+          echo "Secret provider not available, building without it"
+        fi
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
