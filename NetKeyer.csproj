@@ -40,10 +40,37 @@
     <PackageReference Include="System.IO.Ports" Version="9.0.10" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="Velopack" Version="*" />
+    <!-- FlexLib dependencies -->
+    <PackageReference Include="AsyncAwaitBestPractices" Version="9.0.0" />
+    <PackageReference Include="DotNetZip" Version="1.16.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Collections.Immutable" Version="9.0.0" />
+    <PackageReference Include="Netify" Version="1.1.1" />
+    <PackageReference Include="Nito.AsyncEx" Version="5.1.2" />
+    <PackageReference Include="RestSharp" Version="112.1.0" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="FlexLib\FlexLib.csproj" />
+    <!-- FlexLib DLL references -->
+    <Reference Include="Flex.UiWpfFramework">
+      <HintPath>lib\Flex.UiWpfFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Util">
+      <HintPath>lib\Util.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Vita">
+      <HintPath>lib\Vita.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FlexLib">
+      <HintPath>lib\FlexLib.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
