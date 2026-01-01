@@ -262,13 +262,6 @@ namespace NetKeyer.Audio
 
         public int Read(float[] buffer, int offset, int count)
         {
-            // Capture events to fire after lock is released
-            Action onToneStartToFire = null;
-            Action onToneCompleteToFire = null;
-            Action onBeforeSilenceEndToFire = null;
-            Action onSilenceCompleteToFire = null;
-            Action onBecomeIdleToFire = null;
-
             lock (_lockObject)
             {
                 _readCallCount++;
@@ -346,9 +339,19 @@ namespace NetKeyer.Audio
                             {
                                 _patchPosition = 0;
 
-                                // Capture OnToneComplete event to fire after lock is released
-                                DebugLogger.Log("sidetone", $"[SidetoneProvider] Capturing OnToneComplete event");
-                                onToneCompleteToFire = OnToneComplete;
+                                // Fire OnToneComplete event immediately
+                                DebugLogger.Log("sidetone", $"[SidetoneProvider] Ramp-down complete, firing OnToneComplete");
+                                if (OnToneComplete != null)
+                                {
+                                    try
+                                    {
+                                        OnToneComplete.Invoke();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnToneComplete: {ex}");
+                                    }
+                                }
 
                                 // Check if we have a queued silence
                                 if (_queuedSilenceDurationMs.HasValue)
@@ -383,12 +386,32 @@ namespace NetKeyer.Audio
                             {
                                 DebugLogger.Log("sidetone", $"[SidetoneProvider] Silence complete");
 
-                                // Capture OnBeforeSilenceEnd event to fire after lock is released
-                                // This allows the keyer to make a late decision and queue a tone
-                                onBeforeSilenceEndToFire = OnBeforeSilenceEnd;
+                                // Fire OnBeforeSilenceEnd immediately while holding lock
+                                // This allows keyer to start a tone that will begin in the same buffer
+                                // for minimum latency. C# locks are reentrant so the handler can call
+                                // back into StartTone() safely.
+                                if (OnBeforeSilenceEnd != null)
+                                {
+                                    try
+                                    {
+                                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnBeforeSilenceEnd event (sync, in lock)");
+                                        OnBeforeSilenceEnd.Invoke();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnBeforeSilenceEnd: {ex}");
+                                    }
+                                }
 
-                                // Check if we have a queued tone
-                                if (_queuedToneDurationMs.HasValue)
+                                // Check if handler started a tone (state changed from Silent to RampUp)
+                                // If so, the while loop will continue and start filling the tone immediately
+                                if (_state == PlaybackState.RampUp)
+                                {
+                                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Tone started by OnBeforeSilenceEnd handler, continuing with RampUp in same buffer");
+                                    // OnToneStart was already fired by StartTone(), just continue the while loop
+                                }
+                                // Check if we have a queued tone (old code path for compatibility)
+                                else if (_queuedToneDurationMs.HasValue)
                                 {
                                     DebugLogger.Log("sidetone", $"[SidetoneProvider] Starting queued tone: {_queuedToneDurationMs.Value}ms");
                                     int toneMs = _queuedToneDurationMs.Value;
@@ -403,119 +426,57 @@ namespace NetKeyer.Audio
                                     _patchPosition = 0;
                                     _state = PlaybackState.RampUp;
 
-                                    // Capture OnToneStart event to fire after lock is released
-                                    onToneStartToFire = OnToneStart;
+                                    // Fire OnToneStart event immediately
+                                    if (OnToneStart != null)
+                                    {
+                                        try
+                                        {
+                                            OnToneStart.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnToneStart: {ex}");
+                                        }
+                                    }
                                 }
                                 else
                                 {
-                                    // No queued tone, transition to Silent state FIRST
-                                    // This ensures handlers see the correct state when calling StartTone()
-                                    DebugLogger.Log("sidetone", $"[SidetoneProvider] No queued tone, transitioning to Silent");
+                                    // No tone started, transition to Silent
+                                    DebugLogger.Log("sidetone", $"[SidetoneProvider] No tone to start, transitioning to Silent");
                                     _state = PlaybackState.Silent;
 
-                                    // Capture OnSilenceComplete event to fire after lock is released
-                                    onSilenceCompleteToFire = OnSilenceComplete;
+                                    // Fire OnSilenceComplete event immediately
+                                    if (OnSilenceComplete != null)
+                                    {
+                                        try
+                                        {
+                                            OnSilenceComplete.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnSilenceComplete: {ex}");
+                                        }
+                                    }
 
-                                    // OnBecomeIdle will be fired conditionally after OnSilenceComplete
-                                    // (only if state is still Silent after OnSilenceComplete handler runs)
+                                    // Fire OnBecomeIdle if still Silent after handler runs
+                                    if (_state == PlaybackState.Silent && OnBecomeIdle != null)
+                                    {
+                                        try
+                                        {
+                                            OnBecomeIdle.Invoke();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnBecomeIdle: {ex}");
+                                        }
+                                    }
                                 }
                             }
                             break;
                     }
                 }
+                return count;
             } // End of lock
-
-            // Fire events AFTER lock is released, in correct order
-            // This prevents deadlock when event handlers call back into SidetoneProvider methods
-
-            // Fire OnBeforeSilenceEnd FIRST so keyer can queue a tone
-            if (onBeforeSilenceEndToFire != null)
-            {
-                try
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnBeforeSilenceEnd event");
-                    onBeforeSilenceEndToFire.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnBeforeSilenceEnd: {ex}");
-                }
-
-                // After OnBeforeSilenceEnd fires, check if keyer started a tone
-                // If state is no longer Silent, suppress OnSilenceComplete to avoid duplicate elements
-                lock (_lockObject)
-                {
-                    if (_state != PlaybackState.Silent)
-                    {
-                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Tone was started in OnBeforeSilenceEnd (state={_state}), suppressing OnSilenceComplete");
-                        onSilenceCompleteToFire = null; // Suppress OnSilenceComplete
-                    }
-                }
-            }
-
-            if (onToneStartToFire != null)
-            {
-                try
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnToneStart event");
-                    onToneStartToFire.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnToneStart: {ex}");
-                }
-            }
-
-            if (onToneCompleteToFire != null)
-            {
-                try
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnToneComplete event");
-                    onToneCompleteToFire.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnToneComplete: {ex}");
-                }
-            }
-
-            if (onSilenceCompleteToFire != null)
-            {
-                try
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnSilenceComplete event");
-                    onSilenceCompleteToFire.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnSilenceComplete: {ex}");
-                }
-
-                // After OnSilenceComplete fires, check if we're still Silent
-                // If so, fire OnBecomeIdle to signal we're truly idle
-                lock (_lockObject)
-                {
-                    if (_state == PlaybackState.Silent && OnBecomeIdle != null)
-                    {
-                        onBecomeIdleToFire = OnBecomeIdle;
-                    }
-                }
-
-                if (onBecomeIdleToFire != null)
-                {
-                    try
-                    {
-                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnBecomeIdle event");
-                        onBecomeIdleToFire.Invoke();
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnBecomeIdle: {ex}");
-                    }
-                }
-            }
-
-            return count;
         }
 
         private int CopyFromPatch(float[] patch, float[] destBuffer, int destOffset, int maxSamples)
