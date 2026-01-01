@@ -32,6 +32,13 @@ namespace NetKeyer.Audio
         event Action OnToneComplete;
 
         /// <summary>
+        /// Event fired when timed silence is about to complete.
+        /// Allows keyer to make decision about next element at the last possible moment.
+        /// Handler can call StartTone() to queue a tone, which will start immediately.
+        /// </summary>
+        event Action OnBeforeSilenceEnd;
+
+        /// <summary>
         /// Event fired when entering non-timed Silent state (fully idle).
         /// Used by WASAPI to stop playback for minimum latency.
         /// </summary>

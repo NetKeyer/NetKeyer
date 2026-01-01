@@ -43,6 +43,10 @@ namespace NetKeyer.Audio
         // Event fired when any timed tone completes (whether silence follows or not)
         public event Action OnToneComplete;
 
+        // Event fired when timed silence is about to end (before transitioning states)
+        // Allows keyer to make late decision and queue next tone if needed
+        public event Action OnBeforeSilenceEnd;
+
         // Event fired when entering non-timed Silent state (fully idle)
         public event Action OnBecomeIdle;
 
@@ -261,6 +265,7 @@ namespace NetKeyer.Audio
             // Capture events to fire after lock is released
             Action onToneStartToFire = null;
             Action onToneCompleteToFire = null;
+            Action onBeforeSilenceEndToFire = null;
             Action onSilenceCompleteToFire = null;
             Action onBecomeIdleToFire = null;
 
@@ -378,6 +383,10 @@ namespace NetKeyer.Audio
                             {
                                 DebugLogger.Log("sidetone", $"[SidetoneProvider] Silence complete");
 
+                                // Capture OnBeforeSilenceEnd event to fire after lock is released
+                                // This allows the keyer to make a late decision and queue a tone
+                                onBeforeSilenceEndToFire = OnBeforeSilenceEnd;
+
                                 // Check if we have a queued tone
                                 if (_queuedToneDurationMs.HasValue)
                                 {
@@ -418,6 +427,32 @@ namespace NetKeyer.Audio
 
             // Fire events AFTER lock is released, in correct order
             // This prevents deadlock when event handlers call back into SidetoneProvider methods
+
+            // Fire OnBeforeSilenceEnd FIRST so keyer can queue a tone
+            if (onBeforeSilenceEndToFire != null)
+            {
+                try
+                {
+                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Firing OnBeforeSilenceEnd event");
+                    onBeforeSilenceEndToFire.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("sidetone", $"[SidetoneProvider] Error in OnBeforeSilenceEnd: {ex}");
+                }
+
+                // After OnBeforeSilenceEnd fires, check if keyer started a tone
+                // If state is no longer Silent, suppress OnSilenceComplete to avoid duplicate elements
+                lock (_lockObject)
+                {
+                    if (_state != PlaybackState.Silent)
+                    {
+                        DebugLogger.Log("sidetone", $"[SidetoneProvider] Tone was started in OnBeforeSilenceEnd (state={_state}), suppressing OnSilenceComplete");
+                        onSilenceCompleteToFire = null; // Suppress OnSilenceComplete
+                    }
+                }
+            }
+
             if (onToneStartToFire != null)
             {
                 try
