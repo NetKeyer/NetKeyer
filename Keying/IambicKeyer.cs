@@ -258,6 +258,25 @@ public class IambicKeyer
     }
 
     /// <summary>
+    /// Starts or queues a tone with the specified duration.
+    /// Clears latches and tracks element type.
+    /// </summary>
+    private void StartOrQueueTone(int toneDurationMs)
+    {
+        bool isDit = (toneDurationMs == _ditLength);
+
+        DebugLogger.Log("keyer", $"[IambicKeyer] Starting/queueing {(isDit ? "dit" : "dah")} ({toneDurationMs}ms)");
+
+        // Start tone (will queue if in silence, start immediately if idle)
+        _sidetoneGenerator?.StartTone(toneDurationMs);
+
+        // Clear latches and track element
+        _iambicDitLatched = false;
+        _iambicDahLatched = false;
+        _lastElementWasDit = isDit;
+    }
+
+    /// <summary>
     /// Called when silence is about to end. Make late decision about next element.
     /// This is the critical decision point where we determine what to send next based on
     /// paddle states during both the tone and the silence period.
@@ -273,17 +292,7 @@ public class IambicKeyer
 
             if (nextToneDuration.HasValue)
             {
-                bool isDit = (nextToneDuration.Value == _ditLength);
-
-                DebugLogger.Log("keyer", $"[IambicKeyer] Queueing {(isDit ? "dit" : "dah")} ({nextToneDuration.Value}ms) to start when silence ends");
-
-                // Queue the tone to start when silence ends
-                _sidetoneGenerator?.StartTone(nextToneDuration.Value);
-
-                // Clear latches and track element
-                _iambicDitLatched = false;
-                _iambicDahLatched = false;
-                _lastElementWasDit = isDit;
+                StartOrQueueTone(nextToneDuration.Value);
             }
             else
             {
@@ -294,60 +303,44 @@ public class IambicKeyer
     }
 
     /// <summary>
-    /// Called when silence completes with no queued tone. Determine and start next element or go idle.
+    /// Called when silence completes with no queued tone. Transition to idle and reset state.
+    /// Note: Decision about whether to send another element was already made in OnBeforeSilenceEnd.
+    /// If we reach here, it means no tone was queued, so we're done.
     /// </summary>
     private void OnSilenceComplete()
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] OnSilenceComplete: Silence ended, starting next element");
-
-            _lastStateChange = DateTime.UtcNow;
-            StartNextElement();
-        }
-    }
-
-    /// <summary>
-    /// Determines what element to send next based on paddle states and latches,
-    /// then starts it (or goes idle if nothing to send).
-    /// </summary>
-    private void StartNextElement()
-    {
-        int? nextDuration = DetermineNextToneDuration();
-
-        if (nextDuration.HasValue)
-        {
-            bool isDit = (nextDuration.Value == _ditLength);
-
-            // Clear latches
-            _iambicDitLatched = false;
-            _iambicDahLatched = false;
-
-            // Track what we're sending
-            _lastElementWasDit = isDit;
-
-            DebugLogger.Log("keyer", $"[IambicKeyer] Starting {(isDit ? "dit" : "dah")} ({nextDuration.Value}ms)");
-
-            // Start tone (OnToneStart will fire, capture paddle states, and send radio key-down)
-            // OnToneComplete will handle queueing the silence that follows
-            _sidetoneGenerator?.StartTone(nextDuration.Value);
-        }
-        else
-        {
-            // Nothing to send, go idle
-            DebugLogger.Log("keyer", $"[IambicKeyer] No element to send, going idle");
-
-            // Send key-up as a safety measure (should already be off, but this ensures it)
-            SendRadioKey(false);
+            DebugLogger.Log("keyer", $"[IambicKeyer] OnSilenceComplete: Silence ended with no queued tone, going idle");
 
             _keyerState = KeyerState.Idle;
             _lastStateChange = DateTime.UtcNow;
+
+            // Reset all state
             _iambicDitLatched = false;
             _iambicDahLatched = false;
             _ditPaddleAtStart = false;
             _dahPaddleAtStart = false;
             _ditPaddleAtSilenceStart = false;
             _dahPaddleAtSilenceStart = false;
+        }
+    }
+
+    /// <summary>
+    /// Determines what element to send next based on paddle states and latches, then starts it.
+    /// Called from Idle state when at least one paddle is pressed.
+    /// Note: Will always send an element (never returns to idle) since at least one paddle is pressed.
+    /// </summary>
+    private void StartNextElement()
+    {
+        int? nextDuration = DetermineNextToneDuration();
+
+        // When called from Idle with at least one paddle pressed, DetermineNextToneDuration
+        // will always return a tone duration, so this should never be null.
+        // The null check is kept for safety but the else branch is unreachable.
+        if (nextDuration.HasValue)
+        {
+            StartOrQueueTone(nextDuration.Value);
         }
     }
 
