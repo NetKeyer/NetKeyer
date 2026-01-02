@@ -131,20 +131,21 @@ public class IambicKeyer
                     DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (opposite paddle during dah tone)");
                 }
             }
-            // If in inter-element space, update alternation latches for opposite paddle
+            // If in inter-element space, latch either paddle if newly pressed during silence
             // Decision about next element happens in OnBeforeSilenceEnd
             else if (_keyerState == KeyerState.InterElementSpace)
             {
-                // Set alternation latches for opposite paddle pressed during silence
-                if (_lastElementWasDit && dahPaddle && !_dahPaddleAtSilenceStart && !_iambicDahLatched)
-                {
-                    _iambicDahLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (opposite paddle during silence after dit)");
-                }
-                if (!_lastElementWasDit && ditPaddle && !_ditPaddleAtSilenceStart && !_iambicDitLatched)
+                // Latch dit paddle if newly pressed during silence
+                if (ditPaddle && !_ditPaddleAtSilenceStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (opposite paddle during silence after dah)");
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (newly pressed during silence)");
+                }
+                // Latch dah paddle if newly pressed during silence
+                if (dahPaddle && !_dahPaddleAtSilenceStart && !_iambicDahLatched)
+                {
+                    _iambicDahLatched = true;
+                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (newly pressed during silence)");
                 }
                 // Don't call Stop() here - decision happens in OnBeforeSilenceEnd
             }
@@ -347,8 +348,8 @@ public class IambicKeyer
     /// <summary>
     /// Determines what the next tone duration should be based on current paddle states and latches.
     /// Uses correct alternation/repetition logic:
-    /// - Alternation: opposite paddle pressed during tone OR silence
-    /// - Repetition: same paddle held from silence start OR pressed during silence
+    /// - Alternation: opposite paddle latched (pressed during tone/silence) OR currently pressed
+    /// - Repetition: same paddle latched (pressed during silence) OR currently pressed at end of silence
     /// Returns null if no tone should be sent.
     /// </summary>
     private int? DetermineNextToneDuration()
@@ -359,17 +360,17 @@ public class IambicKeyer
         if (_lastElementWasDit || _keyerState == KeyerState.Idle)
         {
             // Just sent dit (or starting from idle)
-            // Priority 1: Alternation - opposite paddle pressed during tone or silence
+            // Priority 1: Alternation - opposite paddle latched or pressed
             if (_iambicDahLatched || _currentDahPaddleState)
             {
                 sendDah = true;
                 DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
             }
-            // Priority 2: Repetition - same paddle held from silence start OR pressed during silence
-            else if (_ditPaddleAtSilenceStart || _currentDitPaddleState)
+            // Priority 2: Repetition - same paddle latched or pressed at end of silence
+            else if (_iambicDitLatched || _currentDitPaddleState)
             {
                 sendDit = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dit (atSilenceStart={_ditPaddleAtSilenceStart}, current={_currentDitPaddleState})");
+                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
             }
             // Priority 3 (Mode B only): Squeeze - both held at tone start, both now released
             else if (IsModeB && _dahPaddleAtStart && !_currentDahPaddleState && !_currentDitPaddleState)
@@ -381,17 +382,17 @@ public class IambicKeyer
         else // was sending dah
         {
             // Just sent dah
-            // Priority 1: Alternation - opposite paddle pressed during tone or silence
+            // Priority 1: Alternation - opposite paddle latched or pressed
             if (_iambicDitLatched || _currentDitPaddleState)
             {
                 sendDit = true;
                 DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
             }
-            // Priority 2: Repetition - same paddle held from silence start OR pressed during silence
-            else if (_dahPaddleAtSilenceStart || _currentDahPaddleState)
+            // Priority 2: Repetition - same paddle latched or pressed at end of silence
+            else if (_iambicDahLatched || _currentDahPaddleState)
             {
                 sendDah = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dah (atSilenceStart={_dahPaddleAtSilenceStart}, current={_currentDahPaddleState})");
+                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
             }
             // Priority 3 (Mode B only): Squeeze - both held at tone start, both now released
             else if (IsModeB && _ditPaddleAtStart && !_currentDitPaddleState && !_currentDahPaddleState)
