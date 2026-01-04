@@ -239,7 +239,8 @@ public partial class MainWindowViewModel : ViewModelBase
         // This initializes PortAudio (on non-Windows) which is needed for device enumeration
         try
         {
-            _sidetoneGenerator = SidetoneGeneratorFactory.Create(null);
+            bool aggressiveLowLatency = _settings.WasapiAggressiveLowLatency;
+            _sidetoneGenerator = SidetoneGeneratorFactory.Create(null, aggressiveLowLatency);
             _sidetoneGenerator.SetFrequency(CwPitch);
             _sidetoneGenerator.SetVolume(SidetoneVolume);
             _sidetoneGenerator.SetWpm(CwSpeed);
@@ -366,15 +367,18 @@ public partial class MainWindowViewModel : ViewModelBase
             // Dispose old generator
             _sidetoneGenerator?.Dispose();
 
-            // Create new generator with selected device
+            // Create new generator with selected device and setting
             string deviceId = SelectedAudioDevice?.DeviceId ?? "";
-            _sidetoneGenerator = SidetoneGeneratorFactory.Create(deviceId);
+            bool aggressiveLowLatency = _settings.WasapiAggressiveLowLatency;
+            _sidetoneGenerator = SidetoneGeneratorFactory.Create(deviceId, aggressiveLowLatency);
             _sidetoneGenerator.SetFrequency(CwPitch);
             _sidetoneGenerator.SetVolume(SidetoneVolume);
             _sidetoneGenerator.SetWpm(CwSpeed);
 
             // Reconnect to keying controller
             _keyingController?.SetSidetoneGenerator(_sidetoneGenerator);
+
+            DebugLogger.Log("audio", $"Sidetone generator reinitialized with device={deviceId}, aggressiveLowLatency={aggressiveLowLatency}");
 
             Console.WriteLine("Sidetone generator reinitialized with new audio device");
         }
@@ -730,6 +734,14 @@ public partial class MainWindowViewModel : ViewModelBase
         if (dialog.DeviceChanged)
         {
             DebugLogger.Log("audio", $"[SelectAudioDevice] Device changed to ID: {dialog.SelectedDeviceId}");
+
+            // Save the aggressive low-latency setting BEFORE reinitializing generator
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                _settings.WasapiAggressiveLowLatency = dialog.AggressiveLowLatency;
+                _settings.Save();
+                DebugLogger.Log("audio", $"[SelectAudioDevice] Saved AggressiveLowLatency={dialog.AggressiveLowLatency}");
+            }
 
             // Update the selected device - this will trigger OnSelectedAudioDeviceChanged
             // which handles saving settings and reinitializing the sidetone generator

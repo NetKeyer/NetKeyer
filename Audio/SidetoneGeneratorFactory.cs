@@ -15,15 +15,16 @@ namespace NetKeyer.Audio
         /// On other platforms, uses PortAudio-based generator (~5-10ms).
         /// </summary>
         /// <param name="deviceId">Audio device name to use, or null/empty for system default</param>
-        public static ISidetoneGenerator Create(string deviceId = null)
+        /// <param name="wasapiAggressiveLowLatency">Windows only: if true, use on-demand device open/close for minimum latency; if false, keep device open</param>
+        public static ISidetoneGenerator Create(string deviceId = null, bool wasapiAggressiveLowLatency = true)
         {
             // On Windows, prefer WASAPI for lowest latency
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 try
                 {
-                    DebugLogger.Log("audio", $"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}");
-                    return new WasapiSidetoneGenerator(deviceId);
+                    DebugLogger.Log("audio", $"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}, aggressiveLowLatency={wasapiAggressiveLowLatency}");
+                    return new WasapiSidetoneGenerator(deviceId, wasapiAggressiveLowLatency);
                 }
                 catch (Exception ex)
                 {

@@ -19,6 +19,9 @@ namespace NetKeyer.Models
         // Audio output device selection (empty string = use system default)
         public string SelectedAudioDeviceId { get; set; } = "";
 
+        // WASAPI aggressive low-latency mode (Windows only)
+        public bool WasapiAggressiveLowLatency { get; set; } = true;
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 

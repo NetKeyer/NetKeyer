@@ -23,6 +23,7 @@ namespace NetKeyer.Audio
         private DeviceNotificationClient _notificationClient;
         private string _selectedDeviceId = null;  // null or empty = default
         private MMDevice _selectedDevice;
+        private bool _aggressiveLowLatency = true; // true = on-demand, false = keep open
 
         // Use absolute minimum latency - WASAPI minimum is typically 3ms in shared mode
         private const int SAMPLE_RATE = 48000;
@@ -34,12 +35,13 @@ namespace NetKeyer.Audio
         public event Action OnBeforeSilenceEnd;
         public event Action OnBecomeIdle;
 
-        public WasapiSidetoneGenerator(string deviceId = null)
+        public WasapiSidetoneGenerator(string deviceId = null, bool aggressiveLowLatency = true)
         {
             try
             {
-                // Store selected device ID
+                // Store selected device ID and aggressiveness flag
                 _selectedDeviceId = deviceId;
+                _aggressiveLowLatency = aggressiveLowLatency;
 
                 // Create custom sidetone provider
                 _sidetoneProvider = new SidetoneProvider();
@@ -52,7 +54,13 @@ namespace NetKeyer.Audio
                 _sidetoneProvider.OnToneStart += () => OnToneStart?.Invoke();
                 _sidetoneProvider.OnToneComplete += () => OnToneComplete?.Invoke();
                 _sidetoneProvider.OnBeforeSilenceEnd += () => OnBeforeSilenceEnd?.Invoke();
-                _sidetoneProvider.OnBecomeIdle += OnProviderBecomeIdle;
+
+                // Conditional event handling based on mode
+                if (_aggressiveLowLatency)
+                {
+                    _sidetoneProvider.OnBecomeIdle += OnProviderBecomeIdle;
+                }
+                // If not aggressive, DON'T subscribe to OnBecomeIdle - let device stay open
 
                 // Set up device change monitoring
                 _deviceEnumerator = new MMDeviceEnumerator();
@@ -62,7 +70,25 @@ namespace NetKeyer.Audio
                 // Initialize WASAPI output
                 InitializeWasapiOut();
 
-                // Don't start the audio stream until needed - this reduces latency
+                // If NOT aggressive low-latency, start the audio stream immediately (like PortAudio)
+                if (!_aggressiveLowLatency)
+                {
+                    try
+                    {
+                        _wasapiOut.Play();
+                        _isPlaying = true;
+                        DebugLogger.Log("audio", "WASAPI initialized in always-on mode (not aggressive low-latency)");
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Log("audio", $"Failed to start always-on WASAPI stream: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    DebugLogger.Log("audio", "WASAPI initialized in aggressive low-latency mode (on-demand)");
+                }
+                // Don't start the audio stream until needed - this reduces latency (only in aggressive mode)
             }
             catch (Exception ex)
             {
@@ -177,7 +203,21 @@ namespace NetKeyer.Audio
                 // Reinitialize with new default device
                 InitializeWasapiOut();
 
-                // Don't auto-start - will be started when tone is needed
+                // If NOT aggressive low-latency, restart the stream immediately
+                if (!_aggressiveLowLatency && _wasapiOut != null)
+                {
+                    try
+                    {
+                        _wasapiOut.Play();
+                        _isPlaying = true;
+                        DebugLogger.Log("audio", "WASAPI restarted in always-on mode after device change");
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Log("audio", $"Failed to restart always-on WASAPI stream: {ex.Message}");
+                    }
+                }
+                // Don't auto-start in aggressive mode - will be started when tone is needed
             }
             catch (Exception ex)
             {
@@ -268,13 +308,15 @@ namespace NetKeyer.Audio
                 // Stop the tone (triggers ramp-down in the provider)
                 _sidetoneProvider?.Stop();
 
-                // For straight-key mode: immediately stop WASAPI to minimize latency
+                // For straight-key mode with aggressive latency:
+                // Immediately stop WASAPI to minimize latency
                 // The ramp-down will be cut short, but that's better than 35-45ms delay
-                if (_isPlaying)
+                if (_aggressiveLowLatency && _isPlaying)
                 {
                     _wasapiOut.Stop();
                     _isPlaying = false;
                 }
+                // If NOT aggressive, let the provider ramp down naturally and don't stop WASAPI
             }
             catch (Exception ex)
             {

@@ -4,8 +4,8 @@
         x:Class="NetKeyer.Views.AudioDeviceDialog"
         x:DataType="vm:AudioDeviceDialogViewModel"
         Title="Audio Output Device Selection"
-        Width="500" Height="220"
-        MinWidth="400" MinHeight="180"
+        Width="500" Height="300"
+        MinWidth="400" MinHeight="280"
         WindowStartupLocation="CenterOwner"
         CanResize="false">
 
@@ -44,6 +44,25 @@
                             HorizontalContentAlignment="Center"
                             Padding="6"/>
                 </StackPanel>
+
+                <CheckBox Content="Aggressive Low-Latency Mode (Windows only)"
+                          IsChecked="{Binding AggressiveLowLatency}"
+                          IsVisible="{Binding IsWindowsOnly}"
+                          FontSize="11"
+                          Foreground="Gray"
+                          Margin="0,10,0,0"/>
+                <TextBlock Text="When enabled: Lowest latency, may cause audio artifacts"
+                           FontSize="10"
+                           Foreground="DarkGray"
+                           TextWrapping="Wrap"
+                           Margin="20,3,0,0"
+                           IsVisible="{Binding IsWindowsOnly}"/>
+                <TextBlock Text="When disabled: Higher latency, most compatible"
+                           FontSize="10"
+                           Foreground="DarkGray"
+                           TextWrapping="Wrap"
+                           Margin="20,2,0,0"
+                           IsVisible="{Binding IsWindowsOnly}"/>
             </StackPanel>
         </Border>
 

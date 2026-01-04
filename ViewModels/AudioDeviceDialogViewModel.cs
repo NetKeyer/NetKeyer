@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NetKeyer.Audio;
@@ -16,8 +17,17 @@ namespace NetKeyer.ViewModels
         [ObservableProperty]
         private AudioDeviceInfo _selectedAudioDevice;
 
+        [ObservableProperty]
+        private bool _aggressiveLowLatency = true;
+
+        [ObservableProperty]
+        private bool _isWindowsOnly = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
         public AudioDeviceDialogViewModel()
         {
+            var settings = UserSettings.Load();
+            AggressiveLowLatency = settings.WasapiAggressiveLowLatency;
+
             RefreshAudioDevices();
         }
 
@@ -30,6 +40,11 @@ namespace NetKeyer.ViewModels
         public string GetSelectedDeviceId()
         {
             return SelectedAudioDevice?.DeviceId ?? "";
+        }
+
+        public bool GetAggressiveLowLatency()
+        {
+            return AggressiveLowLatency;
         }
 
         [RelayCommand]
