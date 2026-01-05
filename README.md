@@ -22,7 +22,7 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
   - Paddle swap option
 - **Local Sidetone Generation**:
   - Low latency audio using platform-optimized backends
-  - OpenAL for cross-platform compatibility
+  - PortAudio for cross-platform compatibility
   - WASAPI for Windows
 - **PTT Support**:
   - Supports PTT keying for non-CW modes
