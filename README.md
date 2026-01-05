@@ -10,7 +10,7 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
   - SmartLink remote connection support
   - Sidetone-only practice mode (no radio required)
 - **Multiple Input Device Types**:
-  - Serial port (HaliKey v1/v2, custom hardware)
+  - Serial port (HaliKey v1)
   - MIDI devices (HaliKey MIDI, CTR2, and other MIDI controllers)
   - Configurable MIDI note mappings for paddles, straight key, and PTT
 - **CW Controls**:
@@ -208,54 +208,63 @@ dotnet run
 ```
 NetKeyer/
 ├── Views/                  # XAML UI layouts
-│   ├── MainWindow.axaml
-│   └── MidiConfigDialog.axaml
 ├── ViewModels/             # Application logic and data binding
 │   ├── MainWindowViewModel.cs
-│   └── MidiConfigDialogViewModel.cs
+│   ├── MidiConfigDialogViewModel.cs
+│   ├── AudioDeviceDialogViewModel.cs
+│   └── AboutWindowViewModel.cs
 ├── Models/                 # Data models
 │   ├── UserSettings.cs
-│   └── MidiNoteMapping.cs
+│   ├── MidiNoteMapping.cs
+│   └── AudioDeviceInfo.cs
+├── Services/               # Core application services
+│   ├── InputDeviceManager.cs
+│   ├── KeyingController.cs
+│   ├── RadioSettingsSynchronizer.cs
+│   ├── SmartLinkManager.cs
+│   └── TransmitSliceMonitor.cs
 ├── Audio/                  # Sidetone generation
-│   ├── SidetoneGenerator.cs (OpenAL)
-│   └── WasapiSidetoneGenerator.cs (Windows)
+│   ├── SidetoneGeneratorFactory.cs
+│   └── ISidetoneGenerator.cs
+│   ├── SidetoneGenerator.cs (PortAudio)
+│   ├── WasapiSidetoneGenerator.cs (Windows WASAPI)
+│   ├── SidetoneProvider.cs (waveform generation)
 ├── Midi/                   # MIDI input handling
 │   └── MidiPaddleInput.cs
-├── FlexLib/                # Modified FlexRadio API library
-├── Util/                   # Utility classes
-├── Vita/                   # VITA packet handling
-└── Flex.UiWpfFramework/    # Minimal MVVM framework stub
+├── Keying/                 # Iambic keyer logic
+│   └── IambicKeyer.cs
+├── SmartLink/              # SmartLink authentication
+│   ├── SmartLinkAuthService.cs
+│   ├── SmartLinkModels.cs
+├── Helpers/                # Utility classes
+│   ├── DebugLogger.cs
+│   └── UrlHelper.cs
+├── lib/                    # Compiled FlexRadio libraries
 ```
 
 ### Input Device Support
 
-**Serial Port (HaliKey v1/v2)**:
-- HaliKey v1: CTS (left paddle) + DCD (right paddle)
-- HaliKey v2: RI (left paddle, toggle-based) + DCD (right paddle)
-- Pin state monitoring with debouncing
+**Serial Port (HaliKey v1)**:
+- HaliKey v1: CTS (left paddle) + DSR (right paddle)
 
 **MIDI Devices**:
 - Supports any MIDI controller with configurable note mappings
+    - Tested with HaliKey MIDI and CTR2-MIDI
 - Note On/Off events trigger paddle/key/PTT state changes
-- Mappings stored in user settings for persistence
 
 ### Iambic Keyer Implementation
 
 - Software-based iambic keyer with Mode A and Mode B support
-- Timer-based state machine for accurate dit/dah timing
-- Calculates timing from WPM setting: dit_length = 1200 / WPM
-- Paddle latching for Mode B alternating behavior
+- State machine is based on audio timings
 
 ### Audio Sidetone
 
-**OpenAL Backend** (Linux, macOS, Windows fallback):
-- Cross-platform compatibility
-- Buffer caching for minimal latency
-- Pre-generated waveforms for instant response
-
 **WASAPI Backend** (Windows preferred):
-- 3-5ms latency using shared mode
-- Real-time sine wave generation
+- Lowest latency
+
+**PortAudio Backend**:
+- Cross-platform compatibility for Linux and macOS
+- Supports Windows DirectSound and ASIO in case WASAPI doesn't work for some reason
 
 ### Settings Persistence
 
