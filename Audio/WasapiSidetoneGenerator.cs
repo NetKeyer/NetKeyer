@@ -135,16 +135,14 @@ namespace NetKeyer.Audio
 
         private MMDevice FindDeviceByName(string friendlyName)
         {
-#if WINDOWS
             using var enumerator = new MMDeviceEnumerator();
-            var collection = enumerator.EnumerateAudioEndpoints(DataFlow.Render, DeviceState.Active);
+            var collection = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
 
             foreach (var device in collection)
             {
                 if (device.FriendlyName == friendlyName)
                     return device;
             }
-#endif
             return null;
         }
 
