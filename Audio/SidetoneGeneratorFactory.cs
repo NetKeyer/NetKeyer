@@ -18,23 +18,6 @@ namespace NetKeyer.Audio
         /// <param name="wasapiAggressiveLowLatency">Windows only: if true, use on-demand device open/close for minimum latency; if false, keep device open</param>
         public static ISidetoneGenerator Create(string deviceId = null, bool wasapiAggressiveLowLatency = true)
         {
-            // On Windows, prefer WASAPI for lowest latency
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                try
-                {
-                    DebugLogger.Log("audio", $"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}, aggressiveLowLatency={wasapiAggressiveLowLatency}");
-                    return new WasapiSidetoneGenerator(deviceId, wasapiAggressiveLowLatency);
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log("audio", $"WASAPI initialization failed, falling back to PortAudio: {ex.Message}");
-                    // Fall back to PortAudio if WASAPI fails
-                    return new SidetoneGenerator(deviceId);
-                }
-            }
-
-            // On Linux/macOS, use PortAudio
             DebugLogger.Log("audio", "Initializing PortAudio sidetone generator");
             return new SidetoneGenerator(deviceId);
         }
@@ -45,14 +28,7 @@ namespace NetKeyer.Audio
         /// </summary>
         public static List<(string deviceId, string name)> EnumerateDevices()
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return EnumerateWasapiDevices();
-            }
-            else
-            {
-                return EnumeratePortAudioDevices();
-            }
+            return EnumeratePortAudioDevices();
         }
 
         private static List<(string deviceId, string name)> EnumerateWasapiDevices()
