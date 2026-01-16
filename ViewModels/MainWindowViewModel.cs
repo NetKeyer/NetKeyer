@@ -178,6 +178,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // Mode differentiation properties
     [ObservableProperty]
+    private string _connectedRadioDisplay = "";  // Shows connected radio name
+
+    [ObservableProperty]
     private string _modeDisplay = "Disconnected";  // Combined mode string
 
     [ObservableProperty]
@@ -1324,6 +1327,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Disconnected
             modeStr = "Disconnected";
+            ConnectedRadioDisplay = "";
             LeftPaddleLabelText = "Left Paddle";
             RightPaddleVisible = true;
             ModeInstructions = "";
@@ -1333,6 +1337,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Sidetone-only mode
             modeStr = "Sidetone Only";
+            ConnectedRadioDisplay = "";
             CwSettingsVisible = true;
             ModeInstructions = "";
 
@@ -1354,6 +1359,7 @@ public partial class MainWindowViewModel : ViewModelBase
             string radioMode = txSlice?.DemodMode?.ToUpper() ?? "Unknown";
             modeStr = $"{radioMode} (PTT)";
 
+            ConnectedRadioDisplay = $"{_connectedRadio.Nickname} ({_connectedRadio.Model})";
             LeftPaddleLabelText = "PTT";
             RightPaddleVisible = false;
             CwSettingsVisible = false;
@@ -1362,6 +1368,8 @@ public partial class MainWindowViewModel : ViewModelBase
         else
         {
             // CW mode
+            ConnectedRadioDisplay = $"{_connectedRadio.Nickname} ({_connectedRadio.Model})";
+
             if (IsIambicMode)
             {
                 string iambicType = IsIambicModeB ? "Mode B" : "Mode A";

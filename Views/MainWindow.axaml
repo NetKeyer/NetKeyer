@@ -7,8 +7,8 @@
         x:Class="NetKeyer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="NetKeyer - FlexRadio CW Keyer"
-        Width="600" Height="620"
-        MinWidth="500" MinHeight="520">
+        Width="600" Height="640"
+        MinWidth="500" MinHeight="540">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
@@ -202,9 +202,12 @@
                     <!-- Radio Mode Indicator -->
                     <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding ModeDisplay}"
-                                       FontWeight="Bold"
+                            <TextBlock Text="{Binding ConnectedRadioDisplay}"
                                        FontSize="14"
+                                       HorizontalAlignment="Center"
+                                       IsVisible="{Binding !!ConnectedRadioDisplay}"/>
+                            <TextBlock Text="{Binding ModeDisplay}"
+                                       FontSize="13"
                                        HorizontalAlignment="Center"/>
 
                             <!-- Mode switching instructions (conditional) -->
