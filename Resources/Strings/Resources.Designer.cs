@@ -1316,15 +1316,6 @@ namespace NetKeyer.Resources.Strings {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to Authenticating....
-        /// </summary>
-        public static string SmartLink_AuthenticatingButton {
-            get {
-                return ResourceManager.GetString("SmartLink_AuthenticatingButton", resourceCulture);
-            }
-        }
-
-        /// <summary>
         ///   Looks up a localized string similar to Retry Login.
         /// </summary>
         public static string SmartLink_RetryButton {

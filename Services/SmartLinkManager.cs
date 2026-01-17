@@ -193,7 +193,7 @@ public class SmartLinkManager
                 break;
             case SmartLinkAuthState.Authenticating:
                 status = Res.SmartLink_Status_Authenticating;
-                buttonText = Res.SmartLink_AuthenticatingButton;
+                buttonText = Res.SmartLink_Status_Authenticating;
                 break;
             case SmartLinkAuthState.Authenticated:
                 status = Res.SmartLink_Status_Authenticated;

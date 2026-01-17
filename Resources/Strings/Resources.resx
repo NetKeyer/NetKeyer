@@ -129,9 +129,6 @@
   <data name="SmartLink_LogoutButton" xml:space="preserve">
     <value>Logout from SmartLink</value>
   </data>
-  <data name="SmartLink_AuthenticatingButton" xml:space="preserve">
-    <value>Authenticating...</value>
-  </data>
   <data name="SmartLink_RetryButton" xml:space="preserve">
     <value>Retry Login</value>
   </data>
