@@ -1,9 +1,13 @@
+using System;
+using System.Globalization;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using NetKeyer.Models;
 using NetKeyer.ViewModels;
 using NetKeyer.Views;
 
@@ -13,6 +17,9 @@ public partial class App : Application
 {
     public override void Initialize()
     {
+        // Apply saved language setting before loading XAML
+        ApplySavedLanguage();
+
         AvaloniaXamlLoader.Load(this);
     }
 
@@ -30,6 +37,25 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private void ApplySavedLanguage()
+    {
+        try
+        {
+            var settings = UserSettings.Load();
+            if (!string.IsNullOrEmpty(settings.Language))
+            {
+                var culture = new CultureInfo(settings.Language);
+                Thread.CurrentThread.CurrentUICulture = culture;
+                CultureInfo.DefaultThreadCurrentUICulture = culture;
+            }
+        }
+        catch (Exception ex)
+        {
+            // If language setting is invalid, just use system default
+            Console.WriteLine($"Failed to apply saved language setting: {ex.Message}");
+        }
     }
 
     private void DisableAvaloniaDataAnnotationValidation()

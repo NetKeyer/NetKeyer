@@ -9,6 +9,7 @@ using Velopack;
 using Velopack.Sources;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
+using Res = NetKeyer.Resources.Strings.Resources;
 
 namespace NetKeyer.ViewModels;
 
@@ -41,7 +42,7 @@ public partial class AboutWindowViewModel : ViewModelBase
                 var currentVersion = updateManager.CurrentVersion;
                 if (currentVersion != null)
                 {
-                    return $"Version {currentVersion}";
+                    return string.Format(Res.AboutWindow_Version_Format, currentVersion);
                 }
             }
         }
@@ -57,7 +58,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             var version = assembly.GetName().Version;
             if (version != null)
             {
-                return $"Version {version.Major}.{version.Minor}.{version.Build}";
+                return string.Format(Res.AboutWindow_Version_Format, $"{version.Major}.{version.Minor}.{version.Build}");
             }
         }
         catch
@@ -65,7 +66,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             // If all else fails
         }
 
-        return "Version unknown";
+        return Res.AboutWindow_Version_Unknown;
     }
 
     [RelayCommand]
@@ -74,7 +75,7 @@ public partial class AboutWindowViewModel : ViewModelBase
         try
         {
             IsCheckingForUpdates = true;
-            UpdateStatus = "Checking for updates...";
+            UpdateStatus = Res.AboutWindow_Update_Checking;
 
             DebugLogger.Log("update", "=== Manual update check started ===");
             DebugLogger.Log("update", $"Current time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -93,7 +94,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             if (!mgr.IsInstalled)
             {
                 DebugLogger.Log("update", "App not installed via Velopack - running in development mode");
-                UpdateStatus = "App is not installed via Velopack (running in development mode)";
+                UpdateStatus = Res.AboutWindow_Update_NotInstalled;
                 return;
             }
 
@@ -121,7 +122,7 @@ public partial class AboutWindowViewModel : ViewModelBase
                 DebugLogger.Log("update", $"Task status: {checkTask.Status}");
                 DebugLogger.Log("update", $"Task is completed: {checkTask.IsCompleted}");
                 DebugLogger.Log("update", $"Task is faulted: {checkTask.IsFaulted}");
-                throw new TimeoutException("Update check timed out after 30 seconds. Please check your internet connection and try again.");
+                throw new TimeoutException(Res.AboutWindow_Update_Timeout);
             }
 
             DebugLogger.Log("update", "CheckForUpdatesAsync task completed within timeout");
@@ -133,7 +134,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             if (updateInfo == null)
             {
                 DebugLogger.Log("update", "No updates available - already on latest version");
-                UpdateStatus = "You are running the latest version!";
+                UpdateStatus = Res.AboutWindow_Update_Latest;
                 return;
             }
 
@@ -150,23 +151,23 @@ public partial class AboutWindowViewModel : ViewModelBase
                 DebugLogger.Log("update", $"  Type: {release.Type}");
             }
 
-            UpdateStatus = $"Update available: {updateInfo.TargetFullRelease?.Version}";
+            UpdateStatus = string.Format(Res.AboutWindow_Update_Available, updateInfo.TargetFullRelease?.Version);
 
             DebugLogger.Log("update", "Downloading update...");
-            UpdateStatus = "Downloading update...";
+            UpdateStatus = Res.AboutWindow_Update_Downloading;
 
             await mgr.DownloadUpdatesAsync(updateInfo, progress =>
             {
                 DebugLogger.Log("update", $"Download progress: {progress}%");
-                UpdateStatus = $"Downloading update... {progress}%";
+                UpdateStatus = string.Format(Res.AboutWindow_Update_DownloadingPercent, progress);
             });
 
             DebugLogger.Log("update", "Download complete!");
 
             // Ask user if they want to restart
             var messageBox = MessageBoxManager.GetMessageBoxStandard(
-                "Update Ready",
-                $"Version {updateInfo.TargetFullRelease?.Version} has been downloaded.\n\nWould you like to restart and install it now?",
+                Res.AboutWindow_UpdateDialog_Title,
+                string.Format(Res.AboutWindow_UpdateDialog_Message, updateInfo.TargetFullRelease?.Version),
                 ButtonEnum.YesNo);
 
             var result = await messageBox.ShowWindowDialogAsync(_window);
@@ -174,7 +175,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             if (result == ButtonResult.Yes)
             {
                 DebugLogger.Log("update", "User confirmed restart - applying update...");
-                UpdateStatus = "Restarting to apply update...";
+                UpdateStatus = Res.AboutWindow_Update_Restarting;
 
                 // Apply update and restart
                 mgr.ApplyUpdatesAndRestart(updateInfo);
@@ -182,7 +183,7 @@ public partial class AboutWindowViewModel : ViewModelBase
             else
             {
                 DebugLogger.Log("update", "User postponed update installation");
-                UpdateStatus = "Update downloaded - restart app to install";
+                UpdateStatus = Res.AboutWindow_Update_Downloaded;
             }
         }
         catch (Exception ex)
@@ -201,11 +202,11 @@ public partial class AboutWindowViewModel : ViewModelBase
                 DebugLogger.Log("update", ex.InnerException.StackTrace ?? "(no stack trace)");
             }
 
-            UpdateStatus = $"Update check failed: {ex.Message}";
+            UpdateStatus = string.Format(Res.AboutWindow_Update_Failed, ex.Message);
 
             var errorBox = MessageBoxManager.GetMessageBoxStandard(
-                "Update Check Failed",
-                $"Failed to check for updates:\n\n{ex.Message}\n\nCheck the debug log for more details.",
+                Res.AboutWindow_UpdateDialog_FailedTitle,
+                string.Format(Res.AboutWindow_UpdateDialog_FailedMessage, ex.Message),
                 ButtonEnum.Ok);
 
             await errorBox.ShowWindowDialogAsync(_window);

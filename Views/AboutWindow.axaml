@@ -3,10 +3,11 @@
         xmlns:vm="using:NetKeyer.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:NetKeyer.Resources.Strings"
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="330"
         x:Class="NetKeyer.Views.AboutWindow"
         x:DataType="vm:AboutWindowViewModel"
-        Title="About NetKeyer"
+        Title="{x:Static res:Resources.AboutWindow_Title}"
         Width="400" Height="330"
         MinWidth="400" MinHeight="330"
         MaxWidth="400" MaxHeight="330"
@@ -20,7 +21,7 @@
     <StackPanel Margin="20" Spacing="15" VerticalAlignment="Center">
 
         <!-- Application Name -->
-        <TextBlock Text="NetKeyer"
+        <TextBlock Text="{x:Static res:Resources.AboutWindow_AppName}"
                    FontSize="24"
                    FontWeight="Bold"
                    HorizontalAlignment="Center"/>
@@ -32,7 +33,7 @@
                    Foreground="Gray"/>
 
         <!-- Credits -->
-        <TextBlock Text="by Andrew KC2G and NetKeyer contributors"
+        <TextBlock Text="{x:Static res:Resources.AboutWindow_Credits}"
                    FontSize="12"
                    HorizontalAlignment="Center"
                    TextWrapping="Wrap"
@@ -64,7 +65,7 @@
                    Margin="0,5,0,0"/>
 
         <!-- Check for Updates Button -->
-        <Button Content="Check for Updates"
+        <Button Content="{x:Static res:Resources.AboutWindow_CheckForUpdates}"
                 Command="{Binding CheckForUpdatesCommand}"
                 HorizontalAlignment="Center"
                 HorizontalContentAlignment="Center"
@@ -73,7 +74,7 @@
                 Margin="0,5,0,0"/>
 
         <!-- Close Button -->
-        <Button Content="Close"
+        <Button Content="{x:Static res:Resources.AboutWindow_Close}"
                 Command="{Binding CloseCommand}"
                 HorizontalAlignment="Center"
                 HorizontalContentAlignment="Center"

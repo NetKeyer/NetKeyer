@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NetKeyer.ViewModels"
+        xmlns:res="clr-namespace:NetKeyer.Resources.Strings"
         x:Class="NetKeyer.Views.MidiConfigDialog"
         x:DataType="vm:MidiConfigDialogViewModel"
-        Title="MIDI Note Configuration"
+        Title="{x:Static res:Resources.MidiConfig_Title}"
         Width="650" Height="550"
         MinWidth="650" MinHeight="450"
         WindowStartupLocation="CenterOwner"
@@ -13,10 +14,10 @@
 
         <!-- Title and Instructions -->
         <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,15">
-            <TextBlock Text="MIDI Note Configuration"
+            <TextBlock Text="{x:Static res:Resources.MidiConfig_Title}"
                        FontSize="18"
                        FontWeight="Bold"/>
-            <TextBlock Text="Assign MIDI notes (0-127) to one or more functions. Multiple functions can be assigned to the same note."
+            <TextBlock Text="{x:Static res:Resources.MidiConfig_Instructions}"
                        FontSize="12"
                        Foreground="Gray"
                        TextWrapping="Wrap"/>
@@ -31,7 +32,7 @@
                 Margin="0,0,0,10">
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Add Note:"
+                    <TextBlock Text="{x:Static res:Resources.MidiConfig_AddNote}"
                                VerticalAlignment="Center"
                                FontWeight="SemiBold"/>
                     <NumericUpDown Value="{Binding SelectedNoteNumber}"
@@ -42,12 +43,12 @@
                                    FormatString="0"
                                    AllowSpin="True"
                                    ParsingNumberStyle="Integer"/>
-                    <Button Content="Add"
+                    <Button Content="{x:Static res:Resources.MidiConfig_Add}"
                             Command="{Binding AddNoteCommand}"
                             Width="60"
                             HorizontalContentAlignment="Center"
                             Padding="5"/>
-                    <TextBlock Text="(MIDI note 0-127)"
+                    <TextBlock Text="{x:Static res:Resources.MidiConfig_NoteRange}"
                                VerticalAlignment="Center"
                                FontSize="11"
                                Foreground="Gray"/>
@@ -73,12 +74,12 @@
                             Background="#F5F5F5"
                             Padding="8,6">
                         <Grid ColumnDefinitions="70,90,90,90,90,60">
-                            <TextBlock Grid.Column="0" HorizontalAlignment="Center" Text="Note #" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="1" HorizontalAlignment="Center" Text="Left Paddle" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="2" HorizontalAlignment="Center" Text="Right Paddle" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="3" HorizontalAlignment="Center" Text="Straight Key" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="4" HorizontalAlignment="Center" Text="PTT" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="5" HorizontalAlignment="Center" Text="Remove" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="0" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_NoteNumber}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="1" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_LeftPaddle}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="2" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_RightPaddle}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="3" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_StraightKey}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="4" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_PTT}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="5" HorizontalAlignment="Center" Text="{x:Static res:Resources.MidiConfig_Remove}" FontWeight="Bold" FontSize="12"/>
                         </Grid>
                     </Border>
 
@@ -136,11 +137,11 @@
                 CornerRadius="3"
                 Margin="0,10,0,0">
             <StackPanel Spacing="4">
-                <TextBlock FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3">Function Descriptions:</TextBlock>
-                <TextBlock FontSize="10" Foreground="#444">• Left Paddle: Used as dit paddle in iambic mode</TextBlock>
-                <TextBlock FontSize="10" Foreground="#444">• Right Paddle: Used as dah paddle in iambic mode</TextBlock>
-                <TextBlock FontSize="10" Foreground="#444">• Straight Key: Key down/up in straight key mode</TextBlock>
-                <TextBlock FontSize="10" Foreground="#444">• PTT: Push-to-talk for non-CW modes</TextBlock>
+                <TextBlock Text="{x:Static res:Resources.MidiConfig_FunctionDescriptions}" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                <TextBlock FontSize="10" Foreground="#444">• <Run Text="{x:Static res:Resources.MidiConfig_LeftPaddleDesc}"/></TextBlock>
+                <TextBlock FontSize="10" Foreground="#444">• <Run Text="{x:Static res:Resources.MidiConfig_RightPaddleDesc}"/></TextBlock>
+                <TextBlock FontSize="10" Foreground="#444">• <Run Text="{x:Static res:Resources.MidiConfig_StraightKeyDesc}"/></TextBlock>
+                <TextBlock FontSize="10" Foreground="#444">• <Run Text="{x:Static res:Resources.MidiConfig_PTTDesc}"/></TextBlock>
             </StackPanel>
         </Border>
 
@@ -150,19 +151,19 @@
                     HorizontalAlignment="Right"
                     Spacing="10"
                     Margin="0,15,0,0">
-            <Button Content="Reset to Defaults"
+            <Button Content="{x:Static res:Resources.MidiConfig_ResetToDefaults}"
                     Command="{Binding ResetToDefaultsCommand}"
                     Width="130"
                     HorizontalContentAlignment="Center"
                     Padding="6"/>
             <Button Name="CancelButton"
-                    Content="Cancel"
+                    Content="{x:Static res:Resources.MidiConfig_Cancel}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
             <Button Name="OkButton"
-                    Content="OK"
+                    Content="{x:Static res:Resources.MidiConfig_OK}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"
