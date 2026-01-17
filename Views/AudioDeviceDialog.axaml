@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NetKeyer.ViewModels"
+        xmlns:res="clr-namespace:NetKeyer.Resources.Strings"
         x:Class="NetKeyer.Views.AudioDeviceDialog"
         x:DataType="vm:AudioDeviceDialogViewModel"
-        Title="Audio Output Device Selection"
+        Title="{x:Static res:Resources.AudioDevice_Title}"
         Width="500" Height="350"
         MinWidth="400" MinHeight="230"
         WindowStartupLocation="CenterOwner"
@@ -13,10 +14,10 @@
 
         <!-- Title and Instructions -->
         <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,15">
-            <TextBlock Text="Audio Output Device Selection"
+            <TextBlock Text="{x:Static res:Resources.AudioDevice_Title}"
                        FontSize="18"
                        FontWeight="Bold"/>
-            <TextBlock Text="Select the audio output device for sidetone. Changes take effect immediately."
+            <TextBlock Text="{x:Static res:Resources.AudioDevice_Instructions}"
                        FontSize="12"
                        Foreground="Gray"
                        TextWrapping="Wrap"/>
@@ -29,7 +30,7 @@
                 Padding="12"
                 CornerRadius="3">
             <StackPanel Spacing="10">
-                <TextBlock Text="Audio Output Device:"
+                <TextBlock Text="{x:Static res:Resources.AudioDevice_Label}"
                            FontWeight="SemiBold"
                            FontSize="13"/>
 
@@ -37,27 +38,27 @@
                     <ComboBox ItemsSource="{Binding AudioDevices}"
                               SelectedItem="{Binding SelectedAudioDevice}"
                               Width="320"
-                              PlaceholderText="Select an audio device..."/>
-                    <Button Content="Refresh"
+                              PlaceholderText="{x:Static res:Resources.AudioDevice_Placeholder}"/>
+                    <Button Content="{x:Static res:Resources.AudioDevice_Refresh}"
                             Command="{Binding RefreshAudioDevicesCommand}"
                             Width="80"
                             HorizontalContentAlignment="Center"
                             Padding="6"/>
                 </StackPanel>
 
-                <CheckBox Content="Aggressive Low-Latency Mode (Windows only)"
+                <CheckBox Content="{x:Static res:Resources.AudioDevice_AggressiveLowLatency}"
                           IsChecked="{Binding AggressiveLowLatency}"
                           IsVisible="{Binding IsWindowsOnly}"
                           FontSize="11"
                           Foreground="Gray"
                           Margin="0,10,0,0"/>
-                <TextBlock Text="When enabled: Lowest latency, may cause audio artifacts"
+                <TextBlock Text="{x:Static res:Resources.AudioDevice_AggressiveEnabled}"
                            FontSize="10"
                            Foreground="DarkGray"
                            TextWrapping="Wrap"
                            Margin="20,3,0,0"
                            IsVisible="{Binding IsWindowsOnly}"/>
-                <TextBlock Text="When disabled: Higher latency, most compatible"
+                <TextBlock Text="{x:Static res:Resources.AudioDevice_AggressiveDisabled}"
                            FontSize="10"
                            Foreground="DarkGray"
                            TextWrapping="Wrap"
@@ -73,13 +74,13 @@
                     Spacing="10"
                     Margin="0,15,0,0">
             <Button Name="CancelButton"
-                    Content="Cancel"
+                    Content="{x:Static res:Resources.AudioDevice_Cancel}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
             <Button Name="OkButton"
-                    Content="OK"
+                    Content="{x:Static res:Resources.AudioDevice_OK}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"

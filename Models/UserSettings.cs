@@ -29,6 +29,9 @@ namespace NetKeyer.Models
         public string SmartLinkClientId { get; set; }
         public bool RememberMeSmartLink { get; set; } = true;
 
+        // Language setting (empty string = system default)
+        public string Language { get; set; } = "";
+
         // Stored encrypted in the file (Base64)
         public string SmartLinkRefreshTokenEncrypted { get; set; }
 

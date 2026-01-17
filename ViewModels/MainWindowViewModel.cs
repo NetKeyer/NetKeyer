@@ -20,6 +20,7 @@ using NetKeyer.Models;
 using NetKeyer.Services;
 using NetKeyer.SmartLink;
 using PortAudioSharp;
+using Res = NetKeyer.Resources.Strings.Resources;
 
 namespace NetKeyer.ViewModels;
 
@@ -106,7 +107,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _hasRadioError = false;
 
     [ObservableProperty]
-    private string _connectButtonText = "Connect";
+    private string _connectButtonText = "";
+
+    // Initializer for ConnectButtonText will be set in constructor
 
     [ObservableProperty]
     private int _cwSpeed = 20;
@@ -171,7 +174,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _smartLinkAuthenticated = false;
 
     [ObservableProperty]
-    private string _smartLinkStatus = "Not connected";
+    private string _smartLinkStatus = "";
 
     [ObservableProperty]
     private string _smartLinkButtonText = "Login to SmartLink";
@@ -181,7 +184,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _connectedRadioDisplay = "";  // Shows connected radio name
 
     [ObservableProperty]
-    private string _modeDisplay = "Disconnected";  // Combined mode string
+    private string _modeDisplay = "";  // Combined mode string, initialized in constructor
 
     [ObservableProperty]
     private string _modeInstructions = "";  // Instructions for mode switching
@@ -190,7 +193,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _cwSettingsVisible = true;  // Control CW settings visibility
 
     [ObservableProperty]
-    private string _leftPaddleLabelText = "Left Paddle";  // Dynamic left label
+    private string _leftPaddleLabelText = "";  // Dynamic left label, initialized in constructor
 
     [ObservableProperty]
     private bool _rightPaddleVisible = true;  // Hide right paddle when appropriate
@@ -199,6 +202,14 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         // Load user settings
         _settings = UserSettings.Load();
+
+        // Initialize localized strings
+        _connectButtonText = Res.Button_Connect;
+        _smartLinkStatus = Res.SmartLink_Status_NotConnected;
+        _modeDisplay = Res.Mode_Disconnected;
+        _leftPaddleLabelText = Res.KeyStatus_LeftPaddle;
+        _leftPaddleStateText = Res.KeyStatus_Off;
+        _rightPaddleStateText = Res.KeyStatus_Off;
 
         // Initialize SmartLink support
         _smartLinkManager = new SmartLinkManager(_settings);
@@ -403,7 +414,7 @@ public partial class MainWindowViewModel : ViewModelBase
         UpdatePaddleLabels();
     }
 
-    private const string SIDETONE_ONLY_OPTION = "No radio (sidetone only)";
+    private static string SIDETONE_ONLY_OPTION => Res.RadioSelection_SidetoneOnly;
 
     [RelayCommand]
     private void RefreshRadios()
@@ -783,8 +794,8 @@ public partial class MainWindowViewModel : ViewModelBase
         // Reset indicators
         LeftPaddleIndicatorColor = Brushes.Black;
         RightPaddleIndicatorColor = Brushes.Black;
-        LeftPaddleStateText = "OFF";
-        RightPaddleStateText = "OFF";
+        LeftPaddleStateText = Res.KeyStatus_Off;
+        RightPaddleStateText = Res.KeyStatus_Off;
     }
 
     private void OpenInputDevice()
@@ -845,9 +856,9 @@ public partial class MainWindowViewModel : ViewModelBase
             DebugLogger.Log("input", $"[Indicator Update] IsIambic={IsIambicMode} IsCW={_transmitSliceMonitor.IsTransmitModeCW} Sidetone={_isSidetoneOnlyMode} | L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState} | LeftInd={leftIndicatorState}");
 
             LeftPaddleIndicatorColor = leftIndicatorState ? Brushes.LimeGreen : Brushes.Black;
-            LeftPaddleStateText = leftIndicatorState ? "ON" : "OFF";
+            LeftPaddleStateText = leftIndicatorState ? Res.KeyStatus_On : Res.KeyStatus_Off;
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
-            RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
+            RightPaddleStateText = rightPaddleState ? Res.KeyStatus_On : Res.KeyStatus_Off;
         });
 
         // Delegate keying logic to KeyingController
@@ -873,7 +884,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Sidetone-only mode - no radio connection
                 _isSidetoneOnlyMode = true;
                 _connectedRadio = null;
-                ConnectButtonText = "Disconnect";
+                ConnectButtonText = Res.Button_Disconnect;
                 HasRadioError = false;
 
                 // Set keying controller to sidetone-only mode
@@ -906,7 +917,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // Connect to real radio
             if (SelectedRadioClient == null || SelectedRadioClient.Radio == null)
             {
-                RadioStatus = "No radio/client selected";
+                RadioStatus = Res.RadioSelection_Error_NoRadioSelected;
                 RadioStatusColor = Brushes.Orange;
                 HasRadioError = true;
                 return;
@@ -914,7 +925,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (SelectedRadioClient.GuiClient == null)
             {
-                RadioStatus = "No station available";
+                RadioStatus = Res.RadioSelection_Error_NoStationAvailable;
                 RadioStatusColor = Brushes.Orange;
                 HasRadioError = true;
                 return;
@@ -929,7 +940,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 if (_smartLinkManager?.WanServer == null || !_smartLinkManager.WanServer.IsConnected)
                 {
-                    RadioStatus = "Not connected to SmartLink server";
+                    RadioStatus = Res.RadioSelection_Error_NotConnectedToServer;
                     RadioStatusColor = Brushes.Red;
                     HasRadioError = true;
                     _connectedRadio = null;
@@ -937,12 +948,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
 
                 // Request connection to this radio
-                RadioStatus = "Requesting SmartLink connection...";
+                RadioStatus = Res.RadioSelection_Error_RequestingConnection;
                 var result = _smartLinkManager.RequestWanConnectionAsync(_connectedRadio.Serial, 10000).Result;
 
                 if (!result.Success)
                 {
-                    RadioStatus = "SmartLink connection request timed out";
+                    RadioStatus = Res.RadioSelection_Error_ConnectionTimeout;
                     RadioStatusColor = Brushes.Red;
                     HasRadioError = true;
                     _connectedRadio = null;
@@ -953,14 +964,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 if (string.IsNullOrEmpty(_connectedRadio.WANConnectionHandle))
                 {
-                    RadioStatus = "Failed to get SmartLink connection handle";
+                    RadioStatus = Res.RadioSelection_Error_NoConnectionHandle;
                     RadioStatusColor = Brushes.Red;
                     HasRadioError = true;
                     _connectedRadio = null;
                     return;
                 }
 
-                RadioStatus = "Connecting to radio via SmartLink...";
+                RadioStatus = Res.RadioSelection_Error_ConnectingViaSmartLink;
             }
 
             // Now connect to the radio (works for both LAN and WAN)
@@ -968,7 +979,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (!connectResult)
             {
-                RadioStatus = "Failed to connect to radio";
+                RadioStatus = Res.RadioSelection_Error_FailedToConnect;
                 RadioStatusColor = Brushes.Red;
                 HasRadioError = true;
                 _connectedRadio = null;
@@ -985,7 +996,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (updatedGuiClient == null)
             {
-                RadioStatus = "Failed to find station after connection";
+                RadioStatus = Res.RadioSelection_Error_StationNotFound;
                 RadioStatusColor = Brushes.Red;
                 HasRadioError = true;
                 _connectedRadio.Disconnect();
@@ -996,7 +1007,7 @@ public partial class MainWindowViewModel : ViewModelBase
             string clientId = updatedGuiClient.ClientID;
             if (string.IsNullOrEmpty(clientId))
             {
-                RadioStatus = "Client UUID not available - binding may fail";
+                RadioStatus = Res.RadioSelection_Error_UuidNotAvailable;
                 RadioStatusColor = Brushes.Orange;
                 HasRadioError = true;
             }
@@ -1009,7 +1020,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // Bind to the selected station using its UUID
             _connectedRadio.BindGUIClient(clientId);
             _boundGuiClientHandle = targetClientHandle;
-            ConnectButtonText = "Disconnect";
+            ConnectButtonText = Res.Button_Disconnect;
 
             // Reinitialize keying controller with the correct radio client handle
             _keyingController = new KeyingController(_sidetoneGenerator);
@@ -1078,8 +1089,8 @@ public partial class MainWindowViewModel : ViewModelBase
             // Reset paddle indicators to OFF state
             LeftPaddleIndicatorColor = Brushes.Black;
             RightPaddleIndicatorColor = Brushes.Black;
-            LeftPaddleStateText = "OFF";
-            RightPaddleStateText = "OFF";
+            LeftPaddleStateText = Res.KeyStatus_Off;
+            RightPaddleStateText = Res.KeyStatus_Off;
 
             // Unsubscribe from radio property changes
             if (_connectedRadio != null)
@@ -1104,7 +1115,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Clear any error status on manual disconnect
             HasRadioError = false;
-            ConnectButtonText = "Connect";
+            ConnectButtonText = Res.Button_Connect;
 
             // Reset selection state
             _currentUserSelection = null;
@@ -1265,10 +1276,10 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_connectedRadio == radio)
         {
             _connectedRadio = null;
-            RadioStatus = "Disconnected (radio removed)";
+            RadioStatus = Res.RadioSelection_Disconnected_RadioRemoved;
             RadioStatusColor = Brushes.Red;
             HasRadioError = true;
-            ConnectButtonText = "Connect";
+            ConnectButtonText = Res.Button_Connect;
         }
     }
 
@@ -1326,9 +1337,9 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_connectedRadio == null && !_isSidetoneOnlyMode)
         {
             // Disconnected
-            modeStr = "Disconnected";
+            modeStr = Res.Mode_Disconnected;
             ConnectedRadioDisplay = "";
-            LeftPaddleLabelText = "Left Paddle";
+            LeftPaddleLabelText = Res.KeyStatus_LeftPaddle;
             RightPaddleVisible = true;
             ModeInstructions = "";
             CwSettingsVisible = true;
@@ -1336,19 +1347,19 @@ public partial class MainWindowViewModel : ViewModelBase
         else if (_isSidetoneOnlyMode)
         {
             // Sidetone-only mode
-            modeStr = "Sidetone Only";
+            modeStr = Res.Mode_SidetoneOnly;
             ConnectedRadioDisplay = "";
             CwSettingsVisible = true;
             ModeInstructions = "";
 
             if (IsIambicMode)
             {
-                LeftPaddleLabelText = "Left Paddle";
+                LeftPaddleLabelText = Res.KeyStatus_LeftPaddle;
                 RightPaddleVisible = true;
             }
             else
             {
-                LeftPaddleLabelText = "Key";
+                LeftPaddleLabelText = Res.KeyStatus_Key;
                 RightPaddleVisible = false;
             }
         }
@@ -1356,14 +1367,14 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // PTT mode (non-CW radio modes)
             var txSlice = _transmitSliceMonitor.TransmitSlice;
-            string radioMode = txSlice?.DemodMode?.ToUpper() ?? "Unknown";
-            modeStr = $"{radioMode} (PTT)";
+            string radioMode = txSlice?.DemodMode?.ToUpper() ?? Res.Mode_PTT_Unknown;
+            modeStr = string.Format(Res.Mode_PTT_Format, radioMode);
 
             ConnectedRadioDisplay = $"{_connectedRadio.Nickname} ({_connectedRadio.Model})";
-            LeftPaddleLabelText = "PTT";
+            LeftPaddleLabelText = Res.KeyStatus_PTT;
             RightPaddleVisible = false;
             CwSettingsVisible = false;
-            ModeInstructions = $"Switch radio to CW mode to activate CW keying";
+            ModeInstructions = Res.Mode_SwitchToCW;
         }
         else
         {
@@ -1372,15 +1383,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (IsIambicMode)
             {
-                string iambicType = IsIambicModeB ? "Mode B" : "Mode A";
-                modeStr = $"CW (Iambic {iambicType})";
-                LeftPaddleLabelText = "Left Paddle";
+                modeStr = IsIambicModeB ? Res.Mode_CW_IambicModeB : Res.Mode_CW_IambicModeA;
+                LeftPaddleLabelText = Res.KeyStatus_LeftPaddle;
                 RightPaddleVisible = true;
             }
             else
             {
-                modeStr = "CW (Straight Key)";
-                LeftPaddleLabelText = "Key";
+                modeStr = Res.Mode_CW_StraightKey;
+                LeftPaddleLabelText = Res.KeyStatus_Key;
                 RightPaddleVisible = false;
             }
 
@@ -1533,7 +1543,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         Dispatcher.UIThread.Post(() =>
         {
-            SmartLinkStatus = "Registration invalid - please log in again";
+            SmartLinkStatus = Res.SmartLink_Status_RegistrationInvalid;
         });
     }
 
@@ -1548,7 +1558,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!SmartLinkAvailable)
         {
-            SmartLinkStatus = "SmartLink not available - no client_id configured";
+            SmartLinkStatus = Res.SmartLink_Status_NotAvailable;
             return;
         }
 
@@ -1583,7 +1593,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (mainWindow == null)
         {
-            SmartLinkStatus = "Failed to show login dialog";
+            SmartLinkStatus = Res.RadioSelection_ShowDialogFailed;
             return;
         }
 
@@ -1599,17 +1609,17 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.Save();
 
             // Attempt login
-            SmartLinkStatus = "Authenticating...";
+            SmartLinkStatus = Res.SmartLink_Status_Authenticating;
             var success = await _smartLinkManager.LoginAsync(username, password);
 
             if (!success)
             {
-                SmartLinkStatus = "Login failed - check credentials";
+                SmartLinkStatus = Res.RadioSelection_LoginFailed;
             }
         }
         else
         {
-            SmartLinkStatus = "Login cancelled";
+            SmartLinkStatus = Res.RadioSelection_LoginCancelled;
         }
     }
 

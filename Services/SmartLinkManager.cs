@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Models;
 using NetKeyer.SmartLink;
+using Res = NetKeyer.Resources.Strings.Resources;
 
 namespace NetKeyer.Services;
 
@@ -57,7 +58,7 @@ public class SmartLinkManager
 
         if (!IsAvailable)
         {
-            RaiseStatusChanged("No client_id configured", false, "Login to SmartLink");
+            RaiseStatusChanged(Res.SmartLink_Status_NoClientId, false, Res.SmartLink_LoginButton);
             return;
         }
 
@@ -121,11 +122,11 @@ public class SmartLinkManager
                 var platform = Environment.OSVersion.Platform.ToString();
                 _wanServer.SendRegisterApplicationMessageToServer("NetKeyer", platform, token);
 
-                RaiseStatusChanged("Connected to SmartLink", IsAuthenticated, GetButtonText());
+                RaiseStatusChanged(Res.SmartLink_Status_ConnectedToServer, IsAuthenticated, GetButtonText());
             }
             else
             {
-                RaiseStatusChanged("Failed to connect to SmartLink server", IsAuthenticated, GetButtonText());
+                RaiseStatusChanged(Res.SmartLink_Status_FailedToConnect, IsAuthenticated, GetButtonText());
             }
         }
 
@@ -187,16 +188,16 @@ public class SmartLinkManager
         switch (state)
         {
             case SmartLinkAuthState.NotAuthenticated:
-                status = "Not logged in";
-                buttonText = "Login to SmartLink";
+                status = Res.SmartLink_Status_NotLoggedIn;
+                buttonText = Res.SmartLink_LoginButton;
                 break;
             case SmartLinkAuthState.Authenticating:
-                status = "Authenticating...";
-                buttonText = "Authenticating...";
+                status = Res.SmartLink_Status_Authenticating;
+                buttonText = Res.SmartLink_AuthenticatingButton;
                 break;
             case SmartLinkAuthState.Authenticated:
-                status = "Authenticated";
-                buttonText = "Logout from SmartLink";
+                status = Res.SmartLink_Status_Authenticated;
+                buttonText = Res.SmartLink_LogoutButton;
 
                 // Save refresh token only if Remember Me is enabled
                 if (_settings.RememberMeSmartLink)
@@ -216,12 +217,12 @@ public class SmartLinkManager
                 }
                 break;
             case SmartLinkAuthState.Error:
-                status = "Authentication error";
-                buttonText = "Retry Login";
+                status = Res.SmartLink_Status_AuthenticationError;
+                buttonText = Res.SmartLink_RetryButton;
                 break;
             default:
-                status = "Unknown state";
-                buttonText = "Login to SmartLink";
+                status = Res.SmartLink_Status_UnknownState;
+                buttonText = Res.SmartLink_LoginButton;
                 break;
         }
 
@@ -232,7 +233,7 @@ public class SmartLinkManager
     {
         Console.WriteLine($"SmartLink error: {error}");
         ErrorOccurred?.Invoke(this, error);
-        RaiseStatusChanged($"Error: {error}", IsAuthenticated, GetButtonText());
+        RaiseStatusChanged(string.Format(Res.SmartLink_Error_Prefix, error), IsAuthenticated, GetButtonText());
     }
 
     private void WanServer_WanRadioListReceived(List<Radio> radios)
@@ -254,7 +255,7 @@ public class SmartLinkManager
         // Disconnect from WAN server
         _wanServer?.Disconnect();
 
-        RaiseStatusChanged("Registration invalid - please log in again", false, "Login to SmartLink");
+        RaiseStatusChanged(Res.SmartLink_Status_RegistrationInvalid, false, Res.SmartLink_LoginButton);
         RegistrationInvalid?.Invoke(this, EventArgs.Empty);
     }
 
@@ -279,7 +280,7 @@ public class SmartLinkManager
 
     private string GetButtonText()
     {
-        return IsAuthenticated ? "Logout from SmartLink" : "Login to SmartLink";
+        return IsAuthenticated ? Res.SmartLink_LogoutButton : Res.SmartLink_LoginButton;
     }
 
     public string GetIdToken()
