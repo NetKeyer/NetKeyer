@@ -1,0 +1,584 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" id="root">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string"/>
+              <xsd:attribute name="type" type="xsd:string"/>
+              <xsd:attribute name="mimetype" type="xsd:string"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string"/>
+              <xsd:attribute name="name" type="xsd:string"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="0"/>
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3"/>
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required"/>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <!-- MainWindow Title -->
+  <data name="MainWindow_Title" xml:space="preserve">
+    <value>NetKeyer - FlexRadio CW Keyer</value>
+  </data>
+  <!-- MainWindow Menu -->
+  <data name="Menu_File" xml:space="preserve">
+    <value>_File</value>
+  </data>
+  <data name="Menu_File_Exit" xml:space="preserve">
+    <value>E_xit</value>
+  </data>
+  <data name="Menu_Settings" xml:space="preserve">
+    <value>_Settings</value>
+  </data>
+  <data name="Menu_Settings_AudioDevice" xml:space="preserve">
+    <value>_Audio Output Device...</value>
+  </data>
+  <data name="Menu_Settings_MidiMapping" xml:space="preserve">
+    <value>_MIDI Note Mapping...</value>
+  </data>
+  <data name="Menu_Help" xml:space="preserve">
+    <value>_Help</value>
+  </data>
+  <data name="Menu_Help_Documentation" xml:space="preserve">
+    <value>_Documentation</value>
+  </data>
+  <data name="Menu_Help_ViewDebugLog" xml:space="preserve">
+    <value>_View Debug Log...</value>
+  </data>
+  <data name="Menu_Help_About" xml:space="preserve">
+    <value>_About NetKeyer...</value>
+  </data>
+  <!-- macOS Menu (without underscore accelerators) -->
+  <data name="MacMenu_File" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="MacMenu_Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="MacMenu_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="MacMenu_AudioDevice" xml:space="preserve">
+    <value>Audio Output Device...</value>
+  </data>
+  <data name="MacMenu_MidiMapping" xml:space="preserve">
+    <value>MIDI Note Mapping...</value>
+  </data>
+  <data name="MacMenu_Help" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="MacMenu_Documentation" xml:space="preserve">
+    <value>Documentation</value>
+  </data>
+  <data name="MacMenu_About" xml:space="preserve">
+    <value>About NetKeyer...</value>
+  </data>
+  <!-- SmartLink Section -->
+  <data name="SmartLink_Title" xml:space="preserve">
+    <value>SmartLink</value>
+  </data>
+  <data name="SmartLink_LoginButton" xml:space="preserve">
+    <value>Login to SmartLink</value>
+  </data>
+  <data name="SmartLink_LogoutButton" xml:space="preserve">
+    <value>Logout from SmartLink</value>
+  </data>
+  <data name="SmartLink_AuthenticatingButton" xml:space="preserve">
+    <value>Authenticating...</value>
+  </data>
+  <data name="SmartLink_RetryButton" xml:space="preserve">
+    <value>Retry Login</value>
+  </data>
+  <data name="SmartLink_Status_NotConnected" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="SmartLink_Status_NotLoggedIn" xml:space="preserve">
+    <value>Not logged in</value>
+  </data>
+  <data name="SmartLink_Status_Authenticating" xml:space="preserve">
+    <value>Authenticating...</value>
+  </data>
+  <data name="SmartLink_Status_Authenticated" xml:space="preserve">
+    <value>Authenticated</value>
+  </data>
+  <data name="SmartLink_Status_AuthenticationError" xml:space="preserve">
+    <value>Authentication error</value>
+  </data>
+  <data name="SmartLink_Status_UnknownState" xml:space="preserve">
+    <value>Unknown state</value>
+  </data>
+  <data name="SmartLink_Status_ConnectedToServer" xml:space="preserve">
+    <value>Connected to SmartLink</value>
+  </data>
+  <data name="SmartLink_Status_FailedToConnect" xml:space="preserve">
+    <value>Failed to connect to SmartLink server</value>
+  </data>
+  <data name="SmartLink_Status_RegistrationInvalid" xml:space="preserve">
+    <value>Registration invalid - please log in again</value>
+  </data>
+  <data name="SmartLink_Status_NoClientId" xml:space="preserve">
+    <value>No client_id configured</value>
+  </data>
+  <data name="SmartLink_Status_NotAvailable" xml:space="preserve">
+    <value>SmartLink not available - no client_id configured</value>
+  </data>
+  <data name="SmartLink_Error_Prefix" xml:space="preserve">
+    <value>Error: {0}</value>
+    <comment>{0} is the error message</comment>
+  </data>
+  <!-- Radio Selection Section -->
+  <data name="RadioSelection_Title" xml:space="preserve">
+    <value>Radio Selection</value>
+  </data>
+  <data name="RadioSelection_Placeholder" xml:space="preserve">
+    <value>Select a radio and station...</value>
+  </data>
+  <data name="RadioSelection_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="RadioSelection_SidetoneOnly" xml:space="preserve">
+    <value>No radio (sidetone only)</value>
+  </data>
+  <data name="RadioSelection_NoStations" xml:space="preserve">
+    <value>No Stations</value>
+  </data>
+  <data name="RadioSelection_Format_LocalRadio" xml:space="preserve">
+    <value>{0} ({1}) - {2} [{3}]</value>
+    <comment>{0}=Nickname, {1}=Model, {2}=Station, {3}=Program</comment>
+  </data>
+  <data name="RadioSelection_Format_LocalRadioNoStation" xml:space="preserve">
+    <value>{0} ({1}) - No Stations</value>
+    <comment>{0}=Nickname, {1}=Model</comment>
+  </data>
+  <data name="RadioSelection_Format_SmartLinkRadio" xml:space="preserve">
+    <value>[SmartLink] {0} ({1}) - {2} [{3}]</value>
+    <comment>{0}=Nickname, {1}=Model, {2}=Station, {3}=Program</comment>
+  </data>
+  <data name="RadioSelection_Format_SmartLinkRadioNoStation" xml:space="preserve">
+    <value>[SmartLink] {0} ({1}) - No Stations</value>
+    <comment>{0}=Nickname, {1}=Model</comment>
+  </data>
+  <data name="RadioSelection_Error_NoRadioSelected" xml:space="preserve">
+    <value>No radio/client selected</value>
+  </data>
+  <data name="RadioSelection_Error_NoStationAvailable" xml:space="preserve">
+    <value>No station available</value>
+  </data>
+  <data name="RadioSelection_Error_NotConnectedToServer" xml:space="preserve">
+    <value>Not connected to SmartLink server</value>
+  </data>
+  <data name="RadioSelection_Error_RequestingConnection" xml:space="preserve">
+    <value>Requesting SmartLink connection...</value>
+  </data>
+  <data name="RadioSelection_Error_ConnectionTimeout" xml:space="preserve">
+    <value>SmartLink connection request timed out</value>
+  </data>
+  <data name="RadioSelection_Error_NoConnectionHandle" xml:space="preserve">
+    <value>Failed to get SmartLink connection handle</value>
+  </data>
+  <data name="RadioSelection_Error_ConnectingViaSmartLink" xml:space="preserve">
+    <value>Connecting to radio via SmartLink...</value>
+  </data>
+  <data name="RadioSelection_Error_FailedToConnect" xml:space="preserve">
+    <value>Failed to connect to radio</value>
+  </data>
+  <data name="RadioSelection_Error_StationNotFound" xml:space="preserve">
+    <value>Failed to find station after connection</value>
+  </data>
+  <data name="RadioSelection_Error_UuidNotAvailable" xml:space="preserve">
+    <value>Client UUID not available - binding may fail</value>
+  </data>
+  <data name="RadioSelection_Disconnected_RadioRemoved" xml:space="preserve">
+    <value>Disconnected (radio removed)</value>
+  </data>
+  <data name="RadioSelection_LoginCancelled" xml:space="preserve">
+    <value>Login cancelled</value>
+  </data>
+  <data name="RadioSelection_LoginFailed" xml:space="preserve">
+    <value>Login failed - check credentials</value>
+  </data>
+  <data name="RadioSelection_ShowDialogFailed" xml:space="preserve">
+    <value>Failed to show login dialog</value>
+  </data>
+  <!-- Input Device Selection Section -->
+  <data name="InputDevice_Title" xml:space="preserve">
+    <value>Input Device Selection</value>
+  </data>
+  <data name="InputDevice_Type" xml:space="preserve">
+    <value>Input Type:</value>
+  </data>
+  <data name="InputDevice_SerialPort" xml:space="preserve">
+    <value>Serial Port (HaliKey v1)</value>
+  </data>
+  <data name="InputDevice_Midi" xml:space="preserve">
+    <value>MIDI (HaliKey MIDI, CTR2)</value>
+  </data>
+  <data name="InputDevice_Port" xml:space="preserve">
+    <value>Port:</value>
+  </data>
+  <data name="InputDevice_PortPlaceholder" xml:space="preserve">
+    <value>Select a port...</value>
+  </data>
+  <data name="InputDevice_MidiDevice" xml:space="preserve">
+    <value>MIDI Device:</value>
+  </data>
+  <data name="InputDevice_MidiPlaceholder" xml:space="preserve">
+    <value>Select a MIDI device...</value>
+  </data>
+  <!-- Connection Buttons -->
+  <data name="Button_Connect" xml:space="preserve">
+    <value>Connect</value>
+  </data>
+  <data name="Button_Disconnect" xml:space="preserve">
+    <value>Disconnect</value>
+  </data>
+  <data name="Button_Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <!-- Key Status Section -->
+  <data name="KeyStatus_Title" xml:space="preserve">
+    <value>Key Status</value>
+  </data>
+  <data name="KeyStatus_LeftPaddle" xml:space="preserve">
+    <value>Left Paddle</value>
+  </data>
+  <data name="KeyStatus_RightPaddle" xml:space="preserve">
+    <value>Right Paddle</value>
+  </data>
+  <data name="KeyStatus_Key" xml:space="preserve">
+    <value>Key</value>
+  </data>
+  <data name="KeyStatus_PTT" xml:space="preserve">
+    <value>PTT</value>
+  </data>
+  <data name="KeyStatus_On" xml:space="preserve">
+    <value>ON</value>
+  </data>
+  <data name="KeyStatus_Off" xml:space="preserve">
+    <value>OFF</value>
+  </data>
+  <!-- Mode Display -->
+  <data name="Mode_Disconnected" xml:space="preserve">
+    <value>Disconnected</value>
+  </data>
+  <data name="Mode_SidetoneOnly" xml:space="preserve">
+    <value>Sidetone Only</value>
+  </data>
+  <data name="Mode_CW_IambicModeA" xml:space="preserve">
+    <value>CW (Iambic Mode A)</value>
+  </data>
+  <data name="Mode_CW_IambicModeB" xml:space="preserve">
+    <value>CW (Iambic Mode B)</value>
+  </data>
+  <data name="Mode_CW_StraightKey" xml:space="preserve">
+    <value>CW (Straight Key)</value>
+  </data>
+  <data name="Mode_PTT_Format" xml:space="preserve">
+    <value>{0} (PTT)</value>
+    <comment>{0} is the radio mode (e.g., SSB, AM, FM)</comment>
+  </data>
+  <data name="Mode_PTT_Unknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Mode_SwitchToCW" xml:space="preserve">
+    <value>Switch radio to CW mode to activate CW keying</value>
+  </data>
+  <!-- CW Settings Section -->
+  <data name="CWSettings_Title" xml:space="preserve">
+    <value>CW Settings</value>
+  </data>
+  <data name="CWSettings_Speed" xml:space="preserve">
+    <value>Speed (WPM):</value>
+  </data>
+  <data name="CWSettings_Sidetone" xml:space="preserve">
+    <value>Sidetone:</value>
+  </data>
+  <data name="CWSettings_Pitch" xml:space="preserve">
+    <value>Pitch (Hz):</value>
+  </data>
+  <data name="CWSettings_KeyerMode" xml:space="preserve">
+    <value>Keyer Mode:</value>
+  </data>
+  <data name="CWSettings_Iambic" xml:space="preserve">
+    <value>Iambic</value>
+  </data>
+  <data name="CWSettings_StraightKey" xml:space="preserve">
+    <value>Straight Key</value>
+  </data>
+  <data name="CWSettings_IambicType" xml:space="preserve">
+    <value>Iambic Type:</value>
+  </data>
+  <data name="CWSettings_ModeA" xml:space="preserve">
+    <value>Mode A</value>
+  </data>
+  <data name="CWSettings_ModeB" xml:space="preserve">
+    <value>Mode B</value>
+  </data>
+  <data name="CWSettings_SwapPaddles" xml:space="preserve">
+    <value>Swap Paddles (Left &#x2194; Right)</value>
+  </data>
+  <!-- About Window -->
+  <data name="AboutWindow_Title" xml:space="preserve">
+    <value>About NetKeyer</value>
+  </data>
+  <data name="AboutWindow_AppName" xml:space="preserve">
+    <value>NetKeyer</value>
+  </data>
+  <data name="AboutWindow_Credits" xml:space="preserve">
+    <value>by Andrew KC2G and NetKeyer contributors</value>
+  </data>
+  <data name="AboutWindow_CheckForUpdates" xml:space="preserve">
+    <value>Check for Updates</value>
+  </data>
+  <data name="AboutWindow_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="AboutWindow_Version_Format" xml:space="preserve">
+    <value>Version {0}</value>
+    <comment>{0} is the version number</comment>
+  </data>
+  <data name="AboutWindow_Version_Unknown" xml:space="preserve">
+    <value>Version unknown</value>
+  </data>
+  <data name="AboutWindow_Update_Checking" xml:space="preserve">
+    <value>Checking for updates...</value>
+  </data>
+  <data name="AboutWindow_Update_NotInstalled" xml:space="preserve">
+    <value>App is not installed via Velopack (running in development mode)</value>
+  </data>
+  <data name="AboutWindow_Update_Latest" xml:space="preserve">
+    <value>You are running the latest version!</value>
+  </data>
+  <data name="AboutWindow_Update_Available" xml:space="preserve">
+    <value>Update available: {0}</value>
+    <comment>{0} is the version number</comment>
+  </data>
+  <data name="AboutWindow_Update_Downloading" xml:space="preserve">
+    <value>Downloading update...</value>
+  </data>
+  <data name="AboutWindow_Update_DownloadingPercent" xml:space="preserve">
+    <value>Downloading update... {0}%</value>
+    <comment>{0} is the download percentage</comment>
+  </data>
+  <data name="AboutWindow_Update_Restarting" xml:space="preserve">
+    <value>Restarting to apply update...</value>
+  </data>
+  <data name="AboutWindow_Update_Downloaded" xml:space="preserve">
+    <value>Update downloaded - restart app to install</value>
+  </data>
+  <data name="AboutWindow_Update_Failed" xml:space="preserve">
+    <value>Update check failed: {0}</value>
+    <comment>{0} is the error message</comment>
+  </data>
+  <data name="AboutWindow_Update_Timeout" xml:space="preserve">
+    <value>Update check timed out after 30 seconds. Please check your internet connection and try again.</value>
+  </data>
+  <data name="AboutWindow_UpdateDialog_Title" xml:space="preserve">
+    <value>Update Ready</value>
+  </data>
+  <data name="AboutWindow_UpdateDialog_Message" xml:space="preserve">
+    <value>Version {0} has been downloaded.
+
+Would you like to restart and install it now?</value>
+    <comment>{0} is the version number</comment>
+  </data>
+  <data name="AboutWindow_UpdateDialog_FailedTitle" xml:space="preserve">
+    <value>Update Check Failed</value>
+  </data>
+  <data name="AboutWindow_UpdateDialog_FailedMessage" xml:space="preserve">
+    <value>Failed to check for updates:
+
+{0}
+
+Check the debug log for more details.</value>
+    <comment>{0} is the error message</comment>
+  </data>
+  <!-- MIDI Config Dialog -->
+  <data name="MidiConfig_Title" xml:space="preserve">
+    <value>MIDI Note Configuration</value>
+  </data>
+  <data name="MidiConfig_Instructions" xml:space="preserve">
+    <value>Assign MIDI notes (0-127) to one or more functions. Multiple functions can be assigned to the same note.</value>
+  </data>
+  <data name="MidiConfig_AddNote" xml:space="preserve">
+    <value>Add Note:</value>
+  </data>
+  <data name="MidiConfig_Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="MidiConfig_NoteRange" xml:space="preserve">
+    <value>(MIDI note 0-127)</value>
+  </data>
+  <data name="MidiConfig_NoteNumber" xml:space="preserve">
+    <value>Note #</value>
+  </data>
+  <data name="MidiConfig_LeftPaddle" xml:space="preserve">
+    <value>Left Paddle</value>
+  </data>
+  <data name="MidiConfig_RightPaddle" xml:space="preserve">
+    <value>Right Paddle</value>
+  </data>
+  <data name="MidiConfig_StraightKey" xml:space="preserve">
+    <value>Straight Key</value>
+  </data>
+  <data name="MidiConfig_PTT" xml:space="preserve">
+    <value>PTT</value>
+  </data>
+  <data name="MidiConfig_Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="MidiConfig_FunctionDescriptions" xml:space="preserve">
+    <value>Function Descriptions:</value>
+  </data>
+  <data name="MidiConfig_LeftPaddleDesc" xml:space="preserve">
+    <value>Left Paddle: Used as dit paddle in iambic mode</value>
+  </data>
+  <data name="MidiConfig_RightPaddleDesc" xml:space="preserve">
+    <value>Right Paddle: Used as dah paddle in iambic mode</value>
+  </data>
+  <data name="MidiConfig_StraightKeyDesc" xml:space="preserve">
+    <value>Straight Key: Key down/up in straight key mode</value>
+  </data>
+  <data name="MidiConfig_PTTDesc" xml:space="preserve">
+    <value>PTT: Push-to-talk for non-CW modes</value>
+  </data>
+  <data name="MidiConfig_ResetToDefaults" xml:space="preserve">
+    <value>Reset to Defaults</value>
+  </data>
+  <data name="MidiConfig_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="MidiConfig_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <!-- Audio Device Dialog -->
+  <data name="AudioDevice_Title" xml:space="preserve">
+    <value>Audio Output Device Selection</value>
+  </data>
+  <data name="AudioDevice_Instructions" xml:space="preserve">
+    <value>Select the audio output device for sidetone. Changes take effect immediately.</value>
+  </data>
+  <data name="AudioDevice_Label" xml:space="preserve">
+    <value>Audio Output Device:</value>
+  </data>
+  <data name="AudioDevice_Placeholder" xml:space="preserve">
+    <value>Select an audio device...</value>
+  </data>
+  <data name="AudioDevice_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="AudioDevice_AggressiveLowLatency" xml:space="preserve">
+    <value>Aggressive Low-Latency Mode (Windows only)</value>
+  </data>
+  <data name="AudioDevice_AggressiveEnabled" xml:space="preserve">
+    <value>When enabled: Lowest latency, may cause audio artifacts</value>
+  </data>
+  <data name="AudioDevice_AggressiveDisabled" xml:space="preserve">
+    <value>When disabled: Higher latency, most compatible</value>
+  </data>
+  <data name="AudioDevice_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AudioDevice_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="AudioDevice_SystemDefault" xml:space="preserve">
+    <value>System Default</value>
+  </data>
+  <!-- SmartLink Login Dialog -->
+  <data name="SmartLinkLogin_Title" xml:space="preserve">
+    <value>SmartLink Login</value>
+  </data>
+  <data name="SmartLinkLogin_Header" xml:space="preserve">
+    <value>Sign in to SmartLink</value>
+  </data>
+  <data name="SmartLinkLogin_UsernameLabel" xml:space="preserve">
+    <value>Email or Username:</value>
+  </data>
+  <data name="SmartLinkLogin_UsernamePlaceholder" xml:space="preserve">
+    <value>Enter your email or username</value>
+  </data>
+  <data name="SmartLinkLogin_PasswordLabel" xml:space="preserve">
+    <value>Password:</value>
+  </data>
+  <data name="SmartLinkLogin_PasswordPlaceholder" xml:space="preserve">
+    <value>Enter your password</value>
+  </data>
+  <data name="SmartLinkLogin_RememberMe" xml:space="preserve">
+    <value>Remember me</value>
+  </data>
+  <data name="SmartLinkLogin_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SmartLinkLogin_Login" xml:space="preserve">
+    <value>Login</value>
+  </data>
+  <!-- Settings -->
+  <data name="Settings_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Settings_LanguageRestartRequired" xml:space="preserve">
+    <value>Language changes will take effect after restarting the application.</value>
+  </data>
+  <!-- Common -->
+  <data name="Common_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Common_Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="Common_No" xml:space="preserve">
+    <value>No</value>
+  </data>
+</root>
