@@ -22,6 +22,9 @@ namespace NetKeyer.Models
         // WASAPI aggressive low-latency mode (Windows only)
         public bool WasapiAggressiveLowLatency { get; set; } = true;
 
+        // Keep audio device awake by playing near-silent audio
+        public bool KeepAudioDeviceAwake { get; set; } = false;
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 

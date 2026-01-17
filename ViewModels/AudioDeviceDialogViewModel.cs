@@ -21,12 +21,16 @@ namespace NetKeyer.ViewModels
         private bool _aggressiveLowLatency = true;
 
         [ObservableProperty]
+        private bool _keepAudioDeviceAwake = false;
+
+        [ObservableProperty]
         private bool _isWindowsOnly = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
         public AudioDeviceDialogViewModel()
         {
             var settings = UserSettings.Load();
             AggressiveLowLatency = settings.WasapiAggressiveLowLatency;
+            KeepAudioDeviceAwake = settings.KeepAudioDeviceAwake;
 
             RefreshAudioDevices();
         }
@@ -45,6 +49,11 @@ namespace NetKeyer.ViewModels
         public bool GetAggressiveLowLatency()
         {
             return AggressiveLowLatency;
+        }
+
+        public bool GetKeepAudioDeviceAwake()
+        {
+            return KeepAudioDeviceAwake;
         }
 
         [RelayCommand]
