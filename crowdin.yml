@@ -1,0 +1,3 @@
+files:
+  - source: /Resources/Strings/Resources.resx
+    translation: /Resources/Strings/Resources.%locale%.resx

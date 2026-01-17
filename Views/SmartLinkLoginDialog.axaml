@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:res="clr-namespace:NetKeyer.Resources.Strings"
         x:Class="NetKeyer.Views.SmartLinkLoginDialog"
-        Title="SmartLink Login"
+        Title="{x:Static res:Resources.SmartLinkLogin_Title}"
         Width="400" Height="280"
         MinWidth="400" MinHeight="280"
         MaxWidth="400" MaxHeight="280"
@@ -12,24 +13,24 @@
 
         <!-- Title -->
         <TextBlock Grid.Row="0"
-                   Text="Sign in to SmartLink"
+                   Text="{x:Static res:Resources.SmartLinkLogin_Header}"
                    FontSize="18"
                    FontWeight="Bold"
                    Margin="0,0,0,15"/>
 
         <!-- Username -->
         <StackPanel Grid.Row="1" Spacing="5" Margin="0,0,0,10">
-            <TextBlock Text="Email or Username:"/>
+            <TextBlock Text="{x:Static res:Resources.SmartLinkLogin_UsernameLabel}"/>
             <TextBox Name="UsernameTextBox"
-                     Watermark="Enter your email or username"
+                     Watermark="{x:Static res:Resources.SmartLinkLogin_UsernamePlaceholder}"
                      Padding="8,6"/>
         </StackPanel>
 
         <!-- Password -->
         <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,10">
-            <TextBlock Text="Password:"/>
+            <TextBlock Text="{x:Static res:Resources.SmartLinkLogin_PasswordLabel}"/>
             <TextBox Name="PasswordTextBox"
-                     Watermark="Enter your password"
+                     Watermark="{x:Static res:Resources.SmartLinkLogin_PasswordPlaceholder}"
                      PasswordChar="●"
                      Padding="8,6"/>
         </StackPanel>
@@ -37,7 +38,7 @@
         <!-- Remember Me -->
         <CheckBox Grid.Row="3"
                   Name="RememberMeCheckBox"
-                  Content="Remember me"
+                  Content="{x:Static res:Resources.SmartLinkLogin_RememberMe}"
                   Margin="0,0,0,10"/>
 
         <!-- Error message -->
@@ -65,13 +66,13 @@
                     HorizontalAlignment="Right"
                     Spacing="10">
             <Button Name="CancelButton"
-                    Content="Cancel"
+                    Content="{x:Static res:Resources.SmartLinkLogin_Cancel}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
             <Button Name="LoginButton"
-                    Content="Login"
+                    Content="{x:Static res:Resources.SmartLinkLogin_Login}"
                     Width="80"
                     HorizontalContentAlignment="Center"
                     Padding="6"
