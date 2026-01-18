@@ -60,133 +60,133 @@
   </resheader>
   <!-- MainWindow Title -->
   <data name="MainWindow_Title" xml:space="preserve">
-    <value>NetKeyer - FlexRadio CW Keyer</value>
+    <value>NetKeyer - FlexRadio CW-Tastgeber</value>
   </data>
   <!-- MainWindow Menu -->
   <data name="Menu_File" xml:space="preserve">
-    <value>_File</value>
+    <value>_Datei</value>
   </data>
   <data name="Menu_File_Exit" xml:space="preserve">
-    <value>E_xit</value>
+    <value>_Beenden</value>
   </data>
   <data name="Menu_Settings" xml:space="preserve">
-    <value>_Settings</value>
+    <value>_Einstellungen</value>
   </data>
   <data name="Menu_Settings_AudioDevice" xml:space="preserve">
-    <value>_Audio Output Device...</value>
+    <value>_Audio-Ausgabegerät...</value>
   </data>
   <data name="Menu_Settings_MidiMapping" xml:space="preserve">
-    <value>_MIDI Note Mapping...</value>
+    <value>_MIDI-Noten Zuordnen...</value>
   </data>
   <data name="Menu_Help" xml:space="preserve">
-    <value>_Help</value>
+    <value>_Hilfe</value>
   </data>
   <data name="Menu_Help_Documentation" xml:space="preserve">
-    <value>_Documentation</value>
+    <value>_Dokumentation</value>
   </data>
   <data name="Menu_Help_ViewDebugLog" xml:space="preserve">
-    <value>_View Debug Log...</value>
+    <value>Debug-_Protokoll ansehen...</value>
   </data>
   <data name="Menu_Help_About" xml:space="preserve">
-    <value>_About NetKeyer...</value>
+    <value>_Über NetKeyer...</value>
   </data>
   <!-- macOS Menu (without underscore accelerators) -->
   <data name="MacMenu_File" xml:space="preserve">
-    <value>File</value>
+    <value>Datei</value>
   </data>
   <data name="MacMenu_Exit" xml:space="preserve">
-    <value>Exit</value>
+    <value>Beenden</value>
   </data>
   <data name="MacMenu_Settings" xml:space="preserve">
-    <value>Settings</value>
+    <value>Einstellungen</value>
   </data>
   <data name="MacMenu_AudioDevice" xml:space="preserve">
-    <value>Audio Output Device...</value>
+    <value>Audio-Ausgabegerät...</value>
   </data>
   <data name="MacMenu_MidiMapping" xml:space="preserve">
-    <value>MIDI Note Mapping...</value>
+    <value>MIDI-Noten Zuordnen...</value>
   </data>
   <data name="MacMenu_Help" xml:space="preserve">
-    <value>Help</value>
+    <value>Hilfe</value>
   </data>
   <data name="MacMenu_Documentation" xml:space="preserve">
-    <value>Documentation</value>
+    <value>Dokumentation</value>
   </data>
   <data name="MacMenu_About" xml:space="preserve">
-    <value>About NetKeyer...</value>
+    <value>Über NetKeyer...</value>
   </data>
   <!-- SmartLink Section -->
   <data name="SmartLink_Title" xml:space="preserve">
     <value>SmartLink</value>
   </data>
   <data name="SmartLink_LoginButton" xml:space="preserve">
-    <value>Login to SmartLink</value>
+    <value>Bei SmartLink anmelden</value>
   </data>
   <data name="SmartLink_LogoutButton" xml:space="preserve">
-    <value>Logout from SmartLink</value>
+    <value>Von SmartLink abmelden</value>
   </data>
   <data name="SmartLink_RetryButton" xml:space="preserve">
-    <value>Retry Login</value>
+    <value>Anmeldung wiederholen</value>
   </data>
   <data name="SmartLink_Status_NotConnected" xml:space="preserve">
-    <value>Not connected</value>
+    <value>Nicht verbunden</value>
   </data>
   <data name="SmartLink_Status_NotLoggedIn" xml:space="preserve">
-    <value>Not logged in</value>
+    <value>Nicht angemeldet</value>
   </data>
   <data name="SmartLink_Status_Authenticating" xml:space="preserve">
-    <value>Authenticating...</value>
+    <value>Authentifizierung ...</value>
   </data>
   <data name="SmartLink_Status_Authenticated" xml:space="preserve">
-    <value>Authenticated</value>
+    <value>Authentifiziert</value>
   </data>
   <data name="SmartLink_Status_AuthenticationError" xml:space="preserve">
-    <value>Authentication error</value>
+    <value>Authentifizierungsfehler</value>
   </data>
   <data name="SmartLink_Status_UnknownState" xml:space="preserve">
-    <value>Unknown state</value>
+    <value>Unbekannter Status</value>
   </data>
   <data name="SmartLink_Status_ConnectedToServer" xml:space="preserve">
-    <value>Connected to SmartLink</value>
+    <value>Mit SmartLink verbunden</value>
   </data>
   <data name="SmartLink_Status_FailedToConnect" xml:space="preserve">
-    <value>Failed to connect to SmartLink server</value>
+    <value>Verbindung zum SmartLink-Server fehlgeschlagen</value>
   </data>
   <data name="SmartLink_Status_RegistrationInvalid" xml:space="preserve">
-    <value>Registration invalid - please log in again</value>
+    <value>Registrierung ungültig - bitte melden Sie sich erneut an</value>
   </data>
   <data name="SmartLink_Status_NoClientId" xml:space="preserve">
-    <value>No client_id configured</value>
+    <value>Keine client_id konfiguriert</value>
   </data>
   <data name="SmartLink_Status_NotAvailable" xml:space="preserve">
-    <value>SmartLink not available - no client_id configured</value>
+    <value>SmartLink nicht verfügbar - keine client_id konfiguriert</value>
   </data>
   <data name="SmartLink_Error_Prefix" xml:space="preserve">
-    <value>Error: {0}</value>
+    <value>Fehler: {0}</value>
     <comment>{0} is the error message</comment>
   </data>
   <!-- Radio Selection Section -->
   <data name="RadioSelection_Title" xml:space="preserve">
-    <value>Radio Selection</value>
+    <value>Radio-Auswahl</value>
   </data>
   <data name="RadioSelection_Placeholder" xml:space="preserve">
     <value>Select a radio and station...</value>
   </data>
   <data name="RadioSelection_Refresh" xml:space="preserve">
-    <value>Refresh</value>
+    <value>Neuladen</value>
   </data>
   <data name="RadioSelection_SidetoneOnly" xml:space="preserve">
-    <value>No radio (sidetone only)</value>
+    <value>Kein Radio (nur Seitenklang)</value>
   </data>
   <data name="RadioSelection_NoStations" xml:space="preserve">
-    <value>No Stations</value>
+    <value>Keine Sender</value>
   </data>
   <data name="RadioSelection_Format_LocalRadio" xml:space="preserve">
     <value>{0} ({1}) - {2} [{3}]</value>
     <comment>{0}=Nickname, {1}=Model, {2}=Station, {3}=Program</comment>
   </data>
   <data name="RadioSelection_Format_LocalRadioNoStation" xml:space="preserve">
-    <value>{0} ({1}) - No Stations</value>
+    <value>{0} ({1}) - Keine Sender</value>
     <comment>{0}=Nickname, {1}=Model</comment>
   </data>
   <data name="RadioSelection_Format_SmartLinkRadio" xml:space="preserve">
@@ -194,29 +194,29 @@
     <comment>{0}=Nickname, {1}=Model, {2}=Station, {3}=Program</comment>
   </data>
   <data name="RadioSelection_Format_SmartLinkRadioNoStation" xml:space="preserve">
-    <value>[SmartLink] {0} ({1}) - No Stations</value>
+    <value>[SmartLink] {0} ({1}) - Keine Sender</value>
     <comment>{0}=Nickname, {1}=Model</comment>
   </data>
   <data name="RadioSelection_Error_NoRadioSelected" xml:space="preserve">
-    <value>No radio/client selected</value>
+    <value>Kein Radio/Klient ausgewählt</value>
   </data>
   <data name="RadioSelection_Error_NoStationAvailable" xml:space="preserve">
-    <value>No station available</value>
+    <value>Kein Sender verfügbar</value>
   </data>
   <data name="RadioSelection_Error_NotConnectedToServer" xml:space="preserve">
-    <value>Not connected to SmartLink server</value>
+    <value>Nicht mit SmartLink-Server verbunden</value>
   </data>
   <data name="RadioSelection_Error_RequestingConnection" xml:space="preserve">
-    <value>Requesting SmartLink connection...</value>
+    <value>SmartLink-Verbindung wird angefordert...</value>
   </data>
   <data name="RadioSelection_Error_ConnectionTimeout" xml:space="preserve">
-    <value>SmartLink connection request timed out</value>
+    <value>SmartLink-Verbindungsanfrangen ist abgelaufen</value>
   </data>
   <data name="RadioSelection_Error_NoConnectionHandle" xml:space="preserve">
-    <value>Failed to get SmartLink connection handle</value>
+    <value>Konnte SmartLink Verbindungs-Handle nicht erhalten</value>
   </data>
   <data name="RadioSelection_Error_ConnectingViaSmartLink" xml:space="preserve">
-    <value>Connecting to radio via SmartLink...</value>
+    <value>Verbindung zum Radio über SmartLink wird hergestellt...</value>
   </data>
   <data name="RadioSelection_Error_FailedToConnect" xml:space="preserve">
     <value>Failed to connect to radio</value>
