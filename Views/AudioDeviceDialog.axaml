@@ -63,6 +63,12 @@
                            TextWrapping="Wrap"
                            Margin="20,2,0,0"
                            IsVisible="{Binding IsWindowsOnly}"/>
+
+                <CheckBox Content="Keep audio device awake"
+                          IsChecked="{Binding KeepAudioDeviceAwake}"
+                          FontSize="11"
+                          Foreground="Gray"
+                          Margin="0,10,0,0"/>
             </StackPanel>
         </Border>
 

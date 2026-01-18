@@ -149,6 +149,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // Sidetone generator
     private ISidetoneGenerator _sidetoneGenerator;
 
+    // Keep-awake stream (plays near-silent audio to prevent device from sleeping)
+    private IKeepAwakeStream _keepAwakeStream;
+
     // SmartLink support
     private SmartLinkManager _smartLinkManager;
 
@@ -260,6 +263,21 @@ public partial class MainWindowViewModel : ViewModelBase
         if (SelectedAudioDevice != null && !string.IsNullOrEmpty(SelectedAudioDevice.DeviceId))
         {
             ReinitializeSidetoneGenerator();
+        }
+
+        // Initialize keep-awake stream if enabled
+        if (_settings.KeepAudioDeviceAwake)
+        {
+            try
+            {
+                string deviceId = SelectedAudioDevice?.DeviceId ?? "";
+                _keepAwakeStream = KeepAwakeStreamFactory.Create(deviceId);
+                _keepAwakeStream.Start();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("audio", $"Warning: Could not initialize keep-awake stream: {ex.Message}");
+            }
         }
 
         // Initialize keying controller
@@ -388,6 +406,34 @@ public partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to reinitialize sidetone generator: {ex.Message}");
+        }
+    }
+
+    private void ReinitializeKeepAwakeStream()
+    {
+        try
+        {
+            // Dispose old stream
+            _keepAwakeStream?.Stop();
+            _keepAwakeStream?.Dispose();
+            _keepAwakeStream = null;
+
+            // Create and start new stream if enabled
+            if (_settings.KeepAudioDeviceAwake)
+            {
+                string deviceId = SelectedAudioDevice?.DeviceId ?? "";
+                _keepAwakeStream = KeepAwakeStreamFactory.Create(deviceId);
+                _keepAwakeStream.Start();
+                DebugLogger.Log("audio", $"Keep-awake stream reinitialized with device={deviceId}");
+            }
+            else
+            {
+                DebugLogger.Log("audio", "Keep-awake stream disabled");
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log("audio", $"Failed to reinitialize keep-awake stream: {ex.Message}");
         }
     }
 
@@ -742,9 +788,14 @@ public partial class MainWindowViewModel : ViewModelBase
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 _settings.WasapiAggressiveLowLatency = dialog.AggressiveLowLatency;
-                _settings.Save();
                 DebugLogger.Log("audio", $"[SelectAudioDevice] Saved AggressiveLowLatency={dialog.AggressiveLowLatency}");
             }
+
+            // Save the keep-awake setting and update the stream
+            bool keepAwakeChanged = _settings.KeepAudioDeviceAwake != dialog.KeepAudioDeviceAwake;
+            _settings.KeepAudioDeviceAwake = dialog.KeepAudioDeviceAwake;
+            _settings.Save();
+            DebugLogger.Log("audio", $"[SelectAudioDevice] Saved KeepAudioDeviceAwake={dialog.KeepAudioDeviceAwake}");
 
             // Update the selected device - this will trigger OnSelectedAudioDeviceChanged
             // which handles saving settings and reinitializing the sidetone generator
@@ -761,6 +812,12 @@ public partial class MainWindowViewModel : ViewModelBase
             else
             {
                 DebugLogger.Log("audio", $"[SelectAudioDevice] Device not found in AudioDevices collection!");
+            }
+
+            // Handle keep-awake stream changes
+            if (keepAwakeChanged || deviceInfo != null)
+            {
+                ReinitializeKeepAwakeStream();
             }
         }
         else
@@ -1147,6 +1204,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Close input device
         _inputDeviceManager?.Dispose();
+
+        // Dispose keep-awake stream
+        _keepAwakeStream?.Stop();
+        _keepAwakeStream?.Dispose();
 
         // Dispose sidetone generator
         _sidetoneGenerator?.Dispose();
