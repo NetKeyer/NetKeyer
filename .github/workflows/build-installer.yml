@@ -233,12 +233,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Determine version
+    - name: Determine version and release type
       id: version
       run: |
         version="${{ github.ref }}"
         version="${version#refs/tags/v}"
         echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+        # Check if this is a prerelease (tag contains "-pre")
+        if [[ "$version" == *"-pre"* ]]; then
+          echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          echo "Release type: prerelease (draft)"
+        else
+          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          echo "Release type: stable"
+        fi
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
@@ -252,8 +261,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: artifacts/**/*
-        draft: false
-        prerelease: false
+        draft: ${{ steps.version.outputs.IS_PRERELEASE == 'true' }}
+        prerelease: ${{ steps.version.outputs.IS_PRERELEASE == 'true' }}
+        make_latest: ${{ steps.version.outputs.IS_PRERELEASE != 'true' }}
         generate_release_notes: true
         body: |
           ## NetKeyer v${{ steps.version.outputs.VERSION }}
