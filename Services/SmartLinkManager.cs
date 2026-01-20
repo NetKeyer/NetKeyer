@@ -109,14 +109,19 @@ public class SmartLinkManager
         return success;
     }
 
-    public async Task<bool> LoginAsync(string username, string password)
+    public async Task<bool> LoginAsync(CancellationToken cancellationToken = default)
     {
-        var success = await _smartLinkAuth.LoginAsync(username, password);
+        var success = await _smartLinkAuth.LoginAsync(cancellationToken);
         if (success)
         {
             await ConnectToServerAsync();
         }
         return success;
+    }
+
+    public void CancelLogin()
+    {
+        _smartLinkAuth?.CancelLogin();
     }
 
     public void Logout()

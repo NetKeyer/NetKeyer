@@ -1648,29 +1648,55 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        // Start the login task before showing dialog (it will open browser)
+        SmartLinkStatus = "Authenticating...";
+        var loginTask = _smartLinkManager.LoginAsync(loginDialog.CancellationToken);
+
+        // Show dialog (blocks until user cancels or login completes)
+        _ = loginTask.ContinueWith(t =>
+        {
+            // When login completes (success or failure), close the dialog
+            if (t.IsCompletedSuccessfully && t.Result)
+            {
+                loginDialog.CompleteSuccessfully();
+            }
+            else if (t.IsFaulted)
+            {
+                loginDialog.ShowError(t.Exception?.InnerException?.Message ?? "Login failed");
+            }
+            // If cancelled, dialog will close via cancel button
+        }, System.Threading.Tasks.TaskScheduler.Default);
+
         await loginDialog.ShowDialog(mainWindow);
 
-        if (loginDialog.LoginSucceeded)
+        // Update and save the Remember Me preference
+        _settings.RememberMeSmartLink = loginDialog.RememberMe;
+        _settings.Save();
+
+        if (loginDialog.WasCancelled)
         {
-            var username = loginDialog.Username;
-            var password = loginDialog.Password;
-
-            // Update and save the Remember Me preference
-            _settings.RememberMeSmartLink = loginDialog.RememberMe;
-            _settings.Save();
-
-            // Attempt login
-            SmartLinkStatus = "Authenticating...";
-            var success = await _smartLinkManager.LoginAsync(username, password);
-
-            if (!success)
-            {
-                SmartLinkStatus = "Login failed - check credentials";
-            }
+            _smartLinkManager.CancelLogin();
+            SmartLinkStatus = "Login cancelled";
         }
         else
         {
-            SmartLinkStatus = "Login cancelled";
+            // Wait for the login task to finish if not already
+            try
+            {
+                var success = await loginTask;
+                if (!success)
+                {
+                    SmartLinkStatus = "Login failed";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                SmartLinkStatus = "Login cancelled";
+            }
+            catch (Exception ex)
+            {
+                SmartLinkStatus = $"Login failed: {ex.Message}";
+            }
         }
     }
 

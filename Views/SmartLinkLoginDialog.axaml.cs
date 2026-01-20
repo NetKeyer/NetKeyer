@@ -1,49 +1,46 @@
 using System;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
 namespace NetKeyer.Views
 {
     public partial class SmartLinkLoginDialog : Window
     {
-        private TextBox _usernameTextBox;
-        private TextBox _passwordTextBox;
         private CheckBox _rememberMeCheckBox;
         private TextBlock _errorTextBlock;
         private TextBlock _statusTextBlock;
-        private Button _loginButton;
+        private TextBlock _hintTextBlock;
+        private ProgressBar _progressBar;
         private Button _cancelButton;
 
-        public string Username { get; private set; }
-        public string Password { get; private set; }
+        private CancellationTokenSource _cts;
+        private bool _completedSuccessfully;
+
         public bool RememberMe { get; private set; }
-        public bool LoginSucceeded { get; private set; }
+        public bool WasCancelled { get; private set; }
+        public CancellationToken CancellationToken => _cts?.Token ?? CancellationToken.None;
 
         public SmartLinkLoginDialog()
         {
             InitializeComponent();
-            this.Opened += OnOpened;
+            _cts = new CancellationTokenSource();
+            this.Closing += OnClosing;
         }
 
         private void InitializeComponent()
         {
             AvaloniaXamlLoader.Load(this);
 
-            _usernameTextBox = this.FindControl<TextBox>("UsernameTextBox");
-            _passwordTextBox = this.FindControl<TextBox>("PasswordTextBox");
             _rememberMeCheckBox = this.FindControl<CheckBox>("RememberMeCheckBox");
             _errorTextBlock = this.FindControl<TextBlock>("ErrorTextBlock");
             _statusTextBlock = this.FindControl<TextBlock>("StatusTextBlock");
-            _loginButton = this.FindControl<Button>("LoginButton");
+            _hintTextBlock = this.FindControl<TextBlock>("HintTextBlock");
+            _progressBar = this.FindControl<ProgressBar>("ProgressBar");
             _cancelButton = this.FindControl<Button>("CancelButton");
-        }
-
-        private void OnOpened(object sender, EventArgs e)
-        {
-            // Focus username textbox when dialog opens
-            _usernameTextBox?.Focus();
         }
 
         public void SetRememberMe(bool rememberMe)
@@ -54,63 +51,65 @@ namespace NetKeyer.Views
             }
         }
 
-        private void LoginButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Updates the status text displayed in the dialog
+        /// </summary>
+        public void UpdateStatus(string message)
         {
-            // Clear previous error
-            _errorTextBlock.IsVisible = false;
-            _errorTextBlock.Text = "";
-
-            // Validate inputs
-            var username = _usernameTextBox?.Text?.Trim();
-            var password = _passwordTextBox?.Text;
-
-            if (string.IsNullOrEmpty(username))
+            Dispatcher.UIThread.Post(() =>
             {
-                ShowError("Please enter your email or username");
-                _usernameTextBox?.Focus();
-                return;
-            }
+                if (_statusTextBlock != null)
+                {
+                    _statusTextBlock.Text = message;
+                }
+            });
+        }
 
-            if (string.IsNullOrEmpty(password))
+        /// <summary>
+        /// Shows an error message and hides the progress indicator
+        /// </summary>
+        public void ShowError(string message)
+        {
+            Dispatcher.UIThread.Post(() =>
             {
-                ShowError("Please enter your password");
-                _passwordTextBox?.Focus();
-                return;
-            }
+                _errorTextBlock.Text = message;
+                _errorTextBlock.IsVisible = true;
+                _progressBar.IsVisible = false;
+                _hintTextBlock.IsVisible = false;
+                _statusTextBlock.Text = "Login failed";
+            });
+        }
 
-            // Store credentials, remember me state, and indicate success
-            Username = username;
-            Password = password;
-            RememberMe = _rememberMeCheckBox?.IsChecked ?? false;
-            LoginSucceeded = true;
-
-            Close();
+        /// <summary>
+        /// Indicates successful completion and closes the dialog
+        /// </summary>
+        public void CompleteSuccessfully()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                RememberMe = _rememberMeCheckBox?.IsChecked ?? false;
+                WasCancelled = false;
+                _completedSuccessfully = true;
+                Close();
+            });
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
-            LoginSucceeded = false;
+            WasCancelled = true;
+            _cts?.Cancel();
             Close();
         }
 
-        private void ShowError(string message)
+        private void OnClosing(object sender, WindowClosingEventArgs e)
         {
-            _errorTextBlock.Text = message;
-            _errorTextBlock.IsVisible = true;
-        }
-
-        public void ShowStatus(string message)
-        {
-            _statusTextBlock.Text = message;
-            _statusTextBlock.IsVisible = true;
-        }
-
-        public void SetButtonsEnabled(bool enabled)
-        {
-            _loginButton.IsEnabled = enabled;
-            _cancelButton.IsEnabled = enabled;
-            _usernameTextBox.IsEnabled = enabled;
-            _passwordTextBox.IsEnabled = enabled;
+            // If closing without explicit completion (e.g., via X button), treat as cancellation
+            if (!_completedSuccessfully && !WasCancelled)
+            {
+                WasCancelled = true;
+                _cts?.Cancel();
+            }
+            RememberMe = _rememberMeCheckBox?.IsChecked ?? false;
         }
     }
 }
