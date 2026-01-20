@@ -2,13 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="NetKeyer.Views.SmartLinkLoginDialog"
         Title="SmartLink Login"
-        Width="400" Height="280"
-        MinWidth="400" MinHeight="280"
-        MaxWidth="400" MaxHeight="280"
+        Width="400" Height="240"
+        MinWidth="400" MinHeight="240"
+        MaxWidth="400" MaxHeight="240"
         WindowStartupLocation="CenterOwner"
         CanResize="false">
 
-    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
         <!-- Title -->
         <TextBlock Grid.Row="0"
@@ -17,50 +17,42 @@
                    FontWeight="Bold"
                    Margin="0,0,0,15"/>
 
-        <!-- Username -->
-        <StackPanel Grid.Row="1" Spacing="5" Margin="0,0,0,10">
-            <TextBlock Text="Email or Username:"/>
-            <TextBox Name="UsernameTextBox"
-                     Watermark="Enter your email or username"
-                     Padding="8,6"/>
-        </StackPanel>
-
-        <!-- Password -->
-        <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,10">
-            <TextBlock Text="Password:"/>
-            <TextBox Name="PasswordTextBox"
-                     Watermark="Enter your password"
-                     PasswordChar="●"
-                     Padding="8,6"/>
-        </StackPanel>
-
-        <!-- Remember Me -->
-        <CheckBox Grid.Row="3"
-                  Name="RememberMeCheckBox"
-                  Content="Remember me"
-                  Margin="0,0,0,10"/>
-
-        <!-- Error message -->
-        <TextBlock Grid.Row="4"
-                   Name="ErrorTextBlock"
-                   Foreground="Red"
-                   TextWrapping="Wrap"
-                   IsVisible="False"
+        <!-- Status message -->
+        <TextBlock Grid.Row="1"
+                   Name="StatusTextBlock"
+                   Text="Opening your browser to sign in..."
+                   FontSize="14"
                    Margin="0,0,0,10"/>
 
-        <!-- Status message -->
-        <TextBlock Grid.Row="5"
-                   Name="StatusTextBlock"
+        <!-- Progress bar -->
+        <ProgressBar Grid.Row="2"
+                     Name="ProgressBar"
+                     IsIndeterminate="True"
+                     Height="4"
+                     Margin="0,0,0,10"/>
+
+        <!-- Hint text -->
+        <TextBlock Grid.Row="3"
+                   Name="HintTextBlock"
+                   Text="Complete sign-in in your browser, then return here."
                    Foreground="Gray"
                    FontSize="12"
-                   IsVisible="False"
+                   TextWrapping="Wrap"
                    Margin="0,0,0,10"/>
 
-        <!-- Spacer -->
-        <Border Grid.Row="6"/>
+        <!-- Remember Me and Error display -->
+        <StackPanel Grid.Row="4" VerticalAlignment="Top">
+            <CheckBox Name="RememberMeCheckBox"
+                      Content="Remember me"
+                      Margin="0,0,0,10"/>
+            <TextBlock Name="ErrorTextBlock"
+                       Foreground="Red"
+                       TextWrapping="Wrap"
+                       IsVisible="False"/>
+        </StackPanel>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="7"
+        <StackPanel Grid.Row="5"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="10">
@@ -70,13 +62,6 @@
                     HorizontalContentAlignment="Center"
                     Padding="6"
                     Click="CancelButton_Click"/>
-            <Button Name="LoginButton"
-                    Content="Login"
-                    Width="80"
-                    HorizontalContentAlignment="Center"
-                    Padding="6"
-                    Click="LoginButton_Click"
-                    IsDefault="True"/>
         </StackPanel>
     </Grid>
 </Window>
