@@ -1,21 +1,28 @@
 using System;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Auth0.AuthenticationApi;
 using Auth0.AuthenticationApi.Models;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.SmartLink
 {
     /// <summary>
-    /// Handles Auth0 authentication for SmartLink using Resource Owner Password Credentials flow
+    /// Handles Auth0 authentication for SmartLink using PKCE authorization code flow
     /// </summary>
     public class SmartLinkAuthService : IDisposable
     {
         private const string AUTH0_DOMAIN = "frtest.auth0.com";
+        private const string AUTH_SCOPE = "openid offline_access email given_name family_name picture";
 
         private readonly IClientIdProvider _clientIdProvider;
         private readonly AuthenticationApiClient _authClient;
         private SmartLinkTokens _tokens;
+        private CancellationTokenSource _loginCts;
+        private OAuthCallbackServer _callbackServer;
 
         public event EventHandler<SmartLinkAuthState> AuthStateChanged;
         public event EventHandler<string> ErrorOccurred;
@@ -30,9 +37,9 @@ namespace NetKeyer.SmartLink
         }
 
         /// <summary>
-        /// Authenticates using username and password (Resource Owner Password Credentials flow)
+        /// Authenticates using PKCE authorization code flow (browser-based)
         /// </summary>
-        public async Task<bool> LoginAsync(string username, string password)
+        public async Task<bool> LoginAsync(CancellationToken cancellationToken = default)
         {
             var clientId = _clientIdProvider.GetClientId();
             if (string.IsNullOrEmpty(clientId))
@@ -41,17 +48,43 @@ namespace NetKeyer.SmartLink
                 return false;
             }
 
+            // Create linked cancellation token
+            _loginCts?.Dispose();
+            _loginCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var linkedToken = _loginCts.Token;
+
             try
             {
                 SetAuthState(SmartLinkAuthState.Authenticating);
 
-                var request = new ResourceOwnerTokenRequest
+                // Generate PKCE code verifier and challenge
+                var codeVerifier = GenerateCodeVerifier();
+                var codeChallenge = GenerateCodeChallenge(codeVerifier);
+
+                // Generate state parameter for CSRF protection
+                var state = GenerateState();
+
+                // Start callback server
+                _callbackServer?.Dispose();
+                _callbackServer = new OAuthCallbackServer();
+                _callbackServer.Start();
+
+                // Build authorization URL
+                var authUrl = BuildAuthorizationUrl(clientId, OAuthCallbackServer.RedirectUri, codeChallenge, state);
+
+                // Open browser for user authentication
+                UrlHelper.OpenUrl(authUrl);
+
+                // Wait for callback with authorization code
+                var authorizationCode = await _callbackServer.WaitForCallbackAsync(state, linkedToken);
+
+                // Exchange authorization code for tokens
+                var request = new AuthorizationCodePkceTokenRequest
                 {
                     ClientId = clientId,
-                    Username = username,
-                    Password = password,
-                    Scope = "openid offline_access email given_name family_name picture",
-                    Realm = "Username-Password-Authentication" // Auth0 default database connection
+                    Code = authorizationCode,
+                    CodeVerifier = codeVerifier,
+                    RedirectUri = OAuthCallbackServer.RedirectUri
                 };
 
                 var response = await _authClient.GetTokenAsync(request);
@@ -71,12 +104,37 @@ namespace NetKeyer.SmartLink
                 SetAuthState(SmartLinkAuthState.Authenticated);
                 return true;
             }
+            catch (OperationCanceledException)
+            {
+                SetAuthState(SmartLinkAuthState.NotAuthenticated);
+                return false;
+            }
+            catch (OAuthException ex)
+            {
+                ErrorOccurred?.Invoke(this, $"Login failed: {ex.Message}");
+                SetAuthState(SmartLinkAuthState.Error);
+                return false;
+            }
             catch (Exception ex)
             {
                 ErrorOccurred?.Invoke(this, $"Login failed: {ex.Message}");
                 SetAuthState(SmartLinkAuthState.Error);
                 return false;
             }
+            finally
+            {
+                _callbackServer?.Dispose();
+                _callbackServer = null;
+            }
+        }
+
+        /// <summary>
+        /// Cancels an in-progress login
+        /// </summary>
+        public void CancelLogin()
+        {
+            _loginCts?.Cancel();
+            _callbackServer?.Stop();
         }
 
         /// <summary>
@@ -167,8 +225,80 @@ namespace NetKeyer.SmartLink
             }
         }
 
+        #region PKCE Helpers
+
+        /// <summary>
+        /// Generates a cryptographically random code verifier (32 bytes, base64url encoded)
+        /// </summary>
+        private static string GenerateCodeVerifier()
+        {
+            var bytes = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            return Base64UrlEncode(bytes);
+        }
+
+        /// <summary>
+        /// Generates code challenge from verifier (SHA256 hash, base64url encoded)
+        /// </summary>
+        private static string GenerateCodeChallenge(string codeVerifier)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var challengeBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+                return Base64UrlEncode(challengeBytes);
+            }
+        }
+
+        /// <summary>
+        /// Generates a random state parameter for CSRF protection
+        /// </summary>
+        private static string GenerateState()
+        {
+            var bytes = new byte[16];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            return Base64UrlEncode(bytes);
+        }
+
+        /// <summary>
+        /// Base64url encoding per RFC 4648
+        /// </summary>
+        private static string Base64UrlEncode(byte[] bytes)
+        {
+            return Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+
+        /// <summary>
+        /// Builds the Auth0 authorization URL for PKCE flow
+        /// </summary>
+        private static string BuildAuthorizationUrl(string clientId, string redirectUri, string codeChallenge, string state)
+        {
+            var sb = new StringBuilder();
+            sb.Append($"https://{AUTH0_DOMAIN}/authorize?");
+            sb.Append($"response_type=code");
+            sb.Append($"&client_id={Uri.EscapeDataString(clientId)}");
+            sb.Append($"&redirect_uri={Uri.EscapeDataString(redirectUri)}");
+            sb.Append($"&scope={Uri.EscapeDataString(AUTH_SCOPE)}");
+            sb.Append($"&code_challenge={Uri.EscapeDataString(codeChallenge)}");
+            sb.Append($"&code_challenge_method=S256");
+            sb.Append($"&state={Uri.EscapeDataString(state)}");
+            return sb.ToString();
+        }
+
+        #endregion
+
         public void Dispose()
         {
+            _loginCts?.Dispose();
+            _callbackServer?.Dispose();
             _authClient?.Dispose();
         }
     }
