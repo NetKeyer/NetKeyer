@@ -64,7 +64,7 @@ dotnet run
    - Select a radio and GUI client station from the dropdown, OR
    - Select "No radio (sidetone only)" for practice mode
 3. **Select Input Device Type**: Choose between:
-   - Serial Port (HaliKey v1) - uses CTS (left) and DCD (right) pins
+   - Serial Port (HaliKey v1) - uses CTS (left) and DSR (right) pins
    - MIDI (HaliKey MIDI, CTR2) - uses configurable MIDI note mappings
 4. **Choose Input Device**:
    - For Serial: Select the serial port connected to your keyer/paddle
