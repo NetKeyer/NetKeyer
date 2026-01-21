@@ -30,6 +30,11 @@ public class IambicKeyer
     private bool _lastElementWasDit = true; // Track what was actually sent last
     private DateTime _lastStateChange = DateTime.UtcNow;
 
+    // Computed timestamp tracking
+    private long _sequenceStartTimestamp;      // Real timestamp when sequence started
+    private long _computedElapsedMs;           // Computed elapsed time in milliseconds
+    private bool _inTimedSequence;             // True when using computed timestamps
+
     private enum KeyerState
     {
         Idle,              // Nothing playing, nothing queued
@@ -82,6 +87,9 @@ public class IambicKeyer
             {
                 _ditLength = 60; // Default to 20 WPM
             }
+
+            // Reset computed timing when WPM changes to avoid drift
+            ResetTimedSequence();
         }
     }
 
@@ -173,6 +181,22 @@ public class IambicKeyer
             _dahPaddleAtStart = false;
             _ditPaddleAtSilenceStart = false;
             _dahPaddleAtSilenceStart = false;
+
+            // Reset computed timing
+            ResetTimedSequence();
+        }
+    }
+
+    /// <summary>
+    /// Resets computed timestamp tracking. Called when timing parameters change mid-sequence.
+    /// </summary>
+    private void ResetTimedSequence()
+    {
+        lock (_lock)
+        {
+            _inTimedSequence = false;
+            _computedElapsedMs = 0;
+            DebugLogger.Log("keyer", $"[IambicKeyer] Timed sequence reset");
         }
     }
 
@@ -215,6 +239,21 @@ public class IambicKeyer
     {
         lock (_lock)
         {
+            // If transitioning from Idle to TonePlaying, start a new timed sequence
+            if (_keyerState == KeyerState.Idle)
+            {
+                _sequenceStartTimestamp = Environment.TickCount64;
+                _computedElapsedMs = 0;
+                _inTimedSequence = true;
+                DebugLogger.Log("keyer", $"[IambicKeyer] Starting new timed sequence at {_sequenceStartTimestamp}");
+            }
+            // If transitioning from InterElementSpace to TonePlaying, advance by the space duration
+            else if (_keyerState == KeyerState.InterElementSpace && _inTimedSequence)
+            {
+                _computedElapsedMs += _ditLength;
+                DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by inter-element space {_ditLength}ms (total elapsed: {_computedElapsedMs}ms)");
+            }
+
             DebugLogger.Log("keyer", $"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
 
             // Capture paddle states at ACTUAL element start time (not decision time)
@@ -239,7 +278,16 @@ public class IambicKeyer
         {
             DebugLogger.Log("keyer", $"[IambicKeyer] OnToneComplete: Tone ended, capturing paddle states at silence start");
 
-            // Send radio key-up
+            // Advance computed time by the element duration we just completed BEFORE sending key-up
+            // This ensures key-up timestamp reflects the end of the element
+            if (_inTimedSequence)
+            {
+                int elementDuration = _lastElementWasDit ? _ditLength : (_ditLength * 3);
+                _computedElapsedMs += elementDuration;
+                DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by {elementDuration}ms (total elapsed: {_computedElapsedMs}ms)");
+            }
+
+            // Send radio key-up with the advanced timestamp
             SendRadioKey(false);
 
             // Set state to InterElementSpace
@@ -316,6 +364,9 @@ public class IambicKeyer
 
             _keyerState = KeyerState.Idle;
             _lastStateChange = DateTime.UtcNow;
+
+            // End timed sequence when returning to idle
+            _inTimedSequence = false;
 
             // Reset all state
             _iambicDitLatched = false;
@@ -425,7 +476,28 @@ public class IambicKeyer
     {
         if (_sendRadioKey != null && _radioClientHandle != 0)
         {
-            string timestamp = _getTimestamp();
+            string timestamp;
+            string timestampType;
+
+            if (_inTimedSequence)
+            {
+                // Compute timestamp based on sequence start + computed elapsed time
+                long computedTimestamp = (_sequenceStartTimestamp + _computedElapsedMs) % 65536;
+                timestamp = computedTimestamp.ToString("X4");
+                timestampType = "computed";
+                DebugLogger.Log("keyer", $"[IambicKeyer] Computed timestamp details: seq_start={_sequenceStartTimestamp}, elapsed={_computedElapsedMs}ms, result={timestamp}");
+            }
+            else
+            {
+                // Straight key mode or fallback: use real timestamp
+                timestamp = _getTimestamp();
+                timestampType = "real";
+            }
+
+            // Log the actual CWKey command being sent
+            string keyState = state ? "KEY-DOWN" : "KEY-UP";
+            DebugLogger.Log("keyer", $"[IambicKeyer] >>> Sending CWKey to radio: {keyState}, timestamp={timestamp} ({timestampType}), handle={_radioClientHandle}");
+
             _sendRadioKey(state, timestamp, _radioClientHandle);
         }
     }
