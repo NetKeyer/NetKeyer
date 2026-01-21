@@ -34,6 +34,11 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
 - Input device:
   - Serial port device (e.g., HaliKey v1/v2), OR
   - MIDI controller (e.g., HaliKey MIDI, CTR2)
+- SmartLink: you must be using a binary build from GitHub releases (or the builtin updater)
+  to connect to SmartLink or see it in the UI. This is because FlexRadio requires us to keep
+  the SmartLink client ID secret. Anyone wanting to develop a fork will have to negotiate a
+  developer contract with FlexRadio if they want to use SmartLink. This is the best compromise
+  we can manage for an open-source app.
 
 ## Building
 
