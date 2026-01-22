@@ -908,6 +908,13 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Set keying controller to sidetone-only mode
                 _keyingController?.SetRadio(null, isSidetoneOnly: true);
 
+                // Explicitly enable CW Monitor if it should be enabled
+                if (_keyingController?.CWMonitor != null)
+                {
+                    _keyingController.CWMonitor.Enabled = _settings.CwMonitorEnabled;
+                    DebugLogger.Log("cwmonitor", $"Explicitly set CWMonitor.Enabled to {_settings.CwMonitorEnabled} in sidetone-only mode");
+                }
+
                 // Open the selected input device
                 OpenInputDevice();
 

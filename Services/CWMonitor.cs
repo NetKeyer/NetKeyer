@@ -230,7 +230,7 @@ namespace NetKeyer.Services
     {
         private const float DitTolerance = 1.5f;
         private const float InterElementTolerance = 1.3f;
-        private const float LetterSpaceThreshold = 5.9f;
+        private const float LetterSpaceThreshold = 5.0f;
 
         public enum KeyElement
         {

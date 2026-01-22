@@ -310,20 +310,20 @@
                                         FontSize="11"
                                         Padding="4,2"
                                         VerticalAlignment="Center"
-                                        IsEnabled="{Binding CwMonitorEnabled}"
+                                        IsVisible="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
                                 <Button Content="Clear Buffer"
                                         Command="{Binding ClearCWMonitorBufferCommand}"
                                         FontSize="11"
                                         Padding="4,2"
                                         VerticalAlignment="Center"
-                                        IsEnabled="{Binding CwMonitorEnabled}"
+                                        IsVisible="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear the decoded CW text buffer"/>
                             </StackPanel>
 
                             <!-- Decoded CW Display -->
                             <Border BorderBrush="DarkGray" BorderThickness="1" Background="#F5F5F5" Padding="6" CornerRadius="2"
-                                    IsEnabled="{Binding CwMonitorEnabled}">
+                                    IsVisible="{Binding CwMonitorEnabled}">
                                 <TextBlock Text="{Binding DecodedCW}"
                                            FontFamily="Consolas,Courier New,monospace"
                                            FontSize="16"
@@ -334,8 +334,9 @@
                             </Border>
 
                             <!-- Diagnostics Section -->
-                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0">
-                                <StackPanel Spacing="4" IsEnabled="{Binding CwMonitorEnabled}">
+                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                                    IsVisible="{Binding CwMonitorEnabled}">
+                                <StackPanel Spacing="4">
                                     <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
                                     
                                     <!-- Primary Stats Row -->

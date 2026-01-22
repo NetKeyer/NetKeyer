@@ -164,6 +164,7 @@ If a pattern isn't recognized, it's displayed as: `#(pattern)`
    - Word space: ~7 dit lengths
 2. **Consistent timing**: Try to maintain steady dit/dah lengths
 3. **Clean keying**: Avoid bounce or hesitation
+4. **Fine-tuning**: If spacing detection feels off, see [Timing Thresholds](#timing-thresholds) for adjustment guidance
 
 ### Troubleshooting
 
@@ -255,6 +256,96 @@ If a pattern isn't recognized, it's displayed as: `#(pattern)`
 - **Thread Safety**: Uses cancellation tokens for clean shutdown
 - **Automatic Reset**: Statistics auto-reset every 30 minutes to prevent stale data
 
+### Timing Thresholds
+
+The CW Monitor uses three configurable constants in the `ElementClassifier` class to control spacing detection. These values are tuned for typical operating conditions but can be adjusted if needed.
+
+#### Constants Overview
+
+Located in `Services/CWMonitor.cs` (ElementClassifier class):
+
+```csharp
+private const float DitTolerance = 1.5f;
+private const float InterElementTolerance = 1.3f;
+private const float LetterSpaceThreshold = 5.0f;
+```
+
+#### DitTolerance (Default: 1.5)
+
+**Purpose**: Maximum duration multiplier to classify a key-down as a dit vs. dah
+
+**How it works**: 
+- Key-down durations ≤ `ditLength × 1.5` are classified as **dits**
+- Key-down durations > `ditLength × 1.5` are classified as **dahs**
+
+**When to adjust**:
+
+| Symptom | Adjustment | Reason |
+|---------|------------|--------|
+| Dits being decoded as dahs | Increase to 1.6-1.8 | Gives more tolerance for slightly longer dits |
+| Dahs being decoded as dits | Decrease to 1.3-1.4 | Tightens dit classification |
+| Very sloppy keying still works | Current value OK | Default handles normal variation |
+
+**Example scenarios**:
+- **Beginner with inconsistent timing**: Increase to `1.7f` for more forgiving classification
+- **Contest operator with precise keying**: Decrease to `1.3f` for tighter detection
+- **Paddle bounce causing short dahs**: Increase to `1.6f` to prevent false dit detection
+
+#### InterElementTolerance (Default: 1.3)
+
+**Purpose**: Maximum duration multiplier to classify a key-up as inter-element space (vs. letter space)
+
+**How it works**:
+- Key-up durations ≤ `ditLength × 1.3` are classified as **inter-element space** (between dits/dahs in same letter)
+- Key-up durations > `ditLength × 1.3` begin letter/word space detection
+
+**When to adjust**:
+
+| Symptom | Adjustment | Reason |
+|---------|------------|--------|
+| Letters breaking into multiple characters | Increase to 1.5-1.8 | Tolerates longer pauses within letters |
+| Characters running together | Decrease to 1.1-1.2 | Forces tighter inter-element spacing |
+| Standard spacing works well | Current value OK | Default matches typical operator timing |
+
+**Example scenarios**:
+- **Straight key with variable spacing**: Increase to `1.6f` for more tolerance
+- **High-speed iambic (30+ WPM)**: Decrease to `1.2f` for tighter timing
+- **Learning operator with hesitation**: Increase to `1.8f` to keep letters together
+
+#### LetterSpaceThreshold (Default: 5.0)
+
+**Purpose**: Minimum duration multiplier to classify a key-up as word space (vs. letter space)
+
+**How it works**:
+- Key-up durations ≤ `ditLength × 5.0` are classified as **letter space** (between characters)
+- Key-up durations > `ditLength × 5.0` are classified as **word space** (between words)
+
+**When to adjust**:
+
+| Symptom | Adjustment | Reason |
+|---------|------------|--------|
+| Word spaces appear too slowly | Decrease to 4.5-4.8 | Triggers word space sooner |
+| Letters breaking into word spaces | Increase to 5.5-6.0 | Requires longer pause for word space |
+| Spacing feels natural | Current value OK | Default balances character/word spacing |
+
+**Example scenarios**:
+- **Fast operator with tight spacing**: Decrease to `4.5f` for quicker word detection
+- **Slow, deliberate keying**: Increase to `5.5f` to prevent premature word spaces
+- **Optimal responsiveness** (current): `5.0f` provides good balance for most operators
+
+#### Making Adjustments
+
+To modify these values:
+
+1. **Open** `Services/CWMonitor.cs`
+2. **Locate** the `ElementClassifier` class (around line 229)
+3. **Find** the three constants at the top of the class
+4. **Modify** the float value(s) as needed
+5. **Rebuild** the application
+6. **Test** with your typical keying and adjust iteratively
+
+**Recommendation**: Change values in small increments (±0.1 to 0.2) and test thoroughly before making larger adjustments.
+
 ### Settings Persistence
 
 Settings are stored in platform-specific locations:
@@ -262,7 +353,7 @@ Settings are stored in platform-specific locations:
 - **Linux/macOS**: `~/.config/NetKeyer/settings.json`
 
 Persisted setting:
-```json
+```csharp
 {
   "CwMonitorEnabled": false
 }
@@ -322,7 +413,7 @@ Ideas for future development:
 - [ ] Export/save decoded text to file
 - [ ] Audio tone feedback for decoded characters
 - [ ] Advanced statistics (timing variance, error rate)
-- [ ] Configurable spacing thresholds
+- [ ] UI-configurable spacing thresholds (currently require code changes)
 - [ ] Support for additional prosigns and special characters
 - [ ] "Learning mode" indicator showing when enough samples collected
 
