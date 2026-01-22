@@ -22,6 +22,9 @@ namespace NetKeyer.Models
         // WASAPI aggressive low-latency mode (Windows only)
         public bool WasapiAggressiveLowLatency { get; set; } = true;
 
+        // CW Monitor enabled state
+        public bool CwMonitorEnabled { get; set; } = true;
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 

@@ -2,6 +2,7 @@ using System;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
 using NetKeyer.Keying;
+using NetKeyer.Helpers;
 
 namespace NetKeyer.Services;
 
@@ -11,6 +12,7 @@ public class KeyingController
     private uint _boundGuiClientHandle;
     private ISidetoneGenerator _sidetoneGenerator;
     private IambicKeyer _iambicKeyer;
+    private CWMonitor _cwMonitor;
     private bool _isTransmitModeCW = true;
     private bool _isSidetoneOnlyMode = false;
     private bool _isIambicMode = true;
@@ -28,6 +30,8 @@ public class KeyingController
     public KeyingController(ISidetoneGenerator sidetoneGenerator)
     {
         _sidetoneGenerator = sidetoneGenerator;
+        _cwMonitor = new CWMonitor();
+        DebugLogger.Log("cwmonitor", "CWMonitor instance created in KeyingController");
     }
 
     public void Initialize(uint guiClientHandle, Func<string> timestampGenerator, Action<bool, string, uint> cwKeyCallback)
@@ -36,13 +40,38 @@ public class KeyingController
         _timestampGenerator = timestampGenerator;
         _cwKeyCallback = cwKeyCallback;
 
-        // Initialize iambic keyer
+        // Create a wrapper callback that notifies CW Monitor
+        Action<bool, string, uint> cwKeyCallbackWithMonitor = (state, timestamp, handle) =>
+        {
+            // Notify CW Monitor (iambic mode)
+            if (_cwMonitor != null && _cwMonitor.Enabled)
+            {
+                if (state)
+                {
+                    _cwMonitor.OnKeyDown();
+                    DebugLogger.Log("cwmonitor", "Iambic: OnKeyDown");
+                }
+                else
+                {
+                    _cwMonitor.OnKeyUp();
+                    DebugLogger.Log("cwmonitor", "Iambic: OnKeyUp");
+                }
+            }
+
+            // Call original callback
+            cwKeyCallback?.Invoke(state, timestamp, handle);
+        };
+
+        // Initialize iambic keyer with wrapped callback
         _iambicKeyer = new IambicKeyer(
             _sidetoneGenerator,
             _boundGuiClientHandle,
             timestampGenerator,
-            cwKeyCallback
+            cwKeyCallbackWithMonitor
         );
+
+        // Note: CW Monitor will be enabled by the ViewModel based on saved settings
+        DebugLogger.Log("cwmonitor", "KeyingController initialized, CWMonitor ready");
     }
 
     public void SetRadio(Radio radio, bool isSidetoneOnly = false)
@@ -145,10 +174,39 @@ public class KeyingController
     public void Stop()
     {
         _iambicKeyer?.Stop();
+        if (_cwMonitor != null)
+        {
+            _cwMonitor.Enabled = false;
+        }
+    }
+
+    // Expose CWMonitor properties
+    public CWMonitor CWMonitor => _cwMonitor;
+
+    public string DecodedCW => _cwMonitor?.DecodedBuffer ?? "";
+
+    public void ResetCWMonitorStats()
+    {
+        _cwMonitor?.ResetStatistics();
     }
 
     private void SendCWKey(bool state)
     {
+        // Notify CW Monitor (straight key mode)
+        if (_cwMonitor != null && _cwMonitor.Enabled)
+        {
+            if (state)
+            {
+                _cwMonitor.OnKeyDown();
+                DebugLogger.Log("cwmonitor", "Straight key: OnKeyDown");
+            }
+            else
+            {
+                _cwMonitor.OnKeyUp();
+                DebugLogger.Log("cwmonitor", "Straight key: OnKeyUp");
+            }
+        }
+
         // Control sidetone
         if (state)
         {

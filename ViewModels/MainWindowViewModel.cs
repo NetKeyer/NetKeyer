@@ -138,6 +138,24 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _rightPaddleStateText = "OFF";
 
+    [ObservableProperty]
+    private string _decodedCW = "";
+
+    [ObservableProperty]
+    private int _ditLength = 0;
+
+    [ObservableProperty]
+    private int _dahLength = 0;
+
+    [ObservableProperty]
+    private int _calculatedWpm = 0;
+
+    [ObservableProperty]
+    private int _sampleCount = 0;
+
+    [ObservableProperty]
+    private bool _cwMonitorEnabled = true;
+
     private Radio _connectedRadio;
     private uint _boundGuiClientHandle = 0;
     private UserSettings _settings;
@@ -272,6 +290,20 @@ public partial class MainWindowViewModel : ViewModelBase
         );
         _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
         _keyingController.SetSpeed(CwSpeed);
+
+        // Subscribe to CW Monitor property changes
+        if (_keyingController.CWMonitor != null)
+        {
+            _keyingController.CWMonitor.PropertyChanged += CWMonitor_PropertyChanged;
+            DebugLogger.Log("cwmonitor", "Subscribed to CW Monitor PropertyChanged events");
+        }
+
+        // Apply saved CW Monitor enabled state
+        _loadingSettings = true;
+        DebugLogger.Log("cwmonitor", $"Loading saved CW Monitor enabled state: {_settings.CwMonitorEnabled}");
+        CwMonitorEnabled = _settings.CwMonitorEnabled;
+        _loadingSettings = false;
+        DebugLogger.Log("cwmonitor", $"CW Monitor enabled state applied: {CwMonitorEnabled}");
 
         // Initialize transmit slice monitor
         _transmitSliceMonitor = new TransmitSliceMonitor();
@@ -1022,6 +1054,19 @@ public partial class MainWindowViewModel : ViewModelBase
             _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
             _keyingController.SetSpeed(CwSpeed);
 
+            // Re-subscribe to CW Monitor property changes after recreation
+            if (_keyingController.CWMonitor != null)
+            {
+                _keyingController.CWMonitor.PropertyChanged += CWMonitor_PropertyChanged;
+                DebugLogger.Log("cwmonitor", "Re-subscribed to CW Monitor PropertyChanged events after radio connection");
+            }
+
+            // Re-apply CW Monitor enabled state
+            _loadingSettings = true;
+            CwMonitorEnabled = _settings.CwMonitorEnabled;
+            _loadingSettings = false;
+            DebugLogger.Log("cwmonitor", $"Re-applied CW Monitor enabled state after radio connection: {CwMonitorEnabled}");
+
             // Subscribe to radio property changes
             _connectedRadio.PropertyChanged += Radio_PropertyChanged;
 
@@ -1184,6 +1229,20 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void ResetCWMonitorStats()
+    {
+        _keyingController?.ResetCWMonitorStats();
+        
+        // Clear displayed statistics
+        DitLength = 0;
+        DahLength = 0;
+        CalculatedWpm = 0;
+        SampleCount = 0;
+        
+        DebugLogger.Log("cwmonitor", "CW Monitor stats reset from UI");
+    }
+
 
     partial void OnCwSpeedChanged(int value)
     {
@@ -1234,6 +1293,29 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncSwapPaddlesToRadio(value);
+    }
+
+    partial void OnCwMonitorEnabledChanged(bool value)
+    {
+        DebugLogger.Log("cwmonitor", $"OnCwMonitorEnabledChanged called: value={value}, _loadingSettings={_loadingSettings}");
+        
+        if (_keyingController?.CWMonitor != null)
+        {
+            DebugLogger.Log("cwmonitor", $"Setting CWMonitor.Enabled to {value}");
+            _keyingController.CWMonitor.Enabled = value;
+            DebugLogger.Log("cwmonitor", $"CW Monitor {(value ? "enabled" : "disabled")} from UI, actual state: {_keyingController.CWMonitor.Enabled}");
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"WARNING: Cannot set CW Monitor enabled state - KeyingController or CWMonitor is null");
+        }
+
+        if (!_loadingSettings)
+        {
+            _settings.CwMonitorEnabled = value;
+            _settings.Save();
+            DebugLogger.Log("cwmonitor", $"Saved CW Monitor enabled state: {value}");
+        }
     }
 
     private void OnRadioAdded(Radio radio)
@@ -1387,6 +1469,40 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         // This is now mainly handled by RadioSettingsSynchronizer
         // Keep this for any non-settings radio property changes if needed in the future
+    }
+
+    private void CWMonitor_PropertyChanged(object sender, PropertyChangedEventArgs e)
+    {
+        // Update UI properties from CW Monitor on the UI thread
+        Dispatcher.UIThread.Post(() =>
+        {
+            switch (e.PropertyName)
+            {
+                case "DecodedBuffer":
+                    DecodedCW = _keyingController?.DecodedCW ?? "";
+                    break;
+
+                case "CurrentStatistics":
+                    if (_keyingController?.CWMonitor != null)
+                    {
+                        var stats = _keyingController.CWMonitor.CurrentStatistics;
+                        DitLength = stats.DitLengthMs;
+                        DahLength = stats.DahLengthMs;
+
+                        // Calculate WPM from dit length (PARIS standard: 1 dit = 1.2 seconds / WPM)
+                        // Formula: WPM = 1200 / ditLength (in milliseconds)
+                        if (stats.DitLengthMs > 0)
+                        {
+                            CalculatedWpm = 1200 / stats.DitLengthMs;
+                        }
+                        else
+                        {
+                            CalculatedWpm = 0;
+                        }
+                    }
+                    break;
+            }
+        });
     }
 
     private void RadioSettingsSynchronizer_SettingChanged(object sender, RadioSettingChangedEventArgs e)

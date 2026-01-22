@@ -295,6 +295,73 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- CW Monitor Section -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                            IsVisible="{Binding CwSettingsVisible}">
+                        <StackPanel Spacing="6">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="CW Monitor" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                                <CheckBox Content="Enable"
+                                          IsChecked="{Binding CwMonitorEnabled}"
+                                          VerticalAlignment="Center"
+                                          Padding="2"/>
+                                <Button Content="Reset Stats"
+                                        Command="{Binding ResetCWMonitorStatsCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
+                            </StackPanel>
+
+                            <!-- Decoded CW Display -->
+                            <Border BorderBrush="DarkGray" BorderThickness="1" Background="#F5F5F5" Padding="6" CornerRadius="2"
+                                    IsEnabled="{Binding CwMonitorEnabled}">
+                                <TextBlock Text="{Binding DecodedCW}"
+                                           FontFamily="Consolas,Courier New,monospace"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           MinHeight="30"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Diagnostics Section -->
+                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0">
+                                <StackPanel Spacing="4" IsEnabled="{Binding CwMonitorEnabled}">
+                                    <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
+                                    
+                                    <!-- Primary Stats Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Dit:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding DitLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Dah:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding DahLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Measured:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding CalculatedWpm}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="WPM" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    
+                                    <!-- Secondary Stats Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <TextBlock Text="Timing samples collected:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding SampleCount}" FontSize="10" FontWeight="Bold" Foreground="Gray" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Disconnect and Exit Buttons -->
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Button Content="Disconnect"
