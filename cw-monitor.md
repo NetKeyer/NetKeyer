@@ -10,7 +10,7 @@ The **CW Monitor** is an integrated feature in NetKeyer that monitors your keyin
 - **Automatic decoding** of Morse code patterns into readable text
 - **Adaptive learning** that automatically adjusts to your keying speed
 - **Bimodal timing analysis** that distinguishes between dits and dahs
-- **Rolling buffer** showing the last 20 characters sent
+- **Rolling buffer** showing the last 120 characters sent
 
 ### Diagnostic Statistics
 - **Dit Length** - Measured duration of dit elements (in milliseconds)
@@ -79,6 +79,7 @@ The CW Monitor section is located on the **Operating Page** (visible after conne
 - **Checked**: CW Monitor is active and decoding
 - **Unchecked**: CW Monitor is disabled (saves CPU resources)
 - Setting is automatically saved and restored on next launch
+- **Default**: CW Monitor starts disabled (unchecked) when first launched
 
 #### Reset Stats Button
 - **Purpose**: Clear all learned timing data
@@ -263,9 +264,11 @@ Settings are stored in platform-specific locations:
 Persisted setting:
 ```json
 {
-  "CwMonitorEnabled": true
+  "CwMonitorEnabled": false
 }
 ```
+
+Note: The default value is `false` (disabled). Once you enable or disable the monitor, your preference is saved.
 
 ### Debug Logging
 

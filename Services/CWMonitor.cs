@@ -291,7 +291,7 @@ namespace NetKeyer.Services
         private string _currentPattern = string.Empty;
         private int _elementCount;
 
-        private const int BufferMaxLength = 20;
+        private const int BufferMaxLength = 120;
         private const int MinElementsBeforeDecoding = 10;
         private const int StatsResetIntervalMinutes = 30;
 

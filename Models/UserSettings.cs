@@ -23,7 +23,7 @@ namespace NetKeyer.Models
         public bool WasapiAggressiveLowLatency { get; set; } = true;
 
         // CW Monitor enabled state
-        public bool CwMonitorEnabled { get; set; } = true;
+        public bool CwMonitorEnabled { get; set; } = false;
 
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
