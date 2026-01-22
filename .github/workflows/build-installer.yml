@@ -20,6 +20,27 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      shell: pwsh
+      run: |
+        $secretFile = "secret-provider/SecretClientIdProvider.cs"
+        if (Test-Path $secretFile) {
+          Move-Item $secretFile "SmartLink/"
+          Write-Host "Secret provider included in build"
+          Remove-Item -Recurse -Force secret-provider
+          Write-Host "Cleaned up secret-provider directory"
+        } else {
+          Write-Host "Secret provider not available, building without it"
+        }
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -102,6 +123,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      run: |
+        secret_file="secret-provider/SecretClientIdProvider.cs"
+        if [ -f "$secret_file" ]; then
+          mv "$secret_file" SmartLink/
+          echo "Secret provider included in build"
+          rm -rf secret-provider
+          echo "Cleaned up secret-provider directory"
+        else
+          echo "Secret provider not available, building without it"
+        fi
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -168,6 +209,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Checkout secret provider
+      uses: actions/checkout@v4
+      with:
+        repository: NetKeyer/NetKeyer-Credentials
+        token: ${{ secrets.SECRET_PROVIDER_PAT }}
+        path: secret-provider
+      continue-on-error: true
+
+    - name: Include secret provider in build
+      run: |
+        secret_file="secret-provider/SecretClientIdProvider.cs"
+        if [ -f "$secret_file" ]; then
+          mv "$secret_file" SmartLink/
+          echo "Secret provider included in build"
+          rm -rf secret-provider
+          echo "Cleaned up secret-provider directory"
+        else
+          echo "Secret provider not available, building without it"
+        fi
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -233,12 +294,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Determine version
+    - name: Determine version and release type
       id: version
       run: |
         version="${{ github.ref }}"
         version="${version#refs/tags/v}"
         echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+        # Check if this is a prerelease (tag contains "-pre")
+        if [[ "$version" == *"-pre"* ]]; then
+          echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          echo "Release type: prerelease (draft)"
+        else
+          echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          echo "Release type: stable"
+        fi
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
@@ -252,8 +322,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: artifacts/**/*
-        draft: false
-        prerelease: false
+        draft: ${{ steps.version.outputs.IS_PRERELEASE == 'true' }}
+        prerelease: ${{ steps.version.outputs.IS_PRERELEASE == 'true' }}
+        make_latest: ${{ steps.version.outputs.IS_PRERELEASE != 'true' }}
         generate_release_notes: true
         body: |
           ## NetKeyer v${{ steps.version.outputs.VERSION }}

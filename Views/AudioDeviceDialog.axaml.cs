@@ -11,6 +11,7 @@ namespace NetKeyer.Views
         public bool DeviceChanged { get; private set; }
         public string SelectedDeviceId { get; private set; }
         public bool AggressiveLowLatency { get; private set; }
+        public bool KeepAudioDeviceAwake { get; private set; }
 
         public AudioDeviceDialog()
         {
@@ -28,6 +29,7 @@ namespace NetKeyer.Views
         {
             SelectedDeviceId = _viewModel.GetSelectedDeviceId();
             AggressiveLowLatency = _viewModel.GetAggressiveLowLatency();
+            KeepAudioDeviceAwake = _viewModel.GetKeepAudioDeviceAwake();
             DeviceChanged = true;
             Close();
         }

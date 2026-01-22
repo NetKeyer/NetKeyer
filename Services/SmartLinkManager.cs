@@ -50,7 +50,19 @@ public class SmartLinkManager
         _settings = settings;
 
         // Initialize SmartLink authentication service
-        var clientIdProvider = new ConfigFileClientIdProvider();
+        // Try user config first, fall back to secret provider if available
+        IClientIdProvider clientIdProvider = new ConfigFileClientIdProvider();
+
+        if (clientIdProvider.GetClientId() == null)
+        {
+            // Try to use secret provider if it was included in build
+            var secretProvider = TryCreateSecretProvider();
+            if (secretProvider != null)
+            {
+                clientIdProvider = secretProvider;
+            }
+        }
+
         _smartLinkAuth = new SmartLinkAuthService(clientIdProvider);
 
         IsAvailable = _smartLinkAuth.IsAvailable;
@@ -63,6 +75,25 @@ public class SmartLinkManager
 
         _smartLinkAuth.AuthStateChanged += SmartLinkAuth_AuthStateChanged;
         _smartLinkAuth.ErrorOccurred += SmartLinkAuth_ErrorOccurred;
+    }
+
+    private static IClientIdProvider TryCreateSecretProvider()
+    {
+        // Use reflection to find SecretClientIdProvider if it exists
+        // This allows the app to work without the secret provider (open source builds)
+        try
+        {
+            var type = Type.GetType("NetKeyer.SmartLink.SecretClientIdProvider, NetKeyer");
+            if (type != null)
+            {
+                return (IClientIdProvider)Activator.CreateInstance(type);
+            }
+        }
+        catch
+        {
+            // Ignore errors - secret provider is optional
+        }
+        return null;
     }
 
     public async Task<bool> TryRestoreSessionAsync()
@@ -78,14 +109,19 @@ public class SmartLinkManager
         return success;
     }
 
-    public async Task<bool> LoginAsync(string username, string password)
+    public async Task<bool> LoginAsync(CancellationToken cancellationToken = default)
     {
-        var success = await _smartLinkAuth.LoginAsync(username, password);
+        var success = await _smartLinkAuth.LoginAsync(cancellationToken);
         if (success)
         {
             await ConnectToServerAsync();
         }
         return success;
+    }
+
+    public void CancelLogin()
+    {
+        _smartLinkAuth?.CancelLogin();
     }
 
     public void Logout()

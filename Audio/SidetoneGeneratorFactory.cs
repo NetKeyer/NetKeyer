@@ -60,11 +60,10 @@ namespace NetKeyer.Audio
             var devices = new List<(string deviceId, string name)>();
             devices.Add(("", "System Default"));
 
-#if WINDOWS
             try
             {
                 using var enumerator = new MMDeviceEnumerator();
-                var endpoints = enumerator.EnumerateAudioEndpoints(DataFlow.Render, DeviceState.Active);
+                var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
 
                 foreach (var device in endpoints)
                 {
@@ -76,7 +75,6 @@ namespace NetKeyer.Audio
             {
                 Console.WriteLine($"Error enumerating WASAPI devices: {ex.Message}");
             }
-#endif
 
             return devices;
         }

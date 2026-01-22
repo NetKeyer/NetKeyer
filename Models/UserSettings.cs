@@ -22,6 +22,9 @@ namespace NetKeyer.Models
         // WASAPI aggressive low-latency mode (Windows only)
         public bool WasapiAggressiveLowLatency { get; set; } = true;
 
+        // Keep audio device awake by playing near-silent audio
+        public bool KeepAudioDeviceAwake { get; set; } = false;
+
         // CW Monitor enabled state
         public bool CwMonitorEnabled { get; set; } = false;
 

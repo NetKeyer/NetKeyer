@@ -167,6 +167,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // Sidetone generator
     private ISidetoneGenerator _sidetoneGenerator;
 
+    // Keep-awake stream (plays near-silent audio to prevent device from sleeping)
+    private IKeepAwakeStream _keepAwakeStream;
+
     // SmartLink support
     private SmartLinkManager _smartLinkManager;
 
@@ -195,6 +198,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _smartLinkButtonText = "Login to SmartLink";
 
     // Mode differentiation properties
+    [ObservableProperty]
+    private string _connectedRadioDisplay = "";  // Shows connected radio name
+
     [ObservableProperty]
     private string _modeDisplay = "Disconnected";  // Combined mode string
 
@@ -275,6 +281,21 @@ public partial class MainWindowViewModel : ViewModelBase
         if (SelectedAudioDevice != null && !string.IsNullOrEmpty(SelectedAudioDevice.DeviceId))
         {
             ReinitializeSidetoneGenerator();
+        }
+
+        // Initialize keep-awake stream if enabled
+        if (_settings.KeepAudioDeviceAwake)
+        {
+            try
+            {
+                string deviceId = SelectedAudioDevice?.DeviceId ?? "";
+                _keepAwakeStream = KeepAwakeStreamFactory.Create(deviceId);
+                _keepAwakeStream.Start();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("audio", $"Warning: Could not initialize keep-awake stream: {ex.Message}");
+            }
         }
 
         // Initialize keying controller
@@ -417,6 +438,34 @@ public partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to reinitialize sidetone generator: {ex.Message}");
+        }
+    }
+
+    private void ReinitializeKeepAwakeStream()
+    {
+        try
+        {
+            // Dispose old stream
+            _keepAwakeStream?.Stop();
+            _keepAwakeStream?.Dispose();
+            _keepAwakeStream = null;
+
+            // Create and start new stream if enabled
+            if (_settings.KeepAudioDeviceAwake)
+            {
+                string deviceId = SelectedAudioDevice?.DeviceId ?? "";
+                _keepAwakeStream = KeepAwakeStreamFactory.Create(deviceId);
+                _keepAwakeStream.Start();
+                DebugLogger.Log("audio", $"Keep-awake stream reinitialized with device={deviceId}");
+            }
+            else
+            {
+                DebugLogger.Log("audio", "Keep-awake stream disabled");
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log("audio", $"Failed to reinitialize keep-awake stream: {ex.Message}");
         }
     }
 
@@ -771,9 +820,14 @@ public partial class MainWindowViewModel : ViewModelBase
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 _settings.WasapiAggressiveLowLatency = dialog.AggressiveLowLatency;
-                _settings.Save();
                 DebugLogger.Log("audio", $"[SelectAudioDevice] Saved AggressiveLowLatency={dialog.AggressiveLowLatency}");
             }
+
+            // Save the keep-awake setting and update the stream
+            bool keepAwakeChanged = _settings.KeepAudioDeviceAwake != dialog.KeepAudioDeviceAwake;
+            _settings.KeepAudioDeviceAwake = dialog.KeepAudioDeviceAwake;
+            _settings.Save();
+            DebugLogger.Log("audio", $"[SelectAudioDevice] Saved KeepAudioDeviceAwake={dialog.KeepAudioDeviceAwake}");
 
             // Update the selected device - this will trigger OnSelectedAudioDeviceChanged
             // which handles saving settings and reinitializing the sidetone generator
@@ -790,6 +844,12 @@ public partial class MainWindowViewModel : ViewModelBase
             else
             {
                 DebugLogger.Log("audio", $"[SelectAudioDevice] Device not found in AudioDevices collection!");
+            }
+
+            // Handle keep-awake stream changes
+            if (keepAwakeChanged || deviceInfo != null)
+            {
+                ReinitializeKeepAwakeStream();
             }
         }
         else
@@ -1195,6 +1255,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // Close input device
         _inputDeviceManager?.Dispose();
 
+        // Dispose keep-awake stream
+        _keepAwakeStream?.Stop();
+        _keepAwakeStream?.Dispose();
+
         // Dispose sidetone generator
         _sidetoneGenerator?.Dispose();
 
@@ -1421,6 +1485,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Disconnected
             modeStr = "Disconnected";
+            ConnectedRadioDisplay = "";
             LeftPaddleLabelText = "Left Paddle";
             RightPaddleVisible = true;
             ModeInstructions = "";
@@ -1430,6 +1495,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             // Sidetone-only mode
             modeStr = "Sidetone Only";
+            ConnectedRadioDisplay = "";
             CwSettingsVisible = true;
             ModeInstructions = "";
 
@@ -1451,6 +1517,7 @@ public partial class MainWindowViewModel : ViewModelBase
             string radioMode = txSlice?.DemodMode?.ToUpper() ?? "Unknown";
             modeStr = $"{radioMode} (PTT)";
 
+            ConnectedRadioDisplay = $"{_connectedRadio.Nickname} ({_connectedRadio.Model})";
             LeftPaddleLabelText = "PTT";
             RightPaddleVisible = false;
             CwSettingsVisible = false;
@@ -1459,6 +1526,8 @@ public partial class MainWindowViewModel : ViewModelBase
         else
         {
             // CW mode
+            ConnectedRadioDisplay = $"{_connectedRadio.Nickname} ({_connectedRadio.Model})";
+
             if (IsIambicMode)
             {
                 string iambicType = IsIambicModeB ? "Mode B" : "Mode A";
@@ -1711,29 +1780,55 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        // Start the login task before showing dialog (it will open browser)
+        SmartLinkStatus = "Authenticating...";
+        var loginTask = _smartLinkManager.LoginAsync(loginDialog.CancellationToken);
+
+        // Show dialog (blocks until user cancels or login completes)
+        _ = loginTask.ContinueWith(t =>
+        {
+            // When login completes (success or failure), close the dialog
+            if (t.IsCompletedSuccessfully && t.Result)
+            {
+                loginDialog.CompleteSuccessfully();
+            }
+            else if (t.IsFaulted)
+            {
+                loginDialog.ShowError(t.Exception?.InnerException?.Message ?? "Login failed");
+            }
+            // If cancelled, dialog will close via cancel button
+        }, System.Threading.Tasks.TaskScheduler.Default);
+
         await loginDialog.ShowDialog(mainWindow);
 
-        if (loginDialog.LoginSucceeded)
+        // Update and save the Remember Me preference
+        _settings.RememberMeSmartLink = loginDialog.RememberMe;
+        _settings.Save();
+
+        if (loginDialog.WasCancelled)
         {
-            var username = loginDialog.Username;
-            var password = loginDialog.Password;
-
-            // Update and save the Remember Me preference
-            _settings.RememberMeSmartLink = loginDialog.RememberMe;
-            _settings.Save();
-
-            // Attempt login
-            SmartLinkStatus = "Authenticating...";
-            var success = await _smartLinkManager.LoginAsync(username, password);
-
-            if (!success)
-            {
-                SmartLinkStatus = "Login failed - check credentials";
-            }
+            _smartLinkManager.CancelLogin();
+            SmartLinkStatus = "Login cancelled";
         }
         else
         {
-            SmartLinkStatus = "Login cancelled";
+            // Wait for the login task to finish if not already
+            try
+            {
+                var success = await loginTask;
+                if (!success)
+                {
+                    SmartLinkStatus = "Login failed";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                SmartLinkStatus = "Login cancelled";
+            }
+            catch (Exception ex)
+            {
+                SmartLinkStatus = $"Login failed: {ex.Message}";
+            }
         }
     }
 
