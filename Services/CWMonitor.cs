@@ -16,6 +16,7 @@ namespace NetKeyer.Services
         private int _ditLengthMs;
         private int _dahLengthMs;
         private string _debugInfo;
+        private int _sampleCount;
 
         public int DitLengthMs
         {
@@ -52,6 +53,19 @@ namespace NetKeyer.Services
                 {
                     _debugInfo = value;
                     OnPropertyChanged(nameof(DebugInfo));
+                }
+            }
+        }
+
+        public int SampleCount
+        {
+            get => _sampleCount;
+            set
+            {
+                if (_sampleCount != value)
+                {
+                    _sampleCount = value;
+                    OnPropertyChanged(nameof(SampleCount));
                 }
             }
         }
@@ -341,7 +355,15 @@ namespace NetKeyer.Services
             }
         }
 
-        public KeyingStatistics CurrentStatistics => _timingAnalyzer.AnalyzeStatistics();
+        public KeyingStatistics CurrentStatistics
+        {
+            get
+            {
+                var stats = _timingAnalyzer.AnalyzeStatistics();
+                stats.SampleCount = _elementCount;
+                return stats;
+            }
+        }
 
         public CWMonitor()
         {
@@ -373,6 +395,17 @@ namespace NetKeyer.Services
             DebugLogger.Log("cwmonitor", "Resetting statistics");
             _timingAnalyzer.Reset();
             _elementCount = 0;
+        }
+
+        public void ClearBuffer()
+        {
+            DebugLogger.Log("cwmonitor", "Clearing decoded buffer");
+            lock (_lockObject)
+            {
+                _decodedBuffer = string.Empty;
+                _currentPattern = string.Empty;
+            }
+            OnPropertyChanged(nameof(DecodedBuffer));
         }
 
         private void Start()

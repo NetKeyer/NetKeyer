@@ -1059,13 +1059,11 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _keyingController.CWMonitor.PropertyChanged += CWMonitor_PropertyChanged;
                 DebugLogger.Log("cwmonitor", "Re-subscribed to CW Monitor PropertyChanged events after radio connection");
+                
+                // Explicitly enable CW Monitor if it should be enabled (new instance needs to be started)
+                _keyingController.CWMonitor.Enabled = _settings.CwMonitorEnabled;
+                DebugLogger.Log("cwmonitor", $"Explicitly set new CWMonitor.Enabled to {_settings.CwMonitorEnabled} after recreation");
             }
-
-            // Re-apply CW Monitor enabled state
-            _loadingSettings = true;
-            CwMonitorEnabled = _settings.CwMonitorEnabled;
-            _loadingSettings = false;
-            DebugLogger.Log("cwmonitor", $"Re-applied CW Monitor enabled state after radio connection: {CwMonitorEnabled}");
 
             // Subscribe to radio property changes
             _connectedRadio.PropertyChanged += Radio_PropertyChanged;
@@ -1241,6 +1239,16 @@ public partial class MainWindowViewModel : ViewModelBase
         SampleCount = 0;
         
         DebugLogger.Log("cwmonitor", "CW Monitor stats reset from UI");
+    }
+
+    [RelayCommand]
+    private void ClearCWMonitorBuffer()
+    {
+        // Clear the decoded CW buffer
+        _keyingController?.ClearCWMonitorBuffer();
+        DecodedCW = "";
+        
+        DebugLogger.Log("cwmonitor", "CW Monitor buffer cleared from UI");
     }
 
 
@@ -1488,6 +1496,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         var stats = _keyingController.CWMonitor.CurrentStatistics;
                         DitLength = stats.DitLengthMs;
                         DahLength = stats.DahLengthMs;
+                        SampleCount = stats.SampleCount;
 
                         // Calculate WPM from dit length (PARIS standard: 1 dit = 1.2 seconds / WPM)
                         // Formula: WPM = 1200 / ditLength (in milliseconds)

@@ -312,6 +312,13 @@
                                         VerticalAlignment="Center"
                                         IsEnabled="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
+                                <Button Content="Clear Buffer"
+                                        Command="{Binding ClearCWMonitorBufferCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Clear the decoded CW text buffer"/>
                             </StackPanel>
 
                             <!-- Decoded CW Display -->

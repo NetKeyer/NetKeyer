@@ -190,6 +190,11 @@ public class KeyingController
         _cwMonitor?.ResetStatistics();
     }
 
+    public void ClearCWMonitorBuffer()
+    {
+        _cwMonitor?.ClearBuffer();
+    }
+
     private void SendCWKey(bool state)
     {
         // Notify CW Monitor (straight key mode)
