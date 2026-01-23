@@ -105,9 +105,9 @@ The CW Monitor recognizes standard Morse code:
 ### Punctuation & Prosigns
 - `.` (period) - `.-.-.-`
 - `,` (comma) - `--..--`
-- `/` (slash) - `-..-`
+- `/` (slash) - `-..-.`
 - `?` (question) - `..--..`
-- **AR** (end of message) - `.-.-`
+- **AR** (end of message) - `.-.-.`
 - **BK** (break) - `-...-.-`
 - **BT** (pause) - `-...-`
 - **KN** (specific station) - `-.--`
