@@ -308,6 +308,15 @@
                                           IsChecked="{Binding CwMonitorEnabled}"
                                           VerticalAlignment="Center"
                                           Padding="2"/>
+                                <Button Content="{Binding CwAlgorithmButtonLabel}"
+                                        Command="{Binding ToggleCWAlgorithmCommand}"
+                                        FontSize="11"
+                                        FontWeight="Bold"
+                                        Padding="6,2"
+                                        MinWidth="50"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Toggle between DNN (Neural Network) and STAT (Statistical) decoding algorithm"/>
                                 <Button Content="Reset Stats"
                                         Command="{Binding ResetCWMonitorStatsCommand}"
                                         FontSize="11"

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -287,15 +288,29 @@ namespace NetKeyer.Services
     }
 
     /// <summary>
+    /// Algorithm mode for CW classification
+    /// </summary>
+    public enum CWAlgorithmMode
+    {
+        /// <summary>Dense Neural Network (100% accuracy on training data)</summary>
+        DNN,
+        /// <summary>Statistical bimodal distribution analyzer</summary>
+        STAT
+    }
+
+    /// <summary>
     /// Main CW (Morse Code) monitoring service
     /// </summary>
-    public class CWMonitor : INotifyPropertyChanged
+    public class CWMonitor : INotifyPropertyChanged, IDisposable
     {
         private readonly TimingAnalyzer _timingAnalyzer;
         private readonly ElementClassifier _classifier;
         private readonly MorseCodeDecoder _decoder;
         private readonly Timer _statsResetTimer;
         private readonly object _lockObject = new object();
+        private readonly MorseNeuralClassifier _neuralClassifier;
+        private readonly bool _neuralNetworkAvailable;
+        private CWAlgorithmMode _algorithmMode = CWAlgorithmMode.DNN;
 
         private CancellationTokenSource _cancellationTokenSource;
         private Task _monitoringTask;
@@ -308,6 +323,29 @@ namespace NetKeyer.Services
         private const int BufferMaxLength = 120;
         private const int MinElementsBeforeDecoding = 10;
         private const int StatsResetIntervalMinutes = 30;
+        private const float NeuralNetworkConfidenceThreshold = 0.85f;
+
+        /// <summary>
+        /// Gets or sets the algorithm mode for classification
+        /// </summary>
+        public CWAlgorithmMode AlgorithmMode
+        {
+            get => _algorithmMode;
+            set
+            {
+                if (_algorithmMode != value)
+                {
+                    _algorithmMode = value;
+                    DebugLogger.Log("cwmonitor", $"Algorithm mode changed to: {value}");
+                    OnPropertyChanged(nameof(AlgorithmMode));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the neural network is available
+        /// </summary>
+        public bool IsNeuralNetworkAvailable => _neuralNetworkAvailable;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -370,6 +408,23 @@ namespace NetKeyer.Services
             _timingAnalyzer = new TimingAnalyzer();
             _classifier = new ElementClassifier();
             _decoder = new MorseCodeDecoder();
+
+            // Try to load neural network model
+            try
+            {
+                string modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, 
+                                               "Models", "morse_dense_model_v2.onnx");
+                _neuralClassifier = new MorseNeuralClassifier(modelPath);
+                _neuralNetworkAvailable = true;
+                _algorithmMode = CWAlgorithmMode.STAT; // Default to STAT (better real-world performance)
+                DebugLogger.Log("cwmonitor", "Neural network classifier loaded (DNN available but defaulting to STAT mode)");
+            }
+            catch (Exception ex)
+            {
+                _neuralNetworkAvailable = false;
+                _algorithmMode = CWAlgorithmMode.STAT; // Fall back to STAT mode
+                DebugLogger.Log("cwmonitor", $"Neural network not available, using STAT mode only: {ex.Message}");
+            }
 
             _statsResetTimer = new Timer(
                 callback: _ => ResetStatistics(),
@@ -488,13 +543,79 @@ namespace NetKeyer.Services
                 if (_elementCount > MinElementsBeforeDecoding)
                 {
                     var stats = _timingAnalyzer.AnalyzeStatistics();
-                    var element = _classifier.ClassifyKeyDown(durationMs, stats);
+                    var element = ClassifyKeyDownHybrid(durationMs, stats);
                     string elementStr = _classifier.KeyElementToString(element);
 
                     _currentPattern += elementStr;
                     DebugLogger.Log("cwmonitor", $"Element: {elementStr}, Pattern: {_currentPattern}");
                 }
             }
+        }
+        
+        /// <summary>
+        /// Hybrid classification for key-down events respecting algorithm mode
+        /// </summary>
+        private ElementClassifier.KeyElement ClassifyKeyDownHybrid(int durationMs, KeyingStatistics stats)
+        {
+            // If mode is STAT or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.STAT || !_neuralNetworkAvailable)
+            {
+                return _classifier.ClassifyKeyDown(durationMs, stats);
+            }
+
+            // DNN mode - try neural network with bimodal fallback
+            if (stats.IsValid)
+            {
+                try
+                {
+                    var (prediction, probabilities) = _neuralClassifier.Classify(durationMs, isKeyDown: true);
+                    float confidence = probabilities[(int)prediction];
+                    
+                    // If confidence is high, trust the neural network
+                    if (confidence >= NeuralNetworkConfidenceThreshold)
+                    {
+                        var nnResult = ConvertNeuralToKeyElement(prediction);
+                        DebugLogger.Log("cwmonitor", $"DNN KeyDown: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        return nnResult;
+                    }
+                    
+                    // Low confidence, use bimodal fallback
+                    DebugLogger.Log("cwmonitor", $"Low DNN confidence ({confidence:P1}), using STAT fallback");
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("cwmonitor", $"DNN error: {ex.Message}, using STAT fallback");
+                }
+            }
+            
+            // Fall back to bimodal classifier
+            return _classifier.ClassifyKeyDown(durationMs, stats);
+        }
+        
+        /// <summary>
+        /// Converts neural network prediction to KeyElement type
+        /// </summary>
+        private ElementClassifier.KeyElement ConvertNeuralToKeyElement(MorseNeuralClassifier.MorseElementType neuralType)
+        {
+            return neuralType switch
+            {
+                MorseNeuralClassifier.MorseElementType.Dit => ElementClassifier.KeyElement.Dit,
+                MorseNeuralClassifier.MorseElementType.Dah => ElementClassifier.KeyElement.Dah,
+                _ => ElementClassifier.KeyElement.Unknown
+            };
+        }
+        
+        /// <summary>
+        /// Converts neural network prediction to SpaceElement type
+        /// </summary>
+        private ElementClassifier.SpaceElement ConvertNeuralToSpaceElement(MorseNeuralClassifier.MorseElementType neuralType)
+        {
+            return neuralType switch
+            {
+                MorseNeuralClassifier.MorseElementType.ElementSpace => ElementClassifier.SpaceElement.InterElement,
+                MorseNeuralClassifier.MorseElementType.WordSpace => ElementClassifier.SpaceElement.WordSpace,
+                _ => ElementClassifier.SpaceElement.Unknown
+            };
         }
 
         private void ProcessKeyUpTiming(StateTracker tracker)
@@ -519,7 +640,7 @@ namespace NetKeyer.Services
                 if (currentDuration > 0 && _elementCount > MinElementsBeforeDecoding)
                 {
                     var stats = _timingAnalyzer.AnalyzeStatistics();
-                    var spaceType = _classifier.ClassifyKeyUp(currentDuration, stats);
+                    var spaceType = ClassifyKeyUpHybrid(currentDuration, stats);
 
                     if (spaceType == ElementClassifier.SpaceElement.WordSpace)
                     {
@@ -534,7 +655,7 @@ namespace NetKeyer.Services
         private void ProcessSpacing(int durationMs)
         {
             var stats = _timingAnalyzer.AnalyzeStatistics();
-            var spaceType = _classifier.ClassifyKeyUp(durationMs, stats);
+            var spaceType = ClassifyKeyUpHybrid(durationMs, stats);
 
             switch (spaceType)
             {
@@ -559,6 +680,46 @@ namespace NetKeyer.Services
                     DebugLogger.Log("cwmonitor", $"Unknown space type: {durationMs}ms");
                     break;
             }
+        }
+        
+        /// <summary>
+        /// Hybrid classification for key-up events respecting algorithm mode
+        /// </summary>
+        private ElementClassifier.SpaceElement ClassifyKeyUpHybrid(int durationMs, KeyingStatistics stats)
+        {
+            // If mode is STAT or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.STAT || !_neuralNetworkAvailable)
+            {
+                return _classifier.ClassifyKeyUp(durationMs, stats);
+            }
+
+            // DNN mode - try neural network with bimodal fallback
+            if (stats.IsValid)
+            {
+                try
+                {
+                    var (prediction, probabilities) = _neuralClassifier.Classify(durationMs, isKeyDown: false);
+                    float confidence = probabilities[(int)prediction];
+                    
+                    // If confidence is high, trust the neural network
+                    if (confidence >= NeuralNetworkConfidenceThreshold)
+                    {
+                        var nnResult = ConvertNeuralToSpaceElement(prediction);
+                        DebugLogger.Log("cwmonitor", $"DNN KeyUp: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        return nnResult;
+                    }
+                    
+                    // Low confidence, use bimodal fallback
+                    DebugLogger.Log("cwmonitor", $"Low DNN confidence ({confidence:P1}), using STAT fallback");
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("cwmonitor", $"DNN error: {ex.Message}, using STAT fallback");
+                }
+            }
+            
+            // Fall back to bimodal classifier
+            return _classifier.ClassifyKeyUp(durationMs, stats);
         }
 
         private void CompleteCharacter()
@@ -591,6 +752,16 @@ namespace NetKeyer.Services
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        /// <summary>
+        /// Disposes resources used by the CWMonitor
+        /// </summary>
+        public void Dispose()
+        {
+            Stop();
+            _statsResetTimer?.Dispose();
+            _neuralClassifier?.Dispose();
         }
 
         /// <summary>

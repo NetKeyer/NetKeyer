@@ -20,6 +20,7 @@ using NetKeyer.Models;
 using NetKeyer.Services;
 using NetKeyer.SmartLink;
 using PortAudioSharp;
+using static NetKeyer.Services.CWMonitor;
 
 namespace NetKeyer.ViewModels;
 
@@ -155,6 +156,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _cwMonitorEnabled = true;
+
+    [ObservableProperty]
+    private string _cwAlgorithmButtonLabel = "STAT";
 
     private Radio _connectedRadio;
     private uint _boundGuiClientHandle = 0;
@@ -310,6 +314,12 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         );
         _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+        
+        // Set initial algorithm button label
+        if (_keyingController.CWMonitor != null)
+        {
+            CwAlgorithmButtonLabel = _keyingController.CWMonitor.AlgorithmMode.ToString();
+        }
         _keyingController.SetSpeed(CwSpeed);
 
         // Subscribe to CW Monitor property changes
@@ -1119,6 +1129,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             );
             _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+            
+            // Set initial algorithm button label
+            if (_keyingController.CWMonitor != null)
+            {
+                CwAlgorithmButtonLabel = _keyingController.CWMonitor.AlgorithmMode.ToString();
+            }
             _keyingController.SetSpeed(CwSpeed);
 
             // Re-subscribe to CW Monitor property changes after recreation
@@ -1320,6 +1336,22 @@ public partial class MainWindowViewModel : ViewModelBase
         DecodedCW = "";
         
         DebugLogger.Log("cwmonitor", "CW Monitor buffer cleared from UI");
+    }
+
+    [RelayCommand]
+    private void ToggleCWAlgorithm()
+    {
+        if (_keyingController?.CWMonitor != null)
+        {
+            // Toggle between DNN and STAT
+            var currentMode = _keyingController.CWMonitor.AlgorithmMode;
+            var newMode = currentMode == CWAlgorithmMode.DNN ? CWAlgorithmMode.STAT : CWAlgorithmMode.DNN;
+            
+            _keyingController.CWMonitor.AlgorithmMode = newMode;
+            CwAlgorithmButtonLabel = newMode.ToString();
+            
+            DebugLogger.Log("cwmonitor", $"Algorithm toggled to: {newMode}");
+        }
     }
 
 
