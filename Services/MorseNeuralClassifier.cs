@@ -8,34 +8,36 @@ using System.Linq;
 namespace NetKeyer.Services
 {
     /// <summary>
-    /// Neural network-based Morse code timing classifier
-    /// Uses ONNX model trained on synthetic Morse timing data
-    /// Achieves 100% accuracy on the 4-class problem
+    /// Neural network-based Morse code timing classifier V3
+    /// Uses ONNX model trained on International Morse Code timing standards
+    /// Follows 1:3:7 timing ratios (Dit:Letter:Word) from morse-timings.mdc
+    /// Achieves 87.35% accuracy on the 5-class problem with validated timing
     /// </summary>
     public class MorseNeuralClassifier : IDisposable
     {
         private readonly InferenceSession _session;
         
-        // Normalization parameters from training
+        // V3 Normalization parameters from training (41k samples, 10-40 WPM)
         // These MUST match the values used during model training
-        private const float DURATION_MEAN = 295.6526f;
-        private const float DURATION_STD = 247.8988f;
+        private const float DURATION_MEAN = 133.4177f;
+        private const float DURATION_STD = 126.2867f;
         
         /// <summary>
-        /// Morse timing element types
+        /// Morse timing element types following International standards
         /// </summary>
         public enum MorseElementType
         {
-            Dit = 0,           // Short key-down pulse (~100ms)
-            Dah = 1,           // Long key-down pulse (~300ms)
-            ElementSpace = 2,  // Short key-up gap (~100ms)
-            WordSpace = 3      // Long key-up gap (~700ms)
+            Dit = 0,           // 1 unit - Short key-down pulse
+            Dah = 1,           // 3 units - Long key-down pulse
+            ElementSpace = 2,  // 1 unit - Short key-up gap (between dits/dahs within letter)
+            LetterSpace = 3,   // 3 units - Medium key-up gap (between letters)
+            WordSpace = 4      // 7 units - Long key-up gap (between words)
         }
         
         /// <summary>
-        /// Creates a new MorseNeuralClassifier instance
+        /// Creates a new MorseNeuralClassifier V3 instance
         /// </summary>
-        /// <param name="modelPath">Path to the ONNX model file</param>
+        /// <param name="modelPath">Path to the ONNX model file (morse_dense_model_v3.onnx)</param>
         /// <exception cref="FileNotFoundException">Thrown if model file doesn't exist</exception>
         public MorseNeuralClassifier(string modelPath)
         {
@@ -43,6 +45,23 @@ namespace NetKeyer.Services
                 throw new FileNotFoundException($"Model file not found: {modelPath}");
             
             _session = new InferenceSession(modelPath);
+        }
+        
+        /// <summary>
+        /// Gets the timing units for a given element type (1, 3, or 7)
+        /// Based on International Morse Code timing standards
+        /// </summary>
+        public int GetTimingUnits(MorseElementType elementType)
+        {
+            return elementType switch
+            {
+                MorseElementType.Dit => 1,
+                MorseElementType.Dah => 3,
+                MorseElementType.ElementSpace => 1,
+                MorseElementType.LetterSpace => 3,
+                MorseElementType.WordSpace => 7,
+                _ => 0
+            };
         }
         
         /// <summary>

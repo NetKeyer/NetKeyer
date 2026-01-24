@@ -323,7 +323,7 @@ namespace NetKeyer.Services
         private const int BufferMaxLength = 120;
         private const int MinElementsBeforeDecoding = 10;
         private const int StatsResetIntervalMinutes = 30;
-        private const float NeuralNetworkConfidenceThreshold = 0.85f;
+        private const float NeuralNetworkConfidenceThreshold = 0.80f; // V3: Lower threshold due to 5 classes (87.35% accuracy)
 
         /// <summary>
         /// Gets or sets the algorithm mode for classification
@@ -413,11 +413,11 @@ namespace NetKeyer.Services
             try
             {
                 string modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, 
-                                               "Models", "morse_dense_model_v2.onnx");
+                                               "Models", "morse_dense_model_v3.onnx");
                 _neuralClassifier = new MorseNeuralClassifier(modelPath);
                 _neuralNetworkAvailable = true;
                 _algorithmMode = CWAlgorithmMode.STAT; // Default to STAT (better real-world performance)
-                DebugLogger.Log("cwmonitor", "Neural network classifier loaded (DNN available but defaulting to STAT mode)");
+                DebugLogger.Log("cwmonitor", "Neural network V3 classifier loaded (5 classes, DNN available but defaulting to STAT mode)");
             }
             catch (Exception ex)
             {
@@ -606,13 +606,14 @@ namespace NetKeyer.Services
         }
         
         /// <summary>
-        /// Converts neural network prediction to SpaceElement type
+        /// Converts neural network prediction to SpaceElement type (V3 with 5 classes)
         /// </summary>
         private ElementClassifier.SpaceElement ConvertNeuralToSpaceElement(MorseNeuralClassifier.MorseElementType neuralType)
         {
             return neuralType switch
             {
                 MorseNeuralClassifier.MorseElementType.ElementSpace => ElementClassifier.SpaceElement.InterElement,
+                MorseNeuralClassifier.MorseElementType.LetterSpace => ElementClassifier.SpaceElement.LetterSpace,
                 MorseNeuralClassifier.MorseElementType.WordSpace => ElementClassifier.SpaceElement.WordSpace,
                 _ => ElementClassifier.SpaceElement.Unknown
             };
