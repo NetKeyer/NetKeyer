@@ -293,9 +293,9 @@ namespace NetKeyer.Services
     public enum CWAlgorithmMode
     {
         /// <summary>Dense Neural Network (100% accuracy on training data)</summary>
-        DNN,
+        DenseNeuralNetwork,
         /// <summary>Statistical bimodal distribution analyzer</summary>
-        STAT
+        StatisticalTiming
     }
 
     /// <summary>
@@ -310,7 +310,7 @@ namespace NetKeyer.Services
         private readonly object _lockObject = new object();
         private readonly MorseNeuralClassifier _neuralClassifier;
         private readonly bool _neuralNetworkAvailable;
-        private CWAlgorithmMode _algorithmMode = CWAlgorithmMode.DNN;
+        private CWAlgorithmMode _algorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
 
         private CancellationTokenSource _cancellationTokenSource;
         private Task _monitoringTask;
@@ -416,14 +416,14 @@ namespace NetKeyer.Services
                                                "Models", "morse_dense_model_v3.onnx");
                 _neuralClassifier = new MorseNeuralClassifier(modelPath);
                 _neuralNetworkAvailable = true;
-                _algorithmMode = CWAlgorithmMode.STAT; // Default to STAT (better real-world performance)
-                DebugLogger.Log("cwmonitor", "Neural network V3 classifier loaded (5 classes, DNN available but defaulting to STAT mode)");
+                _algorithmMode = CWAlgorithmMode.DenseNeuralNetwork; // Default to DenseNeuralNetwork
+                DebugLogger.Log("cwmonitor", "Neural network V3 classifier loaded (5 classes, defaulting to DenseNeuralNetwork mode)");
             }
             catch (Exception ex)
             {
                 _neuralNetworkAvailable = false;
-                _algorithmMode = CWAlgorithmMode.STAT; // Fall back to STAT mode
-                DebugLogger.Log("cwmonitor", $"Neural network not available, using STAT mode only: {ex.Message}");
+                _algorithmMode = CWAlgorithmMode.StatisticalTiming; // Fall back to StatisticalTiming mode
+                DebugLogger.Log("cwmonitor", $"Neural network not available, using StatisticalTiming mode only: {ex.Message}");
             }
 
             _statsResetTimer = new Timer(
@@ -557,13 +557,13 @@ namespace NetKeyer.Services
         /// </summary>
         private ElementClassifier.KeyElement ClassifyKeyDownHybrid(int durationMs, KeyingStatistics stats)
         {
-            // If mode is STAT or NN not available, use bimodal only
-            if (_algorithmMode == CWAlgorithmMode.STAT || !_neuralNetworkAvailable)
+            // If mode is StatisticalTiming or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
             {
                 return _classifier.ClassifyKeyDown(durationMs, stats);
             }
 
-            // DNN mode - try neural network with bimodal fallback
+            // DenseNeuralNetwork mode - try neural network with bimodal fallback
             if (stats.IsValid)
             {
                 try
@@ -575,16 +575,16 @@ namespace NetKeyer.Services
                     if (confidence >= NeuralNetworkConfidenceThreshold)
                     {
                         var nnResult = ConvertNeuralToKeyElement(prediction);
-                        DebugLogger.Log("cwmonitor", $"DNN KeyDown: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyDown: {prediction} ({confidence:P1} confidence) -> {nnResult}");
                         return nnResult;
                     }
                     
                     // Low confidence, use bimodal fallback
-                    DebugLogger.Log("cwmonitor", $"Low DNN confidence ({confidence:P1}), using STAT fallback");
+                    DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
                 }
                 catch (Exception ex)
                 {
-                    DebugLogger.Log("cwmonitor", $"DNN error: {ex.Message}, using STAT fallback");
+                    DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork error: {ex.Message}, using StatisticalTiming fallback");
                 }
             }
             
@@ -688,13 +688,13 @@ namespace NetKeyer.Services
         /// </summary>
         private ElementClassifier.SpaceElement ClassifyKeyUpHybrid(int durationMs, KeyingStatistics stats)
         {
-            // If mode is STAT or NN not available, use bimodal only
-            if (_algorithmMode == CWAlgorithmMode.STAT || !_neuralNetworkAvailable)
+            // If mode is StatisticalTiming or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
             {
                 return _classifier.ClassifyKeyUp(durationMs, stats);
             }
 
-            // DNN mode - try neural network with bimodal fallback
+            // DenseNeuralNetwork mode - try neural network with bimodal fallback
             if (stats.IsValid)
             {
                 try
@@ -706,16 +706,16 @@ namespace NetKeyer.Services
                     if (confidence >= NeuralNetworkConfidenceThreshold)
                     {
                         var nnResult = ConvertNeuralToSpaceElement(prediction);
-                        DebugLogger.Log("cwmonitor", $"DNN KeyUp: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyUp: {prediction} ({confidence:P1} confidence) -> {nnResult}");
                         return nnResult;
                     }
                     
                     // Low confidence, use bimodal fallback
-                    DebugLogger.Log("cwmonitor", $"Low DNN confidence ({confidence:P1}), using STAT fallback");
+                    DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
                 }
                 catch (Exception ex)
                 {
-                    DebugLogger.Log("cwmonitor", $"DNN error: {ex.Message}, using STAT fallback");
+                    DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork error: {ex.Message}, using StatisticalTiming fallback");
                 }
             }
             

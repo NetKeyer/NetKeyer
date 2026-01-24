@@ -281,8 +281,24 @@ User settings are stored in:
 Stored settings include:
 - Selected radio (serial number and GUI client station)
 - Input device type and selection
+- Audio device selection
+- CW Monitor enabled state
+- CW Monitor algorithm mode (`"DenseNeuralNetwork"` or `"StatisticalTiming"`, default: `"DenseNeuralNetwork"`)
 - MIDI note mappings
 - SmartLink credentials (encrypted)
+
+Example `settings.json`:
+```json
+{
+  "SelectedRadioSerial": "1234-5678-9012-3456",
+  "SelectedGuiClientStation": "Station1",
+  "InputType": "Serial",
+  "SelectedSerialPort": "COM3",
+  "SelectedAudioDeviceId": "",
+  "CwMonitorEnabled": true,
+  "CwAlgorithmMode": "DenseNeuralNetwork"
+}
+```
 
 ## License
 

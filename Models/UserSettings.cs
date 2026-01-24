@@ -28,6 +28,9 @@ namespace NetKeyer.Models
         // CW Monitor enabled state
         public bool CwMonitorEnabled { get; set; } = false;
 
+        // CW Monitor algorithm mode: "DenseNeuralNetwork" or "StatisticalTiming"
+        public string CwAlgorithmMode { get; set; } = "DenseNeuralNetwork";
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 
