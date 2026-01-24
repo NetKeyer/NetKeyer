@@ -157,6 +157,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _cwMonitorEnabled = true;
 
+    [ObservableProperty]
+    private string _cwAlgorithmMode = "Dense Neural Network";
+
     private Radio _connectedRadio;
     private uint _boundGuiClientHandle = 0;
     private UserSettings _settings;
@@ -216,6 +219,100 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _rightPaddleVisible = true;  // Hide right paddle when appropriate
+
+    // CW Monitor Algorithm Mode
+    public ObservableCollection<string> AlgorithmModes { get; } = new()
+    {
+        "Dense Neural Network",
+        "Statistical Timing"
+    };
+
+    // DNN Diagnostics Properties
+    public string AlgorithmModeDisplay =>
+        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+        "Dense Neural Network v3" : "Statistical Timing";
+
+    public bool IsDnnMode =>
+        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork;
+
+    public bool IsStatisticalMode =>
+        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.StatisticalTiming;
+
+    public bool IsDnnLoaded =>
+        _keyingController?.CWMonitor?.IsNeuralNetworkAvailable ?? false;
+
+    public string DnnStatus => IsDnnLoaded ? "✓" : "✗";
+
+    public string LastClassificationDisplay
+    {
+        get
+        {
+            var info = _keyingController?.CWMonitor?.LastClassification;
+            if (info == null) return "Waiting...";
+
+            string methodTag = info.Method == "Neural Network" ? "NN" : "ST";
+            return $"{info.ElementType} ({info.DurationMs}ms) @ {info.Confidence:P0} [{methodTag}]";
+        }
+    }
+
+    public IBrush LastClassificationColor
+    {
+        get
+        {
+            var confidence = _keyingController?.CWMonitor?.LastClassification?.Confidence ?? 0f;
+            if (confidence >= 0.90f) return Brushes.LimeGreen;
+            if (confidence >= 0.80f) return Brushes.Yellow;
+            return Brushes.Red;
+        }
+    }
+
+    public int HighConfidenceCount =>
+        _keyingController?.CWMonitor?.HighConfidenceCount ?? 0;
+
+    public int MediumConfidenceCount =>
+        _keyingController?.CWMonitor?.MediumConfidenceCount ?? 0;
+
+    public int LowConfidenceCount =>
+        _keyingController?.CWMonitor?.LowConfidenceCount ?? 0;
+
+    public string HighConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.HighConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string MediumConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.MediumConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string LowConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.LowConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string FallbackRateDisplay =>
+        $"{_keyingController?.CWMonitor?.FallbackRate ?? 0f:F1}%";
 
     public MainWindowViewModel()
     {
@@ -326,6 +423,10 @@ public partial class MainWindowViewModel : ViewModelBase
                     _keyingController.CWMonitor.AlgorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
                     DebugLogger.Log("cwmonitor", "Invalid algorithm mode in settings, defaulting to DenseNeuralNetwork");
                 }
+                
+                // Set the UI property to match
+                CwAlgorithmMode = _keyingController.CWMonitor.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+                    "Dense Neural Network" : "Statistical Timing";
             }
         _keyingController.SetSpeed(CwSpeed);
 
@@ -1151,6 +1252,12 @@ public partial class MainWindowViewModel : ViewModelBase
                     _keyingController.CWMonitor.AlgorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
                     DebugLogger.Log("cwmonitor", "Invalid algorithm mode in settings, defaulting to DenseNeuralNetwork after reconnect");
                 }
+                
+                // Set the UI property to match
+                _loadingSettings = true;
+                CwAlgorithmMode = _keyingController.CWMonitor.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+                    "Dense Neural Network" : "Statistical Timing";
+                _loadingSettings = false;
             }
             _keyingController.SetSpeed(CwSpeed);
 
@@ -1355,6 +1462,17 @@ public partial class MainWindowViewModel : ViewModelBase
         DebugLogger.Log("cwmonitor", "CW Monitor buffer cleared from UI");
     }
 
+    [RelayCommand]
+    private void ToggleAlgorithmMode()
+    {
+        if (!_loadingSettings && _keyingController?.CWMonitor != null)
+        {
+            // Toggle between the two modes
+            CwAlgorithmMode = CwAlgorithmMode == "Dense Neural Network" ?
+                "Statistical Timing" : "Dense Neural Network";
+        }
+    }
+
     partial void OnCwSpeedChanged(int value)
     {
         // Update sidetone generator WPM for ramp calculations
@@ -1426,6 +1544,28 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.CwMonitorEnabled = value;
             _settings.Save();
             DebugLogger.Log("cwmonitor", $"Saved CW Monitor enabled state: {value}");
+        }
+    }
+
+    partial void OnCwAlgorithmModeChanged(string value)
+    {
+        if (!_loadingSettings && _keyingController?.CWMonitor != null && _settings != null)
+        {
+            var mode = value == "Dense Neural Network" ?
+                CWAlgorithmMode.DenseNeuralNetwork :
+                CWAlgorithmMode.StatisticalTiming;
+            _keyingController.CWMonitor.AlgorithmMode = mode;
+
+            // Save to settings
+            _settings.CwAlgorithmMode = mode.ToString();
+            _settings.Save();
+            
+            DebugLogger.Log("cwmonitor", $"Algorithm mode changed to: {mode}");
+
+            // Notify UI that properties have changed
+            OnPropertyChanged(nameof(AlgorithmModeDisplay));
+            OnPropertyChanged(nameof(IsDnnMode));
+            OnPropertyChanged(nameof(IsStatisticalMode));
         }
     }
 
@@ -1617,6 +1757,33 @@ public partial class MainWindowViewModel : ViewModelBase
                             CalculatedWpm = 0;
                         }
                     }
+                    break;
+
+                case "LastClassification":
+                    // Update DNN diagnostics
+                    OnPropertyChanged(nameof(LastClassificationDisplay));
+                    OnPropertyChanged(nameof(LastClassificationColor));
+                    break;
+
+                case "HighConfidenceCount":
+                case "MediumConfidenceCount":
+                case "LowConfidenceCount":
+                case "FallbackRate":
+                    // Update confidence statistics
+                    OnPropertyChanged(nameof(HighConfidenceCount));
+                    OnPropertyChanged(nameof(MediumConfidenceCount));
+                    OnPropertyChanged(nameof(LowConfidenceCount));
+                    OnPropertyChanged(nameof(HighConfidencePercent));
+                    OnPropertyChanged(nameof(MediumConfidencePercent));
+                    OnPropertyChanged(nameof(LowConfidencePercent));
+                    OnPropertyChanged(nameof(FallbackRateDisplay));
+                    break;
+
+                case "AlgorithmMode":
+                    // Update algorithm mode display
+                    OnPropertyChanged(nameof(AlgorithmModeDisplay));
+                    OnPropertyChanged(nameof(IsDnnMode));
+                    OnPropertyChanged(nameof(IsStatisticalMode));
                     break;
             }
         });

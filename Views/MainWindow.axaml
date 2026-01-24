@@ -308,11 +308,21 @@
                                           IsChecked="{Binding CwMonitorEnabled}"
                                           VerticalAlignment="Center"
                                           Padding="2"/>
+                                <Button Content="{Binding CwAlgorithmMode}"
+                                        Command="{Binding ToggleAlgorithmModeCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        Width="140"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Toggle between Dense Neural Network and Statistical Timing"/>
                                 <Button Content="Reset Stats"
                                         Command="{Binding ResetCWMonitorStatsCommand}"
                                         FontSize="11"
                                         Padding="4,2"
                                         Width="80"
+                                        HorizontalContentAlignment="Center"
                                         VerticalAlignment="Center"
                                         IsVisible="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
@@ -321,6 +331,7 @@
                                         FontSize="11"
                                         Padding="4,2"
                                         Width="80"
+                                        HorizontalContentAlignment="Center"
                                         VerticalAlignment="Center"
                                         IsVisible="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear the decoded CW text buffer"/>
@@ -338,9 +349,52 @@
                                            VerticalAlignment="Center"/>
                             </Border>
 
-                            <!-- Diagnostics Section -->
+                            <!-- DNN Diagnostics Section (shown only in DNN mode) -->
                             <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
-                                    IsVisible="{Binding CwMonitorEnabled}">
+                                    IsVisible="{Binding IsDnnMode}">
+                                <StackPanel Spacing="4">
+                                    <!-- Header Row with Mode Indicator -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                        <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
+                                                   Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
+                                                   FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DnnStatus}" FontSize="10" 
+                                                   Foreground="LimeGreen" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsDnnLoaded}"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Last Classification Row -->
+                                    <Border Background="#F0F0F0" Padding="4" CornerRadius="2" Margin="0,2">
+                                        <TextBlock Text="{Binding LastClassificationDisplay}" 
+                                                   FontSize="10" FontFamily="Consolas,Courier New,monospace"
+                                                   Foreground="{Binding LastClassificationColor}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                    
+                                    <!-- Confidence Statistics Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="High: "/>
+                                            <Run Text="{Binding HighConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="Med: "/>
+                                            <Run Text="{Binding MediumConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="Low: "/>
+                                            <Run Text="{Binding LowConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Statistical Diagnostics Section (shown only in Statistical mode) -->
+                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                                    IsVisible="{Binding IsStatisticalMode}">
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
                                     

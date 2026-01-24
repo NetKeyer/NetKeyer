@@ -299,6 +299,18 @@ namespace NetKeyer.Services
     }
 
     /// <summary>
+    /// Classification information for diagnostics
+    /// </summary>
+    public class ClassificationInfo
+    {
+        public string ElementType { get; set; }
+        public int DurationMs { get; set; }
+        public float Confidence { get; set; }
+        public string Method { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    /// <summary>
     /// Main CW (Morse Code) monitoring service
     /// </summary>
     public class CWMonitor : INotifyPropertyChanged, IDisposable
@@ -319,6 +331,11 @@ namespace NetKeyer.Services
         private string _decodedBuffer = string.Empty;
         private string _currentPattern = string.Empty;
         private int _elementCount;
+
+        // Classification tracking for diagnostics
+        private ClassificationInfo _lastClassification;
+        private Queue<float> _recentConfidences = new Queue<float>();
+        private const int ConfidenceWindowSize = 20;
 
         private const int BufferMaxLength = 120;
         private const int MinElementsBeforeDecoding = 10;
@@ -346,6 +363,45 @@ namespace NetKeyer.Services
         /// Gets whether the neural network is available
         /// </summary>
         public bool IsNeuralNetworkAvailable => _neuralNetworkAvailable;
+
+        /// <summary>
+        /// Gets the last classification information (for diagnostics)
+        /// </summary>
+        public ClassificationInfo LastClassification
+        {
+            get => _lastClassification;
+            private set
+            {
+                _lastClassification = value;
+                OnPropertyChanged(nameof(LastClassification));
+            }
+        }
+
+        /// <summary>
+        /// Gets the count of high confidence classifications (>= 90%)
+        /// </summary>
+        public int HighConfidenceCount => _recentConfidences.Count(c => c >= 0.90f);
+
+        /// <summary>
+        /// Gets the count of medium confidence classifications (80-90%)
+        /// </summary>
+        public int MediumConfidenceCount => _recentConfidences.Count(c => c >= 0.80f && c < 0.90f);
+
+        /// <summary>
+        /// Gets the count of low confidence classifications (< 80%)
+        /// </summary>
+        public int LowConfidenceCount => _recentConfidences.Count(c => c < 0.80f);
+
+        /// <summary>
+        /// Gets the fallback rate (percentage of low confidence classifications)
+        /// </summary>
+        public float FallbackRate => _recentConfidences.Any() ?
+            (float)LowConfidenceCount / _recentConfidences.Count * 100f : 0f;
+
+        /// <summary>
+        /// Gets the model version string
+        /// </summary>
+        public string ModelVersion => "v3";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -560,7 +616,15 @@ namespace NetKeyer.Services
             // If mode is StatisticalTiming or NN not available, use bimodal only
             if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
             {
-                return _classifier.ClassifyKeyDown(durationMs, stats);
+                var result = _classifier.ClassifyKeyDown(durationMs, stats);
+                // Track classification for statistical mode (no confidence score)
+                UpdateClassificationInfo(
+                    elementType: result.ToString(),
+                    durationMs: durationMs,
+                    confidence: 1.0f, // Statistical mode always returns "confident" result
+                    method: "Statistical Timing"
+                );
+                return result;
             }
 
             // DenseNeuralNetwork mode - try neural network with bimodal fallback
@@ -575,12 +639,32 @@ namespace NetKeyer.Services
                     if (confidence >= NeuralNetworkConfidenceThreshold)
                     {
                         var nnResult = ConvertNeuralToKeyElement(prediction);
+                        
+                        // Track classification
+                        UpdateClassificationInfo(
+                            elementType: prediction.ToString(),
+                            durationMs: durationMs,
+                            confidence: confidence,
+                            method: "Neural Network"
+                        );
+                        
                         DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyDown: {prediction} ({confidence:P1} confidence) -> {nnResult}");
                         return nnResult;
                     }
                     
                     // Low confidence, use bimodal fallback
+                    var fallbackResult = _classifier.ClassifyKeyDown(durationMs, stats);
+                    
+                    // Track classification with low confidence
+                    UpdateClassificationInfo(
+                        elementType: fallbackResult.ToString(),
+                        durationMs: durationMs,
+                        confidence: confidence,
+                        method: "Statistical Timing"
+                    );
+                    
                     DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
+                    return fallbackResult;
                 }
                 catch (Exception ex)
                 {
@@ -589,7 +673,14 @@ namespace NetKeyer.Services
             }
             
             // Fall back to bimodal classifier
-            return _classifier.ClassifyKeyDown(durationMs, stats);
+            var bimodalResult = _classifier.ClassifyKeyDown(durationMs, stats);
+            UpdateClassificationInfo(
+                elementType: bimodalResult.ToString(),
+                durationMs: durationMs,
+                confidence: 0.0f, // Unknown confidence for error fallback
+                method: "Statistical Timing"
+            );
+            return bimodalResult;
         }
         
         /// <summary>
@@ -691,7 +782,15 @@ namespace NetKeyer.Services
             // If mode is StatisticalTiming or NN not available, use bimodal only
             if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
             {
-                return _classifier.ClassifyKeyUp(durationMs, stats);
+                var result = _classifier.ClassifyKeyUp(durationMs, stats);
+                // Track classification for statistical mode (no confidence score)
+                UpdateClassificationInfo(
+                    elementType: result.ToString(),
+                    durationMs: durationMs,
+                    confidence: 1.0f, // Statistical mode always returns "confident" result
+                    method: "Statistical Timing"
+                );
+                return result;
             }
 
             // DenseNeuralNetwork mode - try neural network with bimodal fallback
@@ -706,12 +805,32 @@ namespace NetKeyer.Services
                     if (confidence >= NeuralNetworkConfidenceThreshold)
                     {
                         var nnResult = ConvertNeuralToSpaceElement(prediction);
+                        
+                        // Track classification
+                        UpdateClassificationInfo(
+                            elementType: prediction.ToString(),
+                            durationMs: durationMs,
+                            confidence: confidence,
+                            method: "Neural Network"
+                        );
+                        
                         DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyUp: {prediction} ({confidence:P1} confidence) -> {nnResult}");
                         return nnResult;
                     }
                     
                     // Low confidence, use bimodal fallback
+                    var fallbackResult = _classifier.ClassifyKeyUp(durationMs, stats);
+                    
+                    // Track classification with low confidence
+                    UpdateClassificationInfo(
+                        elementType: fallbackResult.ToString(),
+                        durationMs: durationMs,
+                        confidence: confidence,
+                        method: "Statistical Timing"
+                    );
+                    
                     DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
+                    return fallbackResult;
                 }
                 catch (Exception ex)
                 {
@@ -720,7 +839,44 @@ namespace NetKeyer.Services
             }
             
             // Fall back to bimodal classifier
-            return _classifier.ClassifyKeyUp(durationMs, stats);
+            var bimodalResult = _classifier.ClassifyKeyUp(durationMs, stats);
+            UpdateClassificationInfo(
+                elementType: bimodalResult.ToString(),
+                durationMs: durationMs,
+                confidence: 0.0f, // Unknown confidence for error fallback
+                method: "Statistical Timing"
+            );
+            return bimodalResult;
+        }
+
+        /// <summary>
+        /// Updates classification info for diagnostics and tracking
+        /// </summary>
+        private void UpdateClassificationInfo(string elementType, int durationMs, float confidence, string method)
+        {
+            // Only track and show Dit and Dah in diagnostics (spaces are not useful for users)
+            if (elementType == "Dit" || elementType == "Dah")
+            {
+                LastClassification = new ClassificationInfo
+                {
+                    ElementType = elementType,
+                    DurationMs = durationMs,
+                    Confidence = confidence,
+                    Method = method,
+                    Timestamp = DateTime.UtcNow
+                };
+
+                // Update confidence window (only track Dit and Dah confidence)
+                _recentConfidences.Enqueue(confidence);
+                if (_recentConfidences.Count > ConfidenceWindowSize)
+                    _recentConfidences.Dequeue();
+
+                // Notify confidence statistics changed
+                OnPropertyChanged(nameof(HighConfidenceCount));
+                OnPropertyChanged(nameof(MediumConfidenceCount));
+                OnPropertyChanged(nameof(LowConfidenceCount));
+                OnPropertyChanged(nameof(FallbackRate));
+            }
         }
 
         private void CompleteCharacter()
