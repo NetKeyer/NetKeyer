@@ -403,6 +403,31 @@ namespace NetKeyer.Services
         /// </summary>
         public string ModelVersion => "v3";
 
+        /// <summary>
+        /// Gets the model architecture description
+        /// </summary>
+        public string ModelArchitecture => "6-layer Dense (128→64→32→16→5)";
+
+        /// <summary>
+        /// Gets the model training accuracy
+        /// </summary>
+        public float ModelAccuracy => 0.8735f;
+
+        /// <summary>
+        /// Gets the number of classification classes
+        /// </summary>
+        public int ModelClasses => 5;
+
+        /// <summary>
+        /// Gets the class names
+        /// </summary>
+        public string ModelClassNames => "Dit, Dah, ElementSpace, LetterSpace, WordSpace";
+
+        /// <summary>
+        /// Gets the confidence threshold used for classification
+        /// </summary>
+        public float ConfidenceThreshold => NeuralNetworkConfidenceThreshold;
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         public bool Enabled

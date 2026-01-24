@@ -314,6 +314,28 @@ public partial class MainWindowViewModel : ViewModelBase
     public string FallbackRateDisplay =>
         $"{_keyingController?.CWMonitor?.FallbackRate ?? 0f:F1}%";
 
+    /// <summary>
+    /// Gets the model information tooltip text
+    /// </summary>
+    public string ModelInfoTooltip
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null || !IsDnnLoaded)
+            {
+                return "Model information unavailable";
+            }
+
+            return $"Model Details:\n" +
+                   $"  Version: {monitor.ModelVersion} (Dense Neural Network)\n" +
+                   $"  Architecture: {monitor.ModelArchitecture}\n" +
+                   $"  Training Accuracy: {monitor.ModelAccuracy:P2}\n" +
+                   $"  Classes: {monitor.ModelClasses} ({monitor.ModelClassNames})\n" +
+                   $"  Confidence Threshold: {monitor.ConfidenceThreshold:P0}";
+        }
+    }
+
     public MainWindowViewModel()
     {
         // Load user settings

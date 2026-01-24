@@ -356,7 +356,8 @@
                                     <!-- Header Row with Mode Indicator -->
                                     <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
                                         <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
-                                                   Foreground="Gray" VerticalAlignment="Center"/>
+                                                   Foreground="Gray" VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding ModelInfoTooltip}"/>
                                         <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
                                         <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
