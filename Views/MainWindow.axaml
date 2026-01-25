@@ -7,22 +7,53 @@
         x:Class="NetKeyer.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="NetKeyer - FlexRadio CW Keyer"
-        Width="600" Height="640"
-        MinWidth="500" MinHeight="540">
+        Width="600"
+        MinWidth="500"
+        SizeToContent="Height"
+        CanResize="True">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <DockPanel>
+    <DockPanel LastChildFill="False">
         <!-- Menu Bar (hidden on macOS, where we use the native menu bar) -->
         <Menu DockPanel.Dock="Top" IsVisible="{Binding IsMenuBarInWindow}">
             <MenuItem Header="_File">
+                <MenuItem Header="_Disconnect" 
+                          Command="{Binding ToggleConnectionCommand}"
+                          IsVisible="{Binding IsOperatingPage}"/>
+                <Separator IsVisible="{Binding IsOperatingPage}"/>
                 <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
             </MenuItem>
             <MenuItem Header="_Settings">
                 <MenuItem Header="_Audio Output Device..." Command="{Binding SelectAudioDeviceCommand}"/>
                 <MenuItem Header="_MIDI Note Mapping..." Command="{Binding ConfigureMidiNotesCommand}"/>
+                <Separator/>
+                <MenuItem Header="  _Decode Transmitted CW"
+                          Command="{Binding ToggleCWMonitorCommand}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding CwMonitorEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="CW Decoder Algorithm" IsEnabled="False" FontWeight="SemiBold"/>
+                <MenuItem Header="  _Dense Neural Network"
+                          Command="{Binding SetAlgorithmModeCommand}"
+                          CommandParameter="Dense Neural Network"
+                          IsEnabled="{Binding CwMonitorEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding IsDnnMode}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="  _Statistical Timing"
+                          Command="{Binding SetAlgorithmModeCommand}"
+                          CommandParameter="Statistical Timing"
+                          IsEnabled="{Binding CwMonitorEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding IsStatisticalMode}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
@@ -31,8 +62,57 @@
             </MenuItem>
         </Menu>
 
+        <!-- Status Bar at Bottom -->
+        <Border DockPanel.Dock="Bottom" 
+                BorderBrush="Gray" 
+                BorderThickness="0,1,0,0" 
+                Background="#F0F0F0"
+                Padding="8,4"
+                IsVisible="{Binding IsOperatingPage}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Left side: Station/Radio Name -->
+                <TextBlock Grid.Column="0" 
+                           Text="{Binding StatusBarStationRadio}"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           FontWeight="SemiBold"/>
+                
+                <!-- Middle: Keyer Mode and Speed -->
+                <TextBlock Grid.Column="1" 
+                           Text="{Binding StatusBarInfo}"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Foreground="Gray"
+                           Margin="15,0,0,0"/>
+                
+                <!-- Right side: Keyer Status LED -->
+                <StackPanel Grid.Column="2" 
+                            Orientation="Horizontal" 
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="Keyer" 
+                               FontSize="12" 
+                               VerticalAlignment="Center"/>
+                    <Border Width="16" 
+                            Height="16" 
+                            CornerRadius="8"
+                            Background="{Binding KeyerStatusLedColor}"
+                            BorderBrush="DarkGray"
+                            BorderThickness="1"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Main Content -->
-        <ScrollViewer>
+        <ScrollViewer DockPanel.Dock="Top"
+                      VerticalScrollBarVisibility="Auto" 
+                      HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="10" Spacing="8">
 
                 <!-- Setup Page -->
@@ -150,81 +230,40 @@
                 <!-- Operating Page -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsOperatingPage}">
 
-                    <!-- Paddle Status -->
-                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Key Status" FontWeight="Bold" FontSize="14"/>
-
-                            <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
-                                <!-- Left Paddle/Key/PTT Indicator -->
-                                <StackPanel Spacing="3">
-                                    <TextBlock Text="{Binding LeftPaddleLabelText}"
-                                               FontSize="11"
-                                               FontWeight="Bold"
-                                               HorizontalAlignment="Center"/>
-                                    <Border Width="80" Height="40"
-                                            Background="{Binding LeftPaddleIndicatorColor}"
-                                            BorderBrush="DarkGray"
-                                            BorderThickness="2"
-                                            CornerRadius="3">
-                                        <TextBlock Text="{Binding LeftPaddleStateText}"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="White"
-                                                   FontWeight="Bold"
-                                                   FontSize="14"/>
-                                    </Border>
-                                </StackPanel>
-
-                                <!-- Right Paddle Indicator (conditional) -->
-                                <StackPanel Spacing="3" IsVisible="{Binding RightPaddleVisible}">
-                                    <TextBlock Text="Right Paddle"
-                                               FontSize="11"
-                                               FontWeight="Bold"
-                                               HorizontalAlignment="Center"/>
-                                    <Border Width="80" Height="40"
-                                            Background="{Binding RightPaddleIndicatorColor}"
-                                            BorderBrush="DarkGray"
-                                            BorderThickness="2"
-                                            CornerRadius="3">
-                                        <TextBlock Text="{Binding RightPaddleStateText}"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="White"
-                                                   FontWeight="Bold"
-                                                   FontSize="14"/>
-                                    </Border>
-                                </StackPanel>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Radio Mode Indicator -->
-                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding ConnectedRadioDisplay}"
-                                       FontSize="14"
-                                       HorizontalAlignment="Center"
-                                       IsVisible="{Binding !!ConnectedRadioDisplay}"/>
-                            <TextBlock Text="{Binding ModeDisplay}"
-                                       FontSize="13"
-                                       HorizontalAlignment="Center"/>
-
-                            <!-- Mode switching instructions (conditional) -->
-                            <TextBlock Text="{Binding ModeInstructions}"
-                                       FontSize="11"
-                                       Foreground="Orange"
-                                       TextWrapping="Wrap"
-                                       HorizontalAlignment="Center"
-                                       IsVisible="{Binding !!ModeInstructions}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- CW Settings Section -->
+                    <!-- CW Settings Section with Collapsible Content -->
                     <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
                             IsVisible="{Binding CwSettingsVisible}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="CW Settings" FontWeight="Bold" FontSize="14"/>
+                            <!-- Header with expand/collapse button -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <Button Grid.Column="0" 
+                                        Command="{Binding ToggleCWSettingsCommand}"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="0"
+                                        Margin="0,0,8,0"
+                                        Width="20"
+                                        Height="20"
+                                        Content="{Binding CwSettingsExpandArrow}"
+                                        FontSize="12"
+                                        FontWeight="Bold"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"/>
+                                
+                                <TextBlock Grid.Column="1" 
+                                           Text="CW Settings" 
+                                           FontWeight="Bold" 
+                                           FontSize="14"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Collapsible Settings Content -->
+                            <StackPanel Spacing="6" IsVisible="{Binding CwSettingsExpanded}">
 
                             <!-- Speed -->
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -295,22 +334,153 @@
                             <CheckBox Content="Swap Paddles (Left ↔ Right)"
                                       IsChecked="{Binding SwapPaddles}"
                                       Padding="2"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Disconnect and Exit Buttons -->
-                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
-                        <Button Content="Disconnect"
-                                Command="{Binding ToggleConnectionCommand}"
-                                HorizontalContentAlignment="Center"
-                                Width="120"
-                                Padding="6"/>
-                        <Button Content="Exit"
-                                Command="{Binding ExitCommand}"
-                                HorizontalContentAlignment="Center"
-                                Width="100"
-                                Padding="6"/>
-                    </StackPanel>
+                    <!-- CW TX Monitor Section -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                            IsVisible="{Binding CwSettingsVisible}">
+                        <StackPanel Spacing="6">
+                            <!-- Title and functional buttons -->
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Transmitted CW" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                                <Button Content="Reset Stats"
+                                        Command="{Binding ResetCWMonitorStatsCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        Width="80"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
+                                <Button Content="Clear Buffer"
+                                        Command="{Binding ClearCWMonitorBufferCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        Width="80"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Clear the decoded CW text buffer"/>
+                                <Button Content="{Binding CwMonitorDiagnosticsButtonText}"
+                                        Command="{Binding ToggleCWMonitorDiagnosticsCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        Width="120"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Show or hide decoder diagnostics"/>
+                            </StackPanel>
+
+                            <!-- Decoded CW Display -->
+                            <Border BorderBrush="DarkGray" BorderThickness="1" Background="#F5F5F5" Padding="6" CornerRadius="2"
+                                    IsVisible="{Binding CwMonitorEnabled}">
+                                <TextBlock Text="{Binding DecodedCW}"
+                                           FontFamily="Consolas,Courier New,monospace"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           MinHeight="30"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- DNN Diagnostics Section (shown only in DNN mode) -->
+                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                                    IsVisible="{Binding IsDnnDiagnosticsVisible}">
+                                <StackPanel Spacing="4">
+                                    <!-- Header Row with Mode Indicator -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                        <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
+                                                   Foreground="Gray" VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding ModelInfoTooltip}"/>
+                                        <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
+                                                   FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DnnStatus}" FontSize="10" 
+                                                   Foreground="LimeGreen" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsDnnLoaded}"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Last Classification Row -->
+                                    <Border Background="#F0F0F0" Padding="4" CornerRadius="2" Margin="0,2">
+                                        <TextBlock Text="{Binding LastClassificationDisplay}" 
+                                                   FontSize="10" FontFamily="Consolas,Courier New,monospace"
+                                                   Foreground="{Binding LastClassificationColor}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                    
+                                    <!-- Confidence Statistics Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="High: "/>
+                                            <Run Text="{Binding HighConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="Med: "/>
+                                            <Run Text="{Binding MediumConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="9" Foreground="Gray">
+                                            <Run Text="Low: "/>
+                                            <Run Text="{Binding LowConfidencePercent}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    
+                                    <!-- Measured WPM Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <TextBlock Text="Measured:" FontSize="11" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding CalculatedWpm}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="WPM" FontSize="11" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Statistical Diagnostics Section (shown only in Statistical mode) -->
+                            <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                                    IsVisible="{Binding IsStatisticalDiagnosticsVisible}">
+                                <StackPanel Spacing="4">
+                                    <!-- Header Row with Mode Indicator -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                        <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
+                                                   Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
+                                                   FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Primary Stats Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Dit:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding DitLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Dah:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding DahLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Measured:" FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding CalculatedWpm}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="WPM" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    
+                                    <!-- Secondary Stats Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <TextBlock Text="Timing samples collected:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding SampleCount}" FontSize="10" FontWeight="Bold" Foreground="Gray" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Exit Button (Setup page only) -->
@@ -320,8 +490,7 @@
                         HorizontalAlignment="Center"
                         HorizontalContentAlignment="Center"
                         Width="100"
-                        Padding="6"
-                        Margin="0,5,0,0"/>
+                        Padding="6"/>
 
             </StackPanel>
         </ScrollViewer>

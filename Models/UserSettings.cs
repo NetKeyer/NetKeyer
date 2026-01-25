@@ -25,6 +25,21 @@ namespace NetKeyer.Models
         // Keep audio device awake by playing near-silent audio
         public bool KeepAudioDeviceAwake { get; set; } = false;
 
+        // CW Monitor enabled state
+        public bool CwMonitorEnabled { get; set; } = false;
+
+        // CW Monitor algorithm mode: "DenseNeuralNetwork" or "StatisticalTiming"
+        public string CwAlgorithmMode { get; set; } = "DenseNeuralNetwork";
+
+    // CW Monitor window position and size
+    public int? CwMonitorWindowX { get; set; }
+    public int? CwMonitorWindowY { get; set; }
+    public int? CwMonitorWindowWidth { get; set; }
+    public int? CwMonitorWindowHeight { get; set; }
+
+    // CW Monitor diagnostics visibility
+    public bool CwMonitorDiagnosticsVisible { get; set; } = true;
+
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 

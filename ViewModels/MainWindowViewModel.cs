@@ -20,6 +20,7 @@ using NetKeyer.Models;
 using NetKeyer.Services;
 using NetKeyer.SmartLink;
 using PortAudioSharp;
+using static NetKeyer.Services.CWMonitor;
 
 namespace NetKeyer.ViewModels;
 
@@ -109,6 +110,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _connectButtonText = "Connect";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
     private int _cwSpeed = 20;
 
     [ObservableProperty]
@@ -118,15 +120,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _cwPitch = 600;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarKeyerMode), nameof(StatusBarInfo))]
     private bool _isIambicMode = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarKeyerMode), nameof(StatusBarInfo))]
     private bool _isIambicModeB = true; // true = Mode B, false = Mode A
 
     [ObservableProperty]
     private bool _swapPaddles = false;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(KeyerStatusLedColor))]
     private IBrush _leftPaddleIndicatorColor = Brushes.Black;
 
     [ObservableProperty]
@@ -138,7 +143,34 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _rightPaddleStateText = "OFF";
 
+    [ObservableProperty]
+    private string _decodedCW = "";
+
+    [ObservableProperty]
+    private int _ditLength = 0;
+
+    [ObservableProperty]
+    private int _dahLength = 0;
+
+    [ObservableProperty]
+    private int _calculatedWpm = 0;
+
+    [ObservableProperty]
+    private int _sampleCount = 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
+    private bool _cwMonitorEnabled = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
+    private string _cwAlgorithmMode = "Dense Neural Network";
+
+    [ObservableProperty]
+    private bool _cwMonitorWindowOpen = false;
+
     private Radio _connectedRadio;
+    private Views.CWMonitorWindow _cwMonitorWindow;
     private uint _boundGuiClientHandle = 0;
     private UserSettings _settings;
     private bool _loadingSettings = false; // Prevent saving while loading
@@ -181,6 +213,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // Mode differentiation properties
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarStationRadio))]
     private string _connectedRadioDisplay = "";  // Shows connected radio name
 
     [ObservableProperty]
@@ -197,6 +230,169 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _rightPaddleVisible = true;  // Hide right paddle when appropriate
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CwSettingsExpandArrow))]
+    private bool _cwSettingsExpanded = false;  // Control CW settings expand/collapse (collapsed by default)
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CwMonitorDiagnosticsButtonText), nameof(IsDnnDiagnosticsVisible), nameof(IsStatisticalDiagnosticsVisible))]
+    private bool _cwMonitorDiagnosticsVisible = true;
+
+    // Arrow symbol for expand/collapse button
+    public string CwSettingsExpandArrow => CwSettingsExpanded ? "▼" : "▶";
+    
+    // Button text for diagnostics toggle
+    public string CwMonitorDiagnosticsButtonText => CwMonitorDiagnosticsVisible ? "Hide Diagnostics" : "Show Diagnostics";
+
+    // Status bar properties
+    public string StatusBarStationRadio => 
+        string.IsNullOrEmpty(ConnectedRadioDisplay) ? "Disconnected" : ConnectedRadioDisplay;
+    
+    public string StatusBarKeyerMode =>
+        IsIambicMode ? $"Iambic {(IsIambicModeB ? "B" : "A")}" : "Straight Key";
+    
+    public string StatusBarInfo
+    {
+        get
+        {
+            var info = $"{StatusBarKeyerMode} • {CwSpeed} WPM";
+            
+            // Add CW decoding mode if CW Monitor is enabled
+            if (CwMonitorEnabled)
+            {
+                var modeShort = CwAlgorithmMode == "Dense Neural Network" ? "DNN" : "Statistical";
+                info += $" • Decode: {modeShort}";
+            }
+            
+            return info;
+        }
+    }
+    
+    public IBrush KeyerStatusLedColor => 
+        LeftPaddleIndicatorColor == Brushes.LimeGreen ? Brushes.Red : Brushes.Black;
+
+    // CW Monitor Algorithm Mode
+    public ObservableCollection<string> AlgorithmModes { get; } = new()
+    {
+        "Dense Neural Network",
+        "Statistical Timing"
+    };
+
+    // DNN Diagnostics Properties
+    public string AlgorithmModeDisplay =>
+        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+        "Dense Neural Network v3" : "Statistical Timing";
+
+    public bool IsDnnMode =>
+        CwMonitorEnabled && _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork;
+
+    public bool IsStatisticalMode =>
+        CwMonitorEnabled && _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.StatisticalTiming;
+    
+    public bool IsDnnDiagnosticsVisible =>
+        IsDnnMode && CwMonitorDiagnosticsVisible;
+    
+    public bool IsStatisticalDiagnosticsVisible =>
+        IsStatisticalMode && CwMonitorDiagnosticsVisible;
+
+    public bool IsDnnLoaded =>
+        _keyingController?.CWMonitor?.IsNeuralNetworkAvailable ?? false;
+
+    public string DnnStatus => IsDnnLoaded ? "✓" : "✗";
+
+    public string LastClassificationDisplay
+    {
+        get
+        {
+            var info = _keyingController?.CWMonitor?.LastClassification;
+            if (info == null) return "Waiting...";
+
+            string methodTag = info.Method == "Neural Network" ? "NN" : "ST";
+            return $"{info.ElementType} ({info.DurationMs}ms) @ {info.Confidence:P0} [{methodTag}]";
+        }
+    }
+
+    public IBrush LastClassificationColor
+    {
+        get
+        {
+            var confidence = _keyingController?.CWMonitor?.LastClassification?.Confidence ?? 0f;
+            if (confidence >= 0.90f) return Brushes.LimeGreen;
+            if (confidence >= 0.80f) return Brushes.Yellow;
+            return Brushes.Red;
+        }
+    }
+
+    public int HighConfidenceCount =>
+        _keyingController?.CWMonitor?.HighConfidenceCount ?? 0;
+
+    public int MediumConfidenceCount =>
+        _keyingController?.CWMonitor?.MediumConfidenceCount ?? 0;
+
+    public int LowConfidenceCount =>
+        _keyingController?.CWMonitor?.LowConfidenceCount ?? 0;
+
+    public string HighConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.HighConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string MediumConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.MediumConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string LowConfidencePercent
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null) return "0%";
+            int total = monitor.HighConfidenceCount + monitor.MediumConfidenceCount + monitor.LowConfidenceCount;
+            if (total == 0) return "0%";
+            return $"{(monitor.LowConfidenceCount * 100 / total)}%";
+        }
+    }
+
+    public string FallbackRateDisplay =>
+        $"{_keyingController?.CWMonitor?.FallbackRate ?? 0f:F1}%";
+
+    /// <summary>
+    /// Gets the model information tooltip text
+    /// </summary>
+    public string ModelInfoTooltip
+    {
+        get
+        {
+            var monitor = _keyingController?.CWMonitor;
+            if (monitor == null || !IsDnnLoaded)
+            {
+                return "Model information unavailable";
+            }
+
+            return $"Model Details:\n" +
+                   $"  Version: {monitor.ModelVersion} (Dense Neural Network)\n" +
+                   $"  Architecture: {monitor.ModelArchitecture}\n" +
+                   $"  Training Accuracy: {monitor.ModelAccuracy:P2}\n" +
+                   $"  Classes: {monitor.ModelClasses} ({monitor.ModelClassNames})\n" +
+                   $"  Confidence Threshold: {monitor.ConfidenceThreshold:P0}";
+        }
+    }
 
     public MainWindowViewModel()
     {
@@ -292,7 +488,43 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         );
         _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+        
+            // Apply saved algorithm mode from settings
+            if (_keyingController.CWMonitor != null)
+            {
+                // Parse the saved algorithm mode (default to DenseNeuralNetwork if invalid)
+                if (Enum.TryParse<CWAlgorithmMode>(_settings.CwAlgorithmMode, out var mode))
+                {
+                    _keyingController.CWMonitor.AlgorithmMode = mode;
+                    DebugLogger.Log("cwmonitor", $"Loaded algorithm mode from settings: {mode}");
+                }
+                else
+                {
+                    _keyingController.CWMonitor.AlgorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
+                    DebugLogger.Log("cwmonitor", "Invalid algorithm mode in settings, defaulting to DenseNeuralNetwork");
+                }
+                
+                // Set the UI property to match
+                CwAlgorithmMode = _keyingController.CWMonitor.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+                    "Dense Neural Network" : "Statistical Timing";
+            }
         _keyingController.SetSpeed(CwSpeed);
+
+        // Subscribe to CW Monitor property changes
+        if (_keyingController.CWMonitor != null)
+        {
+            _keyingController.CWMonitor.PropertyChanged += CWMonitor_PropertyChanged;
+            DebugLogger.Log("cwmonitor", "Subscribed to CW Monitor PropertyChanged events");
+        }
+
+        // Apply saved CW Monitor enabled state
+        _loadingSettings = true;
+        DebugLogger.Log("cwmonitor", $"Loading saved CW Monitor enabled state: {_settings.CwMonitorEnabled}");
+        CwMonitorEnabled = _settings.CwMonitorEnabled;
+        DebugLogger.Log("cwmonitor", $"Loading saved CW Monitor diagnostics visibility: {_settings.CwMonitorDiagnosticsVisible}");
+        CwMonitorDiagnosticsVisible = _settings.CwMonitorDiagnosticsVisible;
+        _loadingSettings = false;
+        DebugLogger.Log("cwmonitor", $"CW Monitor enabled state applied: {CwMonitorEnabled}");
 
         // Initialize transmit slice monitor
         _transmitSliceMonitor = new TransmitSliceMonitor();
@@ -936,6 +1168,13 @@ public partial class MainWindowViewModel : ViewModelBase
                 // Set keying controller to sidetone-only mode
                 _keyingController?.SetRadio(null, isSidetoneOnly: true);
 
+                // Explicitly enable CW Monitor if it should be enabled
+                if (_keyingController?.CWMonitor != null)
+                {
+                    _keyingController.CWMonitor.Enabled = _settings.CwMonitorEnabled;
+                    DebugLogger.Log("cwmonitor", $"Explicitly set CWMonitor.Enabled to {_settings.CwMonitorEnabled} in sidetone-only mode");
+                }
+
                 // Open the selected input device
                 OpenInputDevice();
 
@@ -1080,7 +1319,40 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             );
             _keyingController.SetKeyingMode(IsIambicMode, IsIambicModeB);
+            
+            // Apply saved algorithm mode from settings
+            if (_keyingController.CWMonitor != null)
+            {
+                // Parse the saved algorithm mode (default to DenseNeuralNetwork if invalid)
+                if (Enum.TryParse<CWAlgorithmMode>(_settings.CwAlgorithmMode, out var mode))
+                {
+                    _keyingController.CWMonitor.AlgorithmMode = mode;
+                    DebugLogger.Log("cwmonitor", $"Loaded algorithm mode from settings after reconnect: {mode}");
+                }
+                else
+                {
+                    _keyingController.CWMonitor.AlgorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
+                    DebugLogger.Log("cwmonitor", "Invalid algorithm mode in settings, defaulting to DenseNeuralNetwork after reconnect");
+                }
+                
+                // Set the UI property to match
+                _loadingSettings = true;
+                CwAlgorithmMode = _keyingController.CWMonitor.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork ?
+                    "Dense Neural Network" : "Statistical Timing";
+                _loadingSettings = false;
+            }
             _keyingController.SetSpeed(CwSpeed);
+
+            // Re-subscribe to CW Monitor property changes after recreation
+            if (_keyingController.CWMonitor != null)
+            {
+                _keyingController.CWMonitor.PropertyChanged += CWMonitor_PropertyChanged;
+                DebugLogger.Log("cwmonitor", "Re-subscribed to CW Monitor PropertyChanged events after radio connection");
+                
+                // Explicitly enable CW Monitor if it should be enabled (new instance needs to be started)
+                _keyingController.CWMonitor.Enabled = _settings.CwMonitorEnabled;
+                DebugLogger.Log("cwmonitor", $"Explicitly set new CWMonitor.Enabled to {_settings.CwMonitorEnabled} after recreation");
+            }
 
             // Subscribe to radio property changes
             _connectedRadio.PropertyChanged += Radio_PropertyChanged;
@@ -1202,6 +1474,21 @@ public partial class MainWindowViewModel : ViewModelBase
             _connectedRadio.Disconnect();
         }
 
+        // Close CW Monitor window if open
+        if (_cwMonitorWindow != null && _cwMonitorWindow.IsVisible)
+        {
+            // Save window position before closing
+            if (_settings != null)
+            {
+                _settings.CwMonitorWindowX = _cwMonitorWindow.Position.X;
+                _settings.CwMonitorWindowY = _cwMonitorWindow.Position.Y;
+                _settings.CwMonitorWindowWidth = (int)_cwMonitorWindow.Width;
+                _settings.CwMonitorWindowHeight = (int)_cwMonitorWindow.Height;
+                _settings.Save();
+            }
+            _cwMonitorWindow.Close();
+        }
+
         // Close input device
         _inputDeviceManager?.Dispose();
 
@@ -1248,6 +1535,146 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void ResetCWMonitorStats()
+    {
+        _keyingController?.ResetCWMonitorStats();
+        
+        // Clear displayed statistics
+        DitLength = 0;
+        DahLength = 0;
+        CalculatedWpm = 0;
+        SampleCount = 0;
+        
+        DebugLogger.Log("cwmonitor", "CW Monitor stats reset from UI");
+    }
+
+    [RelayCommand]
+    private void ClearCWMonitorBuffer()
+    {
+        // Clear the decoded CW buffer
+        _keyingController?.ClearCWMonitorBuffer();
+        DecodedCW = "";
+        
+        DebugLogger.Log("cwmonitor", "CW Monitor buffer cleared from UI");
+    }
+
+    [RelayCommand]
+    private void ToggleAlgorithmMode()
+    {
+        if (!_loadingSettings && _keyingController?.CWMonitor != null)
+        {
+            // Toggle between the two modes
+            CwAlgorithmMode = CwAlgorithmMode == "Dense Neural Network" ?
+                "Statistical Timing" : "Dense Neural Network";
+        }
+    }
+
+    [RelayCommand]
+    private void SetAlgorithmMode(object? parameter)
+    {
+        var mode = parameter as string;
+        DebugLogger.Log("cwmonitor", $"SetAlgorithmMode called with parameter: '{parameter}', mode: '{mode}', _loadingSettings: {_loadingSettings}, CWMonitor null: {_keyingController?.CWMonitor == null}");
+        
+        if (!_loadingSettings && _keyingController?.CWMonitor != null && !string.IsNullOrEmpty(mode))
+        {
+            DebugLogger.Log("cwmonitor", $"Setting CwAlgorithmMode to: {mode}");
+            CwAlgorithmMode = mode;
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"SetAlgorithmMode blocked - loadingSettings: {_loadingSettings}, CWMonitor: {_keyingController?.CWMonitor != null}, mode empty: {string.IsNullOrEmpty(mode)}");
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleCWSettings()
+    {
+        CwSettingsExpanded = !CwSettingsExpanded;
+    }
+
+    [RelayCommand]
+    private void ToggleCWMonitor()
+    {
+        CwMonitorEnabled = !CwMonitorEnabled;
+    }
+
+    [RelayCommand]
+    private void ToggleCWMonitorDiagnostics()
+    {
+        CwMonitorDiagnosticsVisible = !CwMonitorDiagnosticsVisible;
+    }
+
+    [RelayCommand]
+    private void ToggleCWMonitorWindow()
+    {
+        if (_cwMonitorWindow == null || !_cwMonitorWindow.IsVisible)
+        {
+            OpenCWMonitorWindow();
+        }
+        else
+        {
+            CloseCWMonitorWindow();
+        }
+    }
+
+    private void OpenCWMonitorWindow()
+    {
+        if (_cwMonitorWindow == null)
+        {
+            _cwMonitorWindow = new Views.CWMonitorWindow();
+            _cwMonitorWindow.DataContext = this;
+        }
+
+        // Restore saved window position if available
+        if (_settings != null)
+        {
+            if (_settings.CwMonitorWindowX.HasValue && _settings.CwMonitorWindowY.HasValue)
+            {
+                _cwMonitorWindow.Position = new Avalonia.PixelPoint(
+                    _settings.CwMonitorWindowX.Value,
+                    _settings.CwMonitorWindowY.Value);
+            }
+
+            if (_settings.CwMonitorWindowWidth.HasValue && _settings.CwMonitorWindowHeight.HasValue)
+            {
+                _cwMonitorWindow.Width = _settings.CwMonitorWindowWidth.Value;
+                _cwMonitorWindow.Height = _settings.CwMonitorWindowHeight.Value;
+            }
+        }
+
+        _cwMonitorWindow.Show();
+        CwMonitorWindowOpen = true;
+
+        DebugLogger.Log("cwmonitor", "CW Monitor window opened");
+    }
+
+    private void CloseCWMonitorWindow()
+    {
+        if (_cwMonitorWindow != null && _cwMonitorWindow.IsVisible)
+        {
+            // Save window position and size before closing
+            if (_settings != null)
+            {
+                _settings.CwMonitorWindowX = _cwMonitorWindow.Position.X;
+                _settings.CwMonitorWindowY = _cwMonitorWindow.Position.Y;
+                _settings.CwMonitorWindowWidth = (int)_cwMonitorWindow.Width;
+                _settings.CwMonitorWindowHeight = (int)_cwMonitorWindow.Height;
+                _settings.Save();
+            }
+
+            _cwMonitorWindow.Hide();
+        }
+        CwMonitorWindowOpen = false;
+
+        DebugLogger.Log("cwmonitor", "CW Monitor window closed");
+    }
+
+    public void OnCWMonitorWindowClosed()
+    {
+        CwMonitorWindowOpen = false;
+        DebugLogger.Log("cwmonitor", "CW Monitor window closed by user");
+    }
 
     partial void OnCwSpeedChanged(int value)
     {
@@ -1298,6 +1725,82 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncSwapPaddlesToRadio(value);
+    }
+
+    partial void OnCwMonitorEnabledChanged(bool value)
+    {
+        DebugLogger.Log("cwmonitor", $"OnCwMonitorEnabledChanged called: value={value}, _loadingSettings={_loadingSettings}");
+        
+        if (_keyingController?.CWMonitor != null)
+        {
+            DebugLogger.Log("cwmonitor", $"Setting CWMonitor.Enabled to {value}");
+            _keyingController.CWMonitor.Enabled = value;
+            DebugLogger.Log("cwmonitor", $"CW Monitor {(value ? "enabled" : "disabled")} from UI, actual state: {_keyingController.CWMonitor.Enabled}");
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"WARNING: Cannot set CW Monitor enabled state - KeyingController or CWMonitor is null");
+        }
+
+        if (!_loadingSettings)
+        {
+            _settings.CwMonitorEnabled = value;
+            _settings.Save();
+            DebugLogger.Log("cwmonitor", $"Saved CW Monitor enabled state: {value}");
+        }
+
+        // Notify UI that diagnostics visibility has changed
+        OnPropertyChanged(nameof(IsDnnMode));
+        OnPropertyChanged(nameof(IsStatisticalMode));
+        OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+        OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
+    }
+
+    partial void OnCwMonitorDiagnosticsVisibleChanged(bool value)
+    {
+        DebugLogger.Log("cwmonitor", $"OnCwMonitorDiagnosticsVisibleChanged called: value={value}, _loadingSettings={_loadingSettings}");
+        
+        if (!_loadingSettings)
+        {
+            _settings.CwMonitorDiagnosticsVisible = value;
+            _settings.Save();
+            DebugLogger.Log("cwmonitor", $"Saved CW Monitor diagnostics visibility: {value}");
+        }
+
+        // Notify UI that diagnostics visibility properties have changed
+        // Note: CwMonitorDiagnosticsButtonText is already notified by NotifyPropertyChangedFor attribute
+        OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+        OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
+    }
+
+    partial void OnCwAlgorithmModeChanged(string value)
+    {
+        DebugLogger.Log("cwmonitor", $"OnCwAlgorithmModeChanged called with value: '{value}', _loadingSettings: {_loadingSettings}, CWMonitor: {_keyingController?.CWMonitor != null}, Settings: {_settings != null}");
+        
+        if (!_loadingSettings && _keyingController?.CWMonitor != null && _settings != null)
+        {
+            var mode = value == "Dense Neural Network" ?
+                CWAlgorithmMode.DenseNeuralNetwork :
+                CWAlgorithmMode.StatisticalTiming;
+            _keyingController.CWMonitor.AlgorithmMode = mode;
+
+            // Save to settings
+            _settings.CwAlgorithmMode = mode.ToString();
+            _settings.Save();
+            
+            DebugLogger.Log("cwmonitor", $"Algorithm mode changed to: {mode}");
+
+            // Notify UI that properties have changed
+            OnPropertyChanged(nameof(AlgorithmModeDisplay));
+            OnPropertyChanged(nameof(IsDnnMode));
+            OnPropertyChanged(nameof(IsStatisticalMode));
+            OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+            OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"OnCwAlgorithmModeChanged skipped due to conditions");
+        }
     }
 
     private void OnRadioAdded(Radio radio)
@@ -1456,6 +1959,69 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         // This is now mainly handled by RadioSettingsSynchronizer
         // Keep this for any non-settings radio property changes if needed in the future
+    }
+
+    private void CWMonitor_PropertyChanged(object sender, PropertyChangedEventArgs e)
+    {
+        // Update UI properties from CW Monitor on the UI thread
+        Dispatcher.UIThread.Post(() =>
+        {
+            switch (e.PropertyName)
+            {
+                case "DecodedBuffer":
+                    DecodedCW = _keyingController?.DecodedCW ?? "";
+                    break;
+
+                case "CurrentStatistics":
+                    if (_keyingController?.CWMonitor != null)
+                    {
+                        var stats = _keyingController.CWMonitor.CurrentStatistics;
+                        DitLength = stats.DitLengthMs;
+                        DahLength = stats.DahLengthMs;
+                        SampleCount = stats.SampleCount;
+
+                        // Calculate WPM from dit length (PARIS standard: 1 dit = 1.2 seconds / WPM)
+                        // Formula: WPM = 1200 / ditLength (in milliseconds)
+                        if (stats.DitLengthMs > 0)
+                        {
+                            CalculatedWpm = 1200 / stats.DitLengthMs;
+                            DebugLogger.Log("cwmonitor", $"WPM Calculation: DitLength={stats.DitLengthMs}ms, DahLength={stats.DahLengthMs}ms, CalculatedWPM={CalculatedWpm}, Ratio={stats.DahLengthMs/(double)stats.DitLengthMs:F2}");
+                        }
+                        else
+                        {
+                            CalculatedWpm = 0;
+                        }
+                    }
+                    break;
+
+                case "LastClassification":
+                    // Update DNN diagnostics
+                    OnPropertyChanged(nameof(LastClassificationDisplay));
+                    OnPropertyChanged(nameof(LastClassificationColor));
+                    break;
+
+                case "HighConfidenceCount":
+                case "MediumConfidenceCount":
+                case "LowConfidenceCount":
+                case "FallbackRate":
+                    // Update confidence statistics
+                    OnPropertyChanged(nameof(HighConfidenceCount));
+                    OnPropertyChanged(nameof(MediumConfidenceCount));
+                    OnPropertyChanged(nameof(LowConfidenceCount));
+                    OnPropertyChanged(nameof(HighConfidencePercent));
+                    OnPropertyChanged(nameof(MediumConfidencePercent));
+                    OnPropertyChanged(nameof(LowConfidencePercent));
+                    OnPropertyChanged(nameof(FallbackRateDisplay));
+                    break;
+
+                case "AlgorithmMode":
+                    // Update algorithm mode display
+                    OnPropertyChanged(nameof(AlgorithmModeDisplay));
+                    OnPropertyChanged(nameof(IsDnnMode));
+                    OnPropertyChanged(nameof(IsStatisticalMode));
+                    break;
+            }
+        });
     }
 
     private void RadioSettingsSynchronizer_SettingChanged(object sender, RadioSettingChangedEventArgs e)

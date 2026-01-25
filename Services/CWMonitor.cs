@@ -1,0 +1,984 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using NetKeyer.Helpers;
+
+namespace NetKeyer.Services
+{
+    /// <summary>
+    /// Represents statistical information about Morse code keying patterns
+    /// </summary>
+    public class KeyingStatistics : INotifyPropertyChanged
+    {
+        private int _ditLengthMs;
+        private int _dahLengthMs;
+        private string _debugInfo;
+        private int _sampleCount;
+
+        public int DitLengthMs
+        {
+            get => _ditLengthMs;
+            set
+            {
+                if (_ditLengthMs != value)
+                {
+                    _ditLengthMs = value;
+                    OnPropertyChanged(nameof(DitLengthMs));
+                }
+            }
+        }
+
+        public int DahLengthMs
+        {
+            get => _dahLengthMs;
+            set
+            {
+                if (_dahLengthMs != value)
+                {
+                    _dahLengthMs = value;
+                    OnPropertyChanged(nameof(DahLengthMs));
+                }
+            }
+        }
+
+        public string DebugInfo
+        {
+            get => _debugInfo;
+            set
+            {
+                if (_debugInfo != value)
+                {
+                    _debugInfo = value;
+                    OnPropertyChanged(nameof(DebugInfo));
+                }
+            }
+        }
+
+        public int SampleCount
+        {
+            get => _sampleCount;
+            set
+            {
+                if (_sampleCount != value)
+                {
+                    _sampleCount = value;
+                    OnPropertyChanged(nameof(SampleCount));
+                }
+            }
+        }
+
+        public bool IsValid => DitLengthMs > 0 && DahLengthMs > 0 && DahLengthMs > DitLengthMs;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// Morse code decoder and pattern recognition service
+    /// </summary>
+    public class MorseCodeDecoder
+    {
+        private static readonly Dictionary<string, string> MorsePatterns = new Dictionary<string, string>
+        {
+            // Letters
+            {".-", "A"}, {"-...", "B"}, {"-.-.", "C"}, {"-..", "D"},
+            {".", "E"}, {"..-.", "F"}, {"--.", "G"}, {"....", "H"},
+            {"..", "I"}, {".---", "J"}, {"-.-", "K"}, {".-..", "L"},
+            {"--", "M"}, {"-.", "N"}, {"---", "O"}, {".--.", "P"},
+            {"--.-", "Q"}, {".-.", "R"}, {"...", "S"}, {"-", "T"},
+            {"..-", "U"}, {"...-", "V"}, {".--", "W"}, {"-..-", "X"},
+            {"-.--", "Y"}, {"--..", "Z"},
+            
+            // Numbers
+            {"-----", "0"}, {".----", "1"}, {"..---", "2"}, {"...--", "3"},
+            {"....-", "4"}, {".....", "5"}, {"-....", "6"}, {"--...", "7"},
+            {"---..", "8"}, {"----.", "9"},
+            
+            // Punctuation and prosigns
+            {".-.-.-", "."}, {"--..--", ","}, {"..--..", "?"},
+            {"-..-.", "/"}, {".-.-.", "AR"}, {"-...-", "BT"},
+            {"-...-.-", "BK"}, {"-.--.", "KN"}, {"...-.-", "SK"}
+        };
+
+        public string Decode(string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                return string.Empty;
+
+            if (MorsePatterns.TryGetValue(pattern, out string character))
+            {
+                return character;
+            }
+
+            return $"#({pattern})";
+        }
+    }
+
+    /// <summary>
+    /// Analyzes timing patterns to determine dit and dah lengths using bimodal distribution
+    /// </summary>
+    public class TimingAnalyzer
+    {
+        private readonly Dictionary<int, List<int>> _timingBuckets = new Dictionary<int, List<int>>();
+        private readonly object _lockObject = new object();
+        private const int BucketRounding = 12;
+        private const int MinSampleCount = 10;
+
+        public void RecordTiming(int durationMs)
+        {
+            int bucket = CalculateBucket(durationMs);
+
+            lock (_lockObject)
+            {
+                if (!_timingBuckets.ContainsKey(bucket))
+                {
+                    _timingBuckets[bucket] = new List<int>();
+                }
+
+                _timingBuckets[bucket].Add(durationMs);
+            }
+        }
+
+        public KeyingStatistics AnalyzeStatistics(bool includeDebugInfo = false)
+        {
+            var stats = new KeyingStatistics();
+
+            lock (_lockObject)
+            {
+                if (_timingBuckets.Count < 2)
+                    return stats;
+
+                // Find the two most populated buckets (bimodal distribution)
+                var sortedBuckets = _timingBuckets
+                    .Where(kvp => kvp.Value.Count >= 2)
+                    .OrderByDescending(kvp => kvp.Value.Count)
+                    .Take(2)
+                    .ToList();
+
+                if (sortedBuckets.Count < 2)
+                    return stats;
+
+                // Calculate average timing for each mode
+                var averages = sortedBuckets
+                    .Select(kvp => (int)kvp.Value.Average())
+                    .OrderBy(avg => avg)
+                    .ToArray();
+
+                stats.DitLengthMs = averages[0];
+                stats.DahLengthMs = averages[1];
+
+                if (includeDebugInfo)
+                {
+                    stats.DebugInfo = GenerateDebugInfo();
+                }
+            }
+
+            return stats;
+        }
+
+        public void Reset()
+        {
+            lock (_lockObject)
+            {
+                _timingBuckets.Clear();
+            }
+        }
+
+        private int CalculateBucket(int durationMs)
+        {
+            // Logarithmic bucketing for better distribution
+            int value = (int)Math.Pow(Math.Log(durationMs, 2), 2);
+            return RoundUpToNearest(value, BucketRounding);
+        }
+
+        private int RoundUpToNearest(int value, int nearest)
+        {
+            if (value % nearest == 0)
+                return value;
+
+            return ((nearest - value % nearest) + value);
+        }
+
+        private string GenerateDebugInfo()
+        {
+            var debugParts = new List<string>();
+
+            foreach (var kvp in _timingBuckets.OrderBy(kvp => kvp.Key))
+            {
+                if (kvp.Value.Count > 1)
+                {
+                    double average = kvp.Value.Average();
+                    debugParts.Add($"Bucket {kvp.Key}: avg={average:F1}ms count={kvp.Value.Count}");
+                }
+            }
+
+            return string.Join(" | ", debugParts);
+        }
+    }
+
+    /// <summary>
+    /// Classifies Morse code elements based on timing patterns
+    /// </summary>
+    public class ElementClassifier
+    {
+        private const float DitTolerance = 1.5f;
+        private const float InterElementTolerance = 1.3f;
+        private const float LetterSpaceThreshold = 5.0f;
+
+        public enum KeyElement
+        {
+            Dit,
+            Dah,
+            Unknown
+        }
+
+        public enum SpaceElement
+        {
+            InterElement,
+            LetterSpace,
+            WordSpace,
+            Unknown
+        }
+
+        public KeyElement ClassifyKeyDown(int durationMs, KeyingStatistics stats)
+        {
+            if (!stats.IsValid)
+                return KeyElement.Unknown;
+
+            if (durationMs <= stats.DitLengthMs * DitTolerance)
+                return KeyElement.Dit;
+
+            if (durationMs >= stats.DahLengthMs * 0.8f)
+                return KeyElement.Dah;
+
+            return KeyElement.Dah; // Default to dah for longer durations
+        }
+
+        public SpaceElement ClassifyKeyUp(int durationMs, KeyingStatistics stats)
+        {
+            if (!stats.IsValid)
+                return SpaceElement.Unknown;
+
+            if (durationMs <= stats.DitLengthMs * InterElementTolerance)
+                return SpaceElement.InterElement;
+
+            if (durationMs <= stats.DitLengthMs * LetterSpaceThreshold)
+                return SpaceElement.LetterSpace;
+
+            return SpaceElement.WordSpace;
+        }
+
+        public string KeyElementToString(KeyElement element)
+        {
+            return element switch
+            {
+                KeyElement.Dit => ".",
+                KeyElement.Dah => "-",
+                _ => "?"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Algorithm mode for CW classification
+    /// </summary>
+    public enum CWAlgorithmMode
+    {
+        /// <summary>Dense Neural Network (100% accuracy on training data)</summary>
+        DenseNeuralNetwork,
+        /// <summary>Statistical bimodal distribution analyzer</summary>
+        StatisticalTiming
+    }
+
+    /// <summary>
+    /// Classification information for diagnostics
+    /// </summary>
+    public class ClassificationInfo
+    {
+        public string ElementType { get; set; }
+        public int DurationMs { get; set; }
+        public float Confidence { get; set; }
+        public string Method { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// Main CW (Morse Code) monitoring service
+    /// </summary>
+    public class CWMonitor : INotifyPropertyChanged, IDisposable
+    {
+        private readonly TimingAnalyzer _timingAnalyzer;
+        private readonly ElementClassifier _classifier;
+        private readonly MorseCodeDecoder _decoder;
+        private readonly Timer _statsResetTimer;
+        private readonly object _lockObject = new object();
+        private readonly MorseNeuralClassifier _neuralClassifier;
+        private readonly bool _neuralNetworkAvailable;
+        private CWAlgorithmMode _algorithmMode = CWAlgorithmMode.DenseNeuralNetwork;
+
+        private CancellationTokenSource _cancellationTokenSource;
+        private Task _monitoringTask;
+        private bool _enabled;
+        private volatile bool _isKeyDown;
+        private string _decodedBuffer = string.Empty;
+        private string _currentPattern = string.Empty;
+        private int _elementCount;
+
+        // Classification tracking for diagnostics
+        private ClassificationInfo _lastClassification;
+        private Queue<float> _recentConfidences = new Queue<float>();
+        private const int ConfidenceWindowSize = 20;
+
+        private const int BufferMaxLength = 120;
+        private const int MinElementsBeforeDecoding = 10;
+        private const int StatsResetIntervalMinutes = 30;
+        private const float NeuralNetworkConfidenceThreshold = 0.80f; // V3: Lower threshold due to 5 classes (87.35% accuracy)
+
+        /// <summary>
+        /// Gets or sets the algorithm mode for classification
+        /// </summary>
+        public CWAlgorithmMode AlgorithmMode
+        {
+            get => _algorithmMode;
+            set
+            {
+                if (_algorithmMode != value)
+                {
+                    _algorithmMode = value;
+                    DebugLogger.Log("cwmonitor", $"Algorithm mode changed to: {value}");
+                    OnPropertyChanged(nameof(AlgorithmMode));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the neural network is available
+        /// </summary>
+        public bool IsNeuralNetworkAvailable => _neuralNetworkAvailable;
+
+        /// <summary>
+        /// Gets the last classification information (for diagnostics)
+        /// </summary>
+        public ClassificationInfo LastClassification
+        {
+            get => _lastClassification;
+            private set
+            {
+                _lastClassification = value;
+                OnPropertyChanged(nameof(LastClassification));
+            }
+        }
+
+        /// <summary>
+        /// Gets the count of high confidence classifications (>= 90%)
+        /// </summary>
+        public int HighConfidenceCount => _recentConfidences.Count(c => c >= 0.90f);
+
+        /// <summary>
+        /// Gets the count of medium confidence classifications (80-90%)
+        /// </summary>
+        public int MediumConfidenceCount => _recentConfidences.Count(c => c >= 0.80f && c < 0.90f);
+
+        /// <summary>
+        /// Gets the count of low confidence classifications (< 80%)
+        /// </summary>
+        public int LowConfidenceCount => _recentConfidences.Count(c => c < 0.80f);
+
+        /// <summary>
+        /// Gets the fallback rate (percentage of low confidence classifications)
+        /// </summary>
+        public float FallbackRate => _recentConfidences.Any() ?
+            (float)LowConfidenceCount / _recentConfidences.Count * 100f : 0f;
+
+        /// <summary>
+        /// Gets the model version string
+        /// </summary>
+        public string ModelVersion => "v3";
+
+        /// <summary>
+        /// Gets the model architecture description
+        /// </summary>
+        public string ModelArchitecture => "6-layer Dense (128→64→32→16→5)";
+
+        /// <summary>
+        /// Gets the model training accuracy
+        /// </summary>
+        public float ModelAccuracy => 0.8735f;
+
+        /// <summary>
+        /// Gets the number of classification classes
+        /// </summary>
+        public int ModelClasses => 5;
+
+        /// <summary>
+        /// Gets the class names
+        /// </summary>
+        public string ModelClassNames => "Dit, Dah, ElementSpace, LetterSpace, WordSpace";
+
+        /// <summary>
+        /// Gets the confidence threshold used for classification
+        /// </summary>
+        public float ConfidenceThreshold => NeuralNetworkConfidenceThreshold;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public bool Enabled
+        {
+            get => _enabled;
+            set
+            {
+                if (_enabled == value)
+                    return;
+
+                DebugLogger.Log("cwmonitor", $"Enabled changing from {_enabled} to {value}");
+
+                if (value)
+                    Start();
+                else
+                    Stop();
+            }
+        }
+
+        public string DecodedBuffer
+        {
+            get
+            {
+                lock (_lockObject)
+                {
+                    return _decodedBuffer;
+                }
+            }
+            private set
+            {
+                lock (_lockObject)
+                {
+                    _decodedBuffer = value;
+
+                    // Trim to maximum length
+                    if (_decodedBuffer.Length > BufferMaxLength)
+                    {
+                        _decodedBuffer = _decodedBuffer.Substring(_decodedBuffer.Length - BufferMaxLength);
+                    }
+                }
+
+                DebugLogger.Log("cwmonitor", $"Buffer updated: '{value}'");
+                OnPropertyChanged(nameof(DecodedBuffer));
+            }
+        }
+
+        public KeyingStatistics CurrentStatistics
+        {
+            get
+            {
+                var stats = _timingAnalyzer.AnalyzeStatistics();
+                stats.SampleCount = _elementCount;
+                return stats;
+            }
+        }
+
+        public CWMonitor()
+        {
+            _timingAnalyzer = new TimingAnalyzer();
+            _classifier = new ElementClassifier();
+            _decoder = new MorseCodeDecoder();
+
+            // Try to load neural network model
+            try
+            {
+                string modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, 
+                                               "Models", "morse_dense_model_v3.onnx");
+                _neuralClassifier = new MorseNeuralClassifier(modelPath);
+                _neuralNetworkAvailable = true;
+                _algorithmMode = CWAlgorithmMode.DenseNeuralNetwork; // Default to DenseNeuralNetwork
+                DebugLogger.Log("cwmonitor", "Neural network V3 classifier loaded (5 classes, defaulting to DenseNeuralNetwork mode)");
+            }
+            catch (Exception ex)
+            {
+                _neuralNetworkAvailable = false;
+                _algorithmMode = CWAlgorithmMode.StatisticalTiming; // Fall back to StatisticalTiming mode
+                DebugLogger.Log("cwmonitor", $"Neural network not available, using StatisticalTiming mode only: {ex.Message}");
+            }
+
+            _statsResetTimer = new Timer(
+                callback: _ => ResetStatistics(),
+                state: null,
+                dueTime: TimeSpan.FromMinutes(StatsResetIntervalMinutes),
+                period: TimeSpan.FromMinutes(StatsResetIntervalMinutes));
+
+            DebugLogger.Log("cwmonitor", "CWMonitor initialized");
+        }
+
+        public void OnKeyDown()
+        {
+            _isKeyDown = true;
+        }
+
+        public void OnKeyUp()
+        {
+            _isKeyDown = false;
+        }
+
+        public void ResetStatistics()
+        {
+            DebugLogger.Log("cwmonitor", "Resetting statistics");
+            _timingAnalyzer.Reset();
+            _elementCount = 0;
+        }
+
+        public void ClearBuffer()
+        {
+            DebugLogger.Log("cwmonitor", "Clearing decoded buffer");
+            lock (_lockObject)
+            {
+                _decodedBuffer = string.Empty;
+                _currentPattern = string.Empty;
+            }
+            OnPropertyChanged(nameof(DecodedBuffer));
+        }
+
+        private void Start()
+        {
+            if (_enabled)
+                return;
+
+            DebugLogger.Log("cwmonitor", "Starting CW Monitor");
+
+            _cancellationTokenSource = new CancellationTokenSource();
+            _monitoringTask = Task.Run(() => MonitoringLoop(_cancellationTokenSource.Token));
+            _enabled = true;
+
+            DebugLogger.Log("cwmonitor", "CW Monitor started");
+        }
+
+        private void Stop()
+        {
+            if (!_enabled)
+                return;
+
+            DebugLogger.Log("cwmonitor", "Stopping CW Monitor");
+
+            _cancellationTokenSource?.Cancel();
+
+            try
+            {
+                _monitoringTask?.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("cwmonitor", $"Error waiting for monitoring task: {ex.Message}");
+            }
+
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = null;
+            _enabled = false;
+
+            DebugLogger.Log("cwmonitor", "CW Monitor stopped");
+        }
+
+        private async Task MonitoringLoop(CancellationToken cancellationToken)
+        {
+            var keyDownTracker = new StateTracker();
+            var keyUpTracker = new StateTracker();
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(1, cancellationToken);
+
+                    ProcessKeyDownTiming(keyDownTracker);
+                    ProcessKeyUpTiming(keyUpTracker);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                DebugLogger.Log("cwmonitor", "Monitoring loop cancelled");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("cwmonitor", $"Error in monitoring loop: {ex.Message}");
+            }
+        }
+
+        private void ProcessKeyDownTiming(StateTracker tracker)
+        {
+            if (_isKeyDown && !tracker.IsActive)
+            {
+                tracker.Start();
+            }
+            else if (!_isKeyDown && tracker.IsActive)
+            {
+                int durationMs = tracker.Stop();
+                _elementCount++;
+
+                _timingAnalyzer.RecordTiming(durationMs);
+
+                if (_elementCount > MinElementsBeforeDecoding)
+                {
+                    var stats = _timingAnalyzer.AnalyzeStatistics();
+                    var element = ClassifyKeyDownHybrid(durationMs, stats);
+                    string elementStr = _classifier.KeyElementToString(element);
+
+                    _currentPattern += elementStr;
+                    DebugLogger.Log("cwmonitor", $"Element: {elementStr}, Pattern: {_currentPattern}");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Hybrid classification for key-down events respecting algorithm mode
+        /// </summary>
+        private ElementClassifier.KeyElement ClassifyKeyDownHybrid(int durationMs, KeyingStatistics stats)
+        {
+            // If mode is StatisticalTiming or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
+            {
+                var result = _classifier.ClassifyKeyDown(durationMs, stats);
+                // Track classification for statistical mode (no confidence score)
+                UpdateClassificationInfo(
+                    elementType: result.ToString(),
+                    durationMs: durationMs,
+                    confidence: 1.0f, // Statistical mode always returns "confident" result
+                    method: "Statistical Timing"
+                );
+                return result;
+            }
+
+            // DenseNeuralNetwork mode - try neural network with bimodal fallback
+            if (stats.IsValid)
+            {
+                try
+                {
+                    var (prediction, probabilities) = _neuralClassifier.Classify(durationMs, isKeyDown: true);
+                    float confidence = probabilities[(int)prediction];
+                    
+                    // If confidence is high, trust the neural network
+                    if (confidence >= NeuralNetworkConfidenceThreshold)
+                    {
+                        var nnResult = ConvertNeuralToKeyElement(prediction);
+                        
+                        // Track classification
+                        UpdateClassificationInfo(
+                            elementType: prediction.ToString(),
+                            durationMs: durationMs,
+                            confidence: confidence,
+                            method: "Neural Network"
+                        );
+                        
+                        DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyDown: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        return nnResult;
+                    }
+                    
+                    // Low confidence, use bimodal fallback
+                    var fallbackResult = _classifier.ClassifyKeyDown(durationMs, stats);
+                    
+                    // Track classification with low confidence
+                    UpdateClassificationInfo(
+                        elementType: fallbackResult.ToString(),
+                        durationMs: durationMs,
+                        confidence: confidence,
+                        method: "Statistical Timing"
+                    );
+                    
+                    DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
+                    return fallbackResult;
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork error: {ex.Message}, using StatisticalTiming fallback");
+                }
+            }
+            
+            // Fall back to bimodal classifier
+            var bimodalResult = _classifier.ClassifyKeyDown(durationMs, stats);
+            UpdateClassificationInfo(
+                elementType: bimodalResult.ToString(),
+                durationMs: durationMs,
+                confidence: 0.0f, // Unknown confidence for error fallback
+                method: "Statistical Timing"
+            );
+            return bimodalResult;
+        }
+        
+        /// <summary>
+        /// Converts neural network prediction to KeyElement type
+        /// </summary>
+        private ElementClassifier.KeyElement ConvertNeuralToKeyElement(MorseNeuralClassifier.MorseElementType neuralType)
+        {
+            return neuralType switch
+            {
+                MorseNeuralClassifier.MorseElementType.Dit => ElementClassifier.KeyElement.Dit,
+                MorseNeuralClassifier.MorseElementType.Dah => ElementClassifier.KeyElement.Dah,
+                _ => ElementClassifier.KeyElement.Unknown
+            };
+        }
+        
+        /// <summary>
+        /// Converts neural network prediction to SpaceElement type (V3 with 5 classes)
+        /// </summary>
+        private ElementClassifier.SpaceElement ConvertNeuralToSpaceElement(MorseNeuralClassifier.MorseElementType neuralType)
+        {
+            return neuralType switch
+            {
+                MorseNeuralClassifier.MorseElementType.ElementSpace => ElementClassifier.SpaceElement.InterElement,
+                MorseNeuralClassifier.MorseElementType.LetterSpace => ElementClassifier.SpaceElement.LetterSpace,
+                MorseNeuralClassifier.MorseElementType.WordSpace => ElementClassifier.SpaceElement.WordSpace,
+                _ => ElementClassifier.SpaceElement.Unknown
+            };
+        }
+
+        private void ProcessKeyUpTiming(StateTracker tracker)
+        {
+            if (!_isKeyDown && !tracker.IsActive)
+            {
+                tracker.Start();
+            }
+            else if (_isKeyDown && tracker.IsActive)
+            {
+                int durationMs = tracker.Stop();
+
+                if (_elementCount > MinElementsBeforeDecoding && !string.IsNullOrEmpty(_currentPattern))
+                {
+                    ProcessSpacing(durationMs);
+                }
+            }
+            else if (!_isKeyDown && tracker.IsActive && !string.IsNullOrEmpty(_currentPattern))
+            {
+                // Check for timeout (word space)
+                int currentDuration = tracker.GetCurrentDuration();
+                if (currentDuration > 0 && _elementCount > MinElementsBeforeDecoding)
+                {
+                    var stats = _timingAnalyzer.AnalyzeStatistics();
+                    var spaceType = ClassifyKeyUpHybrid(currentDuration, stats);
+
+                    if (spaceType == ElementClassifier.SpaceElement.WordSpace)
+                    {
+                        CompleteCharacter();
+                        AppendToBuffer(" ");
+                        OnPropertyChanged(nameof(CurrentStatistics));
+                    }
+                }
+            }
+        }
+
+        private void ProcessSpacing(int durationMs)
+        {
+            var stats = _timingAnalyzer.AnalyzeStatistics();
+            var spaceType = ClassifyKeyUpHybrid(durationMs, stats);
+
+            switch (spaceType)
+            {
+                case ElementClassifier.SpaceElement.InterElement:
+                    DebugLogger.Log("cwmonitor", "Inter-element space");
+                    break;
+
+                case ElementClassifier.SpaceElement.LetterSpace:
+                    DebugLogger.Log("cwmonitor", $"Letter space - completing pattern: {_currentPattern}");
+                    CompleteCharacter();
+                    OnPropertyChanged(nameof(CurrentStatistics));
+                    break;
+
+                case ElementClassifier.SpaceElement.WordSpace:
+                    DebugLogger.Log("cwmonitor", $"Word space - completing pattern: {_currentPattern}");
+                    CompleteCharacter();
+                    AppendToBuffer(" ");
+                    OnPropertyChanged(nameof(CurrentStatistics));
+                    break;
+
+                default:
+                    DebugLogger.Log("cwmonitor", $"Unknown space type: {durationMs}ms");
+                    break;
+            }
+        }
+        
+        /// <summary>
+        /// Hybrid classification for key-up events respecting algorithm mode
+        /// </summary>
+        private ElementClassifier.SpaceElement ClassifyKeyUpHybrid(int durationMs, KeyingStatistics stats)
+        {
+            // If mode is StatisticalTiming or NN not available, use bimodal only
+            if (_algorithmMode == CWAlgorithmMode.StatisticalTiming || !_neuralNetworkAvailable)
+            {
+                var result = _classifier.ClassifyKeyUp(durationMs, stats);
+                // Track classification for statistical mode (no confidence score)
+                UpdateClassificationInfo(
+                    elementType: result.ToString(),
+                    durationMs: durationMs,
+                    confidence: 1.0f, // Statistical mode always returns "confident" result
+                    method: "Statistical Timing"
+                );
+                return result;
+            }
+
+            // DenseNeuralNetwork mode - try neural network with bimodal fallback
+            if (stats.IsValid)
+            {
+                try
+                {
+                    var (prediction, probabilities) = _neuralClassifier.Classify(durationMs, isKeyDown: false);
+                    float confidence = probabilities[(int)prediction];
+                    
+                    // If confidence is high, trust the neural network
+                    if (confidence >= NeuralNetworkConfidenceThreshold)
+                    {
+                        var nnResult = ConvertNeuralToSpaceElement(prediction);
+                        
+                        // Track classification
+                        UpdateClassificationInfo(
+                            elementType: prediction.ToString(),
+                            durationMs: durationMs,
+                            confidence: confidence,
+                            method: "Neural Network"
+                        );
+                        
+                        DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork KeyUp: {prediction} ({confidence:P1} confidence) -> {nnResult}");
+                        return nnResult;
+                    }
+                    
+                    // Low confidence, use bimodal fallback
+                    var fallbackResult = _classifier.ClassifyKeyUp(durationMs, stats);
+                    
+                    // Track classification with low confidence
+                    UpdateClassificationInfo(
+                        elementType: fallbackResult.ToString(),
+                        durationMs: durationMs,
+                        confidence: confidence,
+                        method: "Statistical Timing"
+                    );
+                    
+                    DebugLogger.Log("cwmonitor", $"Low DenseNeuralNetwork confidence ({confidence:P1}), using StatisticalTiming fallback");
+                    return fallbackResult;
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("cwmonitor", $"DenseNeuralNetwork error: {ex.Message}, using StatisticalTiming fallback");
+                }
+            }
+            
+            // Fall back to bimodal classifier
+            var bimodalResult = _classifier.ClassifyKeyUp(durationMs, stats);
+            UpdateClassificationInfo(
+                elementType: bimodalResult.ToString(),
+                durationMs: durationMs,
+                confidence: 0.0f, // Unknown confidence for error fallback
+                method: "Statistical Timing"
+            );
+            return bimodalResult;
+        }
+
+        /// <summary>
+        /// Updates classification info for diagnostics and tracking
+        /// </summary>
+        private void UpdateClassificationInfo(string elementType, int durationMs, float confidence, string method)
+        {
+            // Only track and show Dit and Dah in diagnostics (spaces are not useful for users)
+            if (elementType == "Dit" || elementType == "Dah")
+            {
+                LastClassification = new ClassificationInfo
+                {
+                    ElementType = elementType,
+                    DurationMs = durationMs,
+                    Confidence = confidence,
+                    Method = method,
+                    Timestamp = DateTime.UtcNow
+                };
+
+                // Update confidence window (only track Dit and Dah confidence)
+                _recentConfidences.Enqueue(confidence);
+                if (_recentConfidences.Count > ConfidenceWindowSize)
+                    _recentConfidences.Dequeue();
+
+                // Notify confidence statistics changed
+                OnPropertyChanged(nameof(HighConfidenceCount));
+                OnPropertyChanged(nameof(MediumConfidenceCount));
+                OnPropertyChanged(nameof(LowConfidenceCount));
+                OnPropertyChanged(nameof(FallbackRate));
+            }
+        }
+
+        private void CompleteCharacter()
+        {
+            if (string.IsNullOrEmpty(_currentPattern))
+                return;
+
+            string decodedChar = _decoder.Decode(_currentPattern);
+            DebugLogger.Log("cwmonitor", $"Decoded '{_currentPattern}' -> '{decodedChar}'");
+
+            AppendToBuffer(decodedChar);
+            _currentPattern = string.Empty;
+        }
+
+        private void AppendToBuffer(string text)
+        {
+            lock (_lockObject)
+            {
+                _decodedBuffer += text;
+
+                if (_decodedBuffer.Length > BufferMaxLength)
+                {
+                    _decodedBuffer = _decodedBuffer.Substring(_decodedBuffer.Length - BufferMaxLength);
+                }
+            }
+
+            OnPropertyChanged(nameof(DecodedBuffer));
+        }
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        /// <summary>
+        /// Disposes resources used by the CWMonitor
+        /// </summary>
+        public void Dispose()
+        {
+            Stop();
+            _statsResetTimer?.Dispose();
+            _neuralClassifier?.Dispose();
+        }
+
+        /// <summary>
+        /// Helper class to track timing states
+        /// </summary>
+        private class StateTracker
+        {
+            private DateTime _startTime;
+            private bool _isActive;
+
+            public bool IsActive => _isActive;
+
+            public void Start()
+            {
+                _startTime = DateTime.UtcNow;
+                _isActive = true;
+            }
+
+            public int Stop()
+            {
+                if (!_isActive)
+                    return 0;
+
+                int duration = (int)(DateTime.UtcNow - _startTime).TotalMilliseconds;
+                _isActive = false;
+                return duration;
+            }
+
+            public int GetCurrentDuration()
+            {
+                if (!_isActive)
+                    return 0;
+
+                return (int)(DateTime.UtcNow - _startTime).TotalMilliseconds;
+            }
+        }
+    }
+}
