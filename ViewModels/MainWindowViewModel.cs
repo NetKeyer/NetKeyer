@@ -160,7 +160,11 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _cwAlgorithmMode = "Dense Neural Network";
 
+    [ObservableProperty]
+    private bool _cwMonitorWindowOpen = false;
+
     private Radio _connectedRadio;
+    private Views.CWMonitorWindow _cwMonitorWindow;
     private uint _boundGuiClientHandle = 0;
     private UserSettings _settings;
     private bool _loadingSettings = false; // Prevent saving while loading
@@ -233,10 +237,10 @@ public partial class MainWindowViewModel : ViewModelBase
         "Dense Neural Network v3" : "Statistical Timing";
 
     public bool IsDnnMode =>
-        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork;
+        CwMonitorEnabled && _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.DenseNeuralNetwork;
 
     public bool IsStatisticalMode =>
-        _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.StatisticalTiming;
+        CwMonitorEnabled && _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.StatisticalTiming;
 
     public bool IsDnnLoaded =>
         _keyingController?.CWMonitor?.IsNeuralNetworkAvailable ?? false;
@@ -1414,6 +1418,21 @@ public partial class MainWindowViewModel : ViewModelBase
             _connectedRadio.Disconnect();
         }
 
+        // Close CW Monitor window if open
+        if (_cwMonitorWindow != null && _cwMonitorWindow.IsVisible)
+        {
+            // Save window position before closing
+            if (_settings != null)
+            {
+                _settings.CwMonitorWindowX = _cwMonitorWindow.Position.X;
+                _settings.CwMonitorWindowY = _cwMonitorWindow.Position.Y;
+                _settings.CwMonitorWindowWidth = (int)_cwMonitorWindow.Width;
+                _settings.CwMonitorWindowHeight = (int)_cwMonitorWindow.Height;
+                _settings.Save();
+            }
+            _cwMonitorWindow.Close();
+        }
+
         // Close input device
         _inputDeviceManager?.Dispose();
 
@@ -1495,6 +1514,77 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void ToggleCWMonitorWindow()
+    {
+        if (_cwMonitorWindow == null || !_cwMonitorWindow.IsVisible)
+        {
+            OpenCWMonitorWindow();
+        }
+        else
+        {
+            CloseCWMonitorWindow();
+        }
+    }
+
+    private void OpenCWMonitorWindow()
+    {
+        if (_cwMonitorWindow == null)
+        {
+            _cwMonitorWindow = new Views.CWMonitorWindow();
+            _cwMonitorWindow.DataContext = this;
+        }
+
+        // Restore saved window position if available
+        if (_settings != null)
+        {
+            if (_settings.CwMonitorWindowX.HasValue && _settings.CwMonitorWindowY.HasValue)
+            {
+                _cwMonitorWindow.Position = new Avalonia.PixelPoint(
+                    _settings.CwMonitorWindowX.Value,
+                    _settings.CwMonitorWindowY.Value);
+            }
+
+            if (_settings.CwMonitorWindowWidth.HasValue && _settings.CwMonitorWindowHeight.HasValue)
+            {
+                _cwMonitorWindow.Width = _settings.CwMonitorWindowWidth.Value;
+                _cwMonitorWindow.Height = _settings.CwMonitorWindowHeight.Value;
+            }
+        }
+
+        _cwMonitorWindow.Show();
+        CwMonitorWindowOpen = true;
+
+        DebugLogger.Log("cwmonitor", "CW Monitor window opened");
+    }
+
+    private void CloseCWMonitorWindow()
+    {
+        if (_cwMonitorWindow != null && _cwMonitorWindow.IsVisible)
+        {
+            // Save window position and size before closing
+            if (_settings != null)
+            {
+                _settings.CwMonitorWindowX = _cwMonitorWindow.Position.X;
+                _settings.CwMonitorWindowY = _cwMonitorWindow.Position.Y;
+                _settings.CwMonitorWindowWidth = (int)_cwMonitorWindow.Width;
+                _settings.CwMonitorWindowHeight = (int)_cwMonitorWindow.Height;
+                _settings.Save();
+            }
+
+            _cwMonitorWindow.Hide();
+        }
+        CwMonitorWindowOpen = false;
+
+        DebugLogger.Log("cwmonitor", "CW Monitor window closed");
+    }
+
+    public void OnCWMonitorWindowClosed()
+    {
+        CwMonitorWindowOpen = false;
+        DebugLogger.Log("cwmonitor", "CW Monitor window closed by user");
+    }
+
     partial void OnCwSpeedChanged(int value)
     {
         // Update sidetone generator WPM for ramp calculations
@@ -1567,6 +1657,10 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.Save();
             DebugLogger.Log("cwmonitor", $"Saved CW Monitor enabled state: {value}");
         }
+
+        // Notify UI that diagnostics visibility has changed
+        OnPropertyChanged(nameof(IsDnnMode));
+        OnPropertyChanged(nameof(IsStatisticalMode));
     }
 
     partial void OnCwAlgorithmModeChanged(string value)

@@ -1,0 +1,156 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NetKeyer.ViewModels"
+        x:Class="NetKeyer.Views.CWMonitorWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="CW Monitor"
+        Width="600" Height="320"
+        MinWidth="400" MinHeight="250"
+        WindowStartupLocation="Manual"
+        CanResize="true">
+
+    <Grid Margin="10">
+        <!-- CW Monitor Content -->
+        <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3">
+            <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="CW Monitor" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                    <ToggleButton IsChecked="{Binding CwMonitorEnabled}"
+                                  VerticalAlignment="Center"
+                                  HorizontalContentAlignment="Center"
+                                  Padding="6,2"
+                                  FontSize="11"
+                                  MinWidth="75">
+                        <ToggleButton.Styles>
+                            <Style Selector="ToggleButton">
+                                <Setter Property="Content" Value="Disabled"/>
+                            </Style>
+                            <Style Selector="ToggleButton:checked">
+                                <Setter Property="Content" Value="Enabled"/>
+                            </Style>
+                        </ToggleButton.Styles>
+                    </ToggleButton>
+                    <Button Content="{Binding CwAlgorithmMode}"
+                            Command="{Binding ToggleAlgorithmModeCommand}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Width="140"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CwMonitorEnabled}"
+                            ToolTip.Tip="Toggle between Dense Neural Network and Statistical Timing"/>
+                    <Button Content="Reset Stats"
+                            Command="{Binding ResetCWMonitorStatsCommand}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Width="80"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CwMonitorEnabled}"
+                            ToolTip.Tip="Clear timing statistics and re-learn keying speed"/>
+                    <Button Content="Clear Buffer"
+                            Command="{Binding ClearCWMonitorBufferCommand}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Width="80"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CwMonitorEnabled}"
+                            ToolTip.Tip="Clear the decoded CW text buffer"/>
+                </StackPanel>
+
+                <!-- Decoded CW Display -->
+                <Border BorderBrush="DarkGray" BorderThickness="1" Background="#F5F5F5" Padding="6" CornerRadius="2"
+                        IsVisible="{Binding CwMonitorEnabled}">
+                    <TextBlock Text="{Binding DecodedCW}"
+                               FontFamily="Consolas,Courier New,monospace"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               MinHeight="30"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- DNN Diagnostics Section (shown only in DNN mode) -->
+                <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                        IsVisible="{Binding IsDnnMode}">
+                    <StackPanel Spacing="4">
+                        <!-- Header Row with Mode Indicator -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                            <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
+                                       Foreground="Gray" VerticalAlignment="Center"
+                                       ToolTip.Tip="{Binding ModelInfoTooltip}"/>
+                            <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
+                            <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
+                                       FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding DnnStatus}" FontSize="10" 
+                                       Foreground="LimeGreen" VerticalAlignment="Center"
+                                       IsVisible="{Binding IsDnnLoaded}"/>
+                        </StackPanel>
+                        
+                        <!-- Last Classification Row -->
+                        <Border Background="#F0F0F0" Padding="4" CornerRadius="2" Margin="0,2">
+                            <TextBlock Text="{Binding LastClassificationDisplay}" 
+                                       FontSize="10" FontFamily="Consolas,Courier New,monospace"
+                                       Foreground="{Binding LastClassificationColor}"
+                                       HorizontalAlignment="Center"/>
+                        </Border>
+                        
+                        <!-- Confidence Statistics Row -->
+                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                            <TextBlock FontSize="9" Foreground="Gray">
+                                <Run Text="High: "/>
+                                <Run Text="{Binding HighConfidencePercent}" FontWeight="Bold"/>
+                            </TextBlock>
+                            <TextBlock FontSize="9" Foreground="Gray">
+                                <Run Text="Med: "/>
+                                <Run Text="{Binding MediumConfidencePercent}" FontWeight="Bold"/>
+                            </TextBlock>
+                            <TextBlock FontSize="9" Foreground="Gray">
+                                <Run Text="Low: "/>
+                                <Run Text="{Binding LowConfidencePercent}" FontWeight="Bold"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Statistical Diagnostics Section (shown only in Statistical mode) -->
+                <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
+                        IsVisible="{Binding IsStatisticalMode}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
+                        
+                        <!-- Primary Stats Row -->
+                        <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Dit:" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DitLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Dah:" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DahLength}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="ms" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="•" FontSize="11" Foreground="LightGray" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Measured:" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CalculatedWpm}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="WPM" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        <!-- Secondary Stats Row -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock Text="Timing samples collected:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding SampleCount}" FontSize="10" FontWeight="Bold" Foreground="Gray" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+
+</Window>
