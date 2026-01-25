@@ -26,6 +26,16 @@ public partial class MainWindow : Window
         var fileMenu = new NativeMenuItem("File");
         var fileSubMenu = new NativeMenu();
         
+        var disconnectItem = new NativeMenuItem("Disconnect");
+        disconnectItem.Click += (s, e) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+            {
+                vm.ToggleConnectionCommand?.Execute(null);
+            }
+        };
+        fileSubMenu.Add(disconnectItem);
+        
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (s, e) =>
         {

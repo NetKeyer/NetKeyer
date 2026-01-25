@@ -110,6 +110,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _connectButtonText = "Connect";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
     private int _cwSpeed = 20;
 
     [ObservableProperty]
@@ -119,15 +120,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _cwPitch = 600;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarKeyerMode), nameof(StatusBarInfo))]
     private bool _isIambicMode = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarKeyerMode), nameof(StatusBarInfo))]
     private bool _isIambicModeB = true; // true = Mode B, false = Mode A
 
     [ObservableProperty]
     private bool _swapPaddles = false;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(KeyerStatusLedColor))]
     private IBrush _leftPaddleIndicatorColor = Brushes.Black;
 
     [ObservableProperty]
@@ -207,6 +211,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // Mode differentiation properties
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarStationRadio))]
     private string _connectedRadioDisplay = "";  // Shows connected radio name
 
     [ObservableProperty]
@@ -223,6 +228,26 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _rightPaddleVisible = true;  // Hide right paddle when appropriate
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CwSettingsExpandArrow))]
+    private bool _cwSettingsExpanded = false;  // Control CW settings expand/collapse (collapsed by default)
+
+    // Arrow symbol for expand/collapse button
+    public string CwSettingsExpandArrow => CwSettingsExpanded ? "▼" : "▶";
+
+    // Status bar properties
+    public string StatusBarStationRadio => 
+        string.IsNullOrEmpty(ConnectedRadioDisplay) ? "Disconnected" : ConnectedRadioDisplay;
+    
+    public string StatusBarKeyerMode =>
+        IsIambicMode ? $"Iambic {(IsIambicModeB ? "B" : "A")}" : "Straight Key";
+    
+    public string StatusBarInfo =>
+        $"{StatusBarKeyerMode} • {CwSpeed} WPM";
+    
+    public IBrush KeyerStatusLedColor => 
+        LeftPaddleIndicatorColor == Brushes.LimeGreen ? Brushes.Red : Brushes.Black;
 
     // CW Monitor Algorithm Mode
     public ObservableCollection<string> AlgorithmModes { get; } = new()
@@ -1512,6 +1537,12 @@ public partial class MainWindowViewModel : ViewModelBase
             CwAlgorithmMode = CwAlgorithmMode == "Dense Neural Network" ?
                 "Statistical Timing" : "Dense Neural Network";
         }
+    }
+
+    [RelayCommand]
+    private void ToggleCWSettings()
+    {
+        CwSettingsExpanded = !CwSettingsExpanded;
     }
 
     [RelayCommand]
