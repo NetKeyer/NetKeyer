@@ -233,8 +233,15 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CwSettingsExpandArrow))]
     private bool _cwSettingsExpanded = false;  // Control CW settings expand/collapse (collapsed by default)
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CwMonitorDiagnosticsButtonText), nameof(IsDnnDiagnosticsVisible), nameof(IsStatisticalDiagnosticsVisible))]
+    private bool _cwMonitorDiagnosticsVisible = true;
+
     // Arrow symbol for expand/collapse button
     public string CwSettingsExpandArrow => CwSettingsExpanded ? "▼" : "▶";
+    
+    // Button text for diagnostics toggle
+    public string CwMonitorDiagnosticsButtonText => CwMonitorDiagnosticsVisible ? "Hide Diagnostics" : "Show Diagnostics";
 
     // Status bar properties
     public string StatusBarStationRadio => 
@@ -266,6 +273,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsStatisticalMode =>
         CwMonitorEnabled && _keyingController?.CWMonitor?.AlgorithmMode == CWAlgorithmMode.StatisticalTiming;
+    
+    public bool IsDnnDiagnosticsVisible =>
+        IsDnnMode && CwMonitorDiagnosticsVisible;
+    
+    public bool IsStatisticalDiagnosticsVisible =>
+        IsStatisticalMode && CwMonitorDiagnosticsVisible;
 
     public bool IsDnnLoaded =>
         _keyingController?.CWMonitor?.IsNeuralNetworkAvailable ?? false;
@@ -1540,9 +1553,38 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void SetAlgorithmMode(object? parameter)
+    {
+        var mode = parameter as string;
+        DebugLogger.Log("cwmonitor", $"SetAlgorithmMode called with parameter: '{parameter}', mode: '{mode}', _loadingSettings: {_loadingSettings}, CWMonitor null: {_keyingController?.CWMonitor == null}");
+        
+        if (!_loadingSettings && _keyingController?.CWMonitor != null && !string.IsNullOrEmpty(mode))
+        {
+            DebugLogger.Log("cwmonitor", $"Setting CwAlgorithmMode to: {mode}");
+            CwAlgorithmMode = mode;
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"SetAlgorithmMode blocked - loadingSettings: {_loadingSettings}, CWMonitor: {_keyingController?.CWMonitor != null}, mode empty: {string.IsNullOrEmpty(mode)}");
+        }
+    }
+
+    [RelayCommand]
     private void ToggleCWSettings()
     {
         CwSettingsExpanded = !CwSettingsExpanded;
+    }
+
+    [RelayCommand]
+    private void ToggleCWMonitor()
+    {
+        CwMonitorEnabled = !CwMonitorEnabled;
+    }
+
+    [RelayCommand]
+    private void ToggleCWMonitorDiagnostics()
+    {
+        CwMonitorDiagnosticsVisible = !CwMonitorDiagnosticsVisible;
     }
 
     [RelayCommand]
@@ -1692,10 +1734,14 @@ public partial class MainWindowViewModel : ViewModelBase
         // Notify UI that diagnostics visibility has changed
         OnPropertyChanged(nameof(IsDnnMode));
         OnPropertyChanged(nameof(IsStatisticalMode));
+        OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+        OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
     }
 
     partial void OnCwAlgorithmModeChanged(string value)
     {
+        DebugLogger.Log("cwmonitor", $"OnCwAlgorithmModeChanged called with value: '{value}', _loadingSettings: {_loadingSettings}, CWMonitor: {_keyingController?.CWMonitor != null}, Settings: {_settings != null}");
+        
         if (!_loadingSettings && _keyingController?.CWMonitor != null && _settings != null)
         {
             var mode = value == "Dense Neural Network" ?
@@ -1713,6 +1759,12 @@ public partial class MainWindowViewModel : ViewModelBase
             OnPropertyChanged(nameof(AlgorithmModeDisplay));
             OnPropertyChanged(nameof(IsDnnMode));
             OnPropertyChanged(nameof(IsStatisticalMode));
+            OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+            OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
+        }
+        else
+        {
+            DebugLogger.Log("cwmonitor", $"OnCwAlgorithmModeChanged skipped due to conditions");
         }
     }
 
@@ -1898,6 +1950,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         if (stats.DitLengthMs > 0)
                         {
                             CalculatedWpm = 1200 / stats.DitLengthMs;
+                            DebugLogger.Log("cwmonitor", $"WPM Calculation: DitLength={stats.DitLengthMs}ms, DahLength={stats.DahLengthMs}ms, CalculatedWPM={CalculatedWpm}, Ratio={stats.DahLengthMs/(double)stats.DitLengthMs:F2}");
                         }
                         else
                         {

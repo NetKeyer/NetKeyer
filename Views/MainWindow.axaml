@@ -29,6 +29,31 @@
             <MenuItem Header="_Settings">
                 <MenuItem Header="_Audio Output Device..." Command="{Binding SelectAudioDeviceCommand}"/>
                 <MenuItem Header="_MIDI Note Mapping..." Command="{Binding ConfigureMidiNotesCommand}"/>
+                <Separator/>
+                <MenuItem Header="  _Monitor Transmitted CW"
+                          Command="{Binding ToggleCWMonitorCommand}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding CwMonitorEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="CW Decoder Algorithm" IsEnabled="False" FontWeight="SemiBold"/>
+                <MenuItem Header="  _Dense Neural Network"
+                          Command="{Binding SetAlgorithmModeCommand}"
+                          CommandParameter="Dense Neural Network"
+                          IsEnabled="{Binding CwMonitorEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding IsDnnMode}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="  _Statistical Timing"
+                          Command="{Binding SetAlgorithmModeCommand}"
+                          CommandParameter="Statistical Timing"
+                          IsEnabled="{Binding CwMonitorEnabled}">
+                    <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding IsStatisticalMode}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
@@ -313,37 +338,13 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- CW Monitor Section -->
+                    <!-- CW TX Monitor Section -->
                     <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
                             IsVisible="{Binding CwSettingsVisible}">
                         <StackPanel Spacing="6">
                             <!-- Title and functional buttons -->
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBlock Text="CW Monitor" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
-                                <ToggleButton IsChecked="{Binding CwMonitorEnabled}"
-                                              VerticalAlignment="Center"
-                                              HorizontalContentAlignment="Center"
-                                              Padding="6,2"
-                                              FontSize="11"
-                                              MinWidth="75">
-                                    <ToggleButton.Styles>
-                                        <Style Selector="ToggleButton">
-                                            <Setter Property="Content" Value="Disabled"/>
-                                        </Style>
-                                        <Style Selector="ToggleButton:checked">
-                                            <Setter Property="Content" Value="Enabled"/>
-                                        </Style>
-                                    </ToggleButton.Styles>
-                                </ToggleButton>
-                                <Button Content="{Binding CwAlgorithmMode}"
-                                        Command="{Binding ToggleAlgorithmModeCommand}"
-                                        FontSize="11"
-                                        Padding="4,2"
-                                        Width="140"
-                                        HorizontalContentAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        IsVisible="{Binding CwMonitorEnabled}"
-                                        ToolTip.Tip="Toggle between Dense Neural Network and Statistical Timing"/>
+                                <TextBlock Text="Transmitted CW" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
                                 <Button Content="Reset Stats"
                                         Command="{Binding ResetCWMonitorStatsCommand}"
                                         FontSize="11"
@@ -362,6 +363,15 @@
                                         VerticalAlignment="Center"
                                         IsVisible="{Binding CwMonitorEnabled}"
                                         ToolTip.Tip="Clear the decoded CW text buffer"/>
+                                <Button Content="{Binding CwMonitorDiagnosticsButtonText}"
+                                        Command="{Binding ToggleCWMonitorDiagnosticsCommand}"
+                                        FontSize="11"
+                                        Padding="4,2"
+                                        Width="120"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding CwMonitorEnabled}"
+                                        ToolTip.Tip="Show or hide decoder diagnostics"/>
                             </StackPanel>
 
                             <!-- Decoded CW Display -->
@@ -378,7 +388,7 @@
 
                             <!-- DNN Diagnostics Section (shown only in DNN mode) -->
                             <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
-                                    IsVisible="{Binding IsDnnMode}">
+                                    IsVisible="{Binding IsDnnDiagnosticsVisible}">
                                 <StackPanel Spacing="4">
                                     <!-- Header Row with Mode Indicator -->
                                     <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
@@ -417,14 +427,29 @@
                                             <Run Text="{Binding LowConfidencePercent}" FontWeight="Bold"/>
                                         </TextBlock>
                                     </StackPanel>
+                                    
+                                    <!-- Measured WPM Row -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                        <TextBlock Text="Measured:" FontSize="11" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding CalculatedWpm}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="WPM" FontSize="11" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
                             <!-- Statistical Diagnostics Section (shown only in Statistical mode) -->
                             <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
-                                    IsVisible="{Binding IsStatisticalMode}">
+                                    IsVisible="{Binding IsStatisticalDiagnosticsVisible}">
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
+                                    <!-- Header Row with Mode Indicator -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                        <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" 
+                                                   Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="•" FontSize="10" Foreground="LightGray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Mode:" FontSize="10" Foreground="Gray" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding AlgorithmModeDisplay}" FontSize="10" 
+                                                   FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                     
                                     <!-- Primary Stats Row -->
                                     <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center">
