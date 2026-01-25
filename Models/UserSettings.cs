@@ -31,11 +31,14 @@ namespace NetKeyer.Models
         // CW Monitor algorithm mode: "DenseNeuralNetwork" or "StatisticalTiming"
         public string CwAlgorithmMode { get; set; } = "DenseNeuralNetwork";
 
-        // CW Monitor window position and size
-        public int? CwMonitorWindowX { get; set; }
-        public int? CwMonitorWindowY { get; set; }
-        public int? CwMonitorWindowWidth { get; set; }
-        public int? CwMonitorWindowHeight { get; set; }
+    // CW Monitor window position and size
+    public int? CwMonitorWindowX { get; set; }
+    public int? CwMonitorWindowY { get; set; }
+    public int? CwMonitorWindowWidth { get; set; }
+    public int? CwMonitorWindowHeight { get; set; }
+
+    // CW Monitor diagnostics visibility
+    public bool CwMonitorDiagnosticsVisible { get; set; } = true;
 
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }

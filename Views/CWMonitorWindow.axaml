@@ -57,6 +57,15 @@
                             VerticalAlignment="Center"
                             IsVisible="{Binding CwMonitorEnabled}"
                             ToolTip.Tip="Clear the decoded CW text buffer"/>
+                    <Button Content="{Binding CwMonitorDiagnosticsButtonText}"
+                            Command="{Binding ToggleCWMonitorDiagnosticsCommand}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Width="115"
+                            HorizontalContentAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CwMonitorEnabled}"
+                            ToolTip.Tip="Show or hide detailed diagnostics information"/>
                 </StackPanel>
 
                 <!-- Decoded CW Display -->
@@ -73,7 +82,7 @@
 
                 <!-- DNN Diagnostics Section (shown only in DNN mode) -->
                 <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
-                        IsVisible="{Binding IsDnnMode}">
+                        IsVisible="{Binding IsDnnDiagnosticsVisible}">
                     <StackPanel Spacing="4">
                         <!-- Header Row with Mode Indicator -->
                         <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
@@ -117,7 +126,7 @@
 
                 <!-- Statistical Diagnostics Section (shown only in Statistical mode) -->
                 <Border BorderBrush="LightGray" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0"
-                        IsVisible="{Binding IsStatisticalMode}">
+                        IsVisible="{Binding IsStatisticalDiagnosticsVisible}">
                     <StackPanel Spacing="4">
                         <TextBlock Text="Diagnostics" FontSize="10" FontWeight="SemiBold" Foreground="Gray" HorizontalAlignment="Center"/>
                         

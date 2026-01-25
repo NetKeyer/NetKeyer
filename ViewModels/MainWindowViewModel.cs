@@ -159,9 +159,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _sampleCount = 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
     private bool _cwMonitorEnabled = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBarInfo))]
     private string _cwAlgorithmMode = "Dense Neural Network";
 
     [ObservableProperty]
@@ -250,8 +252,22 @@ public partial class MainWindowViewModel : ViewModelBase
     public string StatusBarKeyerMode =>
         IsIambicMode ? $"Iambic {(IsIambicModeB ? "B" : "A")}" : "Straight Key";
     
-    public string StatusBarInfo =>
-        $"{StatusBarKeyerMode} • {CwSpeed} WPM";
+    public string StatusBarInfo
+    {
+        get
+        {
+            var info = $"{StatusBarKeyerMode} • {CwSpeed} WPM";
+            
+            // Add CW decoding mode if CW Monitor is enabled
+            if (CwMonitorEnabled)
+            {
+                var modeShort = CwAlgorithmMode == "Dense Neural Network" ? "DNN" : "Statistical";
+                info += $" • Decode: {modeShort}";
+            }
+            
+            return info;
+        }
+    }
     
     public IBrush KeyerStatusLedColor => 
         LeftPaddleIndicatorColor == Brushes.LimeGreen ? Brushes.Red : Brushes.Black;
@@ -505,6 +521,8 @@ public partial class MainWindowViewModel : ViewModelBase
         _loadingSettings = true;
         DebugLogger.Log("cwmonitor", $"Loading saved CW Monitor enabled state: {_settings.CwMonitorEnabled}");
         CwMonitorEnabled = _settings.CwMonitorEnabled;
+        DebugLogger.Log("cwmonitor", $"Loading saved CW Monitor diagnostics visibility: {_settings.CwMonitorDiagnosticsVisible}");
+        CwMonitorDiagnosticsVisible = _settings.CwMonitorDiagnosticsVisible;
         _loadingSettings = false;
         DebugLogger.Log("cwmonitor", $"CW Monitor enabled state applied: {CwMonitorEnabled}");
 
@@ -1734,6 +1752,23 @@ public partial class MainWindowViewModel : ViewModelBase
         // Notify UI that diagnostics visibility has changed
         OnPropertyChanged(nameof(IsDnnMode));
         OnPropertyChanged(nameof(IsStatisticalMode));
+        OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
+        OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
+    }
+
+    partial void OnCwMonitorDiagnosticsVisibleChanged(bool value)
+    {
+        DebugLogger.Log("cwmonitor", $"OnCwMonitorDiagnosticsVisibleChanged called: value={value}, _loadingSettings={_loadingSettings}");
+        
+        if (!_loadingSettings)
+        {
+            _settings.CwMonitorDiagnosticsVisible = value;
+            _settings.Save();
+            DebugLogger.Log("cwmonitor", $"Saved CW Monitor diagnostics visibility: {value}");
+        }
+
+        // Notify UI that diagnostics visibility properties have changed
+        // Note: CwMonitorDiagnosticsButtonText is already notified by NotifyPropertyChangedFor attribute
         OnPropertyChanged(nameof(IsDnnDiagnosticsVisible));
         OnPropertyChanged(nameof(IsStatisticalDiagnosticsVisible));
     }
