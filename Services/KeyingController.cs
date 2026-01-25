@@ -193,4 +193,10 @@ public class KeyingController
         _previousStraightKeyState = false;
         _previousPttState = false;
     }
+
+    public void Dispose()
+    {
+        _iambicKeyer?.Dispose();
+        _iambicKeyer = null;
+    }
 }

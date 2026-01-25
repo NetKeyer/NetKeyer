@@ -70,6 +70,7 @@ public class IambicKeyer
         _sidetoneGenerator.OnToneStart += OnToneStart;
         _sidetoneGenerator.OnToneComplete += OnToneComplete;
         _sidetoneGenerator.OnBeforeSilenceEnd += OnBeforeSilenceEnd;
+        DebugLogger.Log("keyer", $"[IambicKeyer] Constructor: Subscribed to sidetone generator events (generator={_sidetoneGenerator.GetHashCode()})");
     }
 
     /// <summary>
@@ -201,6 +202,25 @@ public class IambicKeyer
     }
 
     /// <summary>
+    /// Disposes the keyer and unsubscribes from sidetone generator events.
+    /// </summary>
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            if (_sidetoneGenerator != null)
+            {
+                _sidetoneGenerator.OnSilenceComplete -= OnSilenceComplete;
+                _sidetoneGenerator.OnToneStart -= OnToneStart;
+                _sidetoneGenerator.OnToneComplete -= OnToneComplete;
+                _sidetoneGenerator.OnBeforeSilenceEnd -= OnBeforeSilenceEnd;
+                DebugLogger.Log("keyer", $"[IambicKeyer] Disposed and unsubscribed from generator ({_sidetoneGenerator.GetHashCode()})");
+                _sidetoneGenerator = null;
+            }
+        }
+    }
+
+    /// <summary>
     /// Updates the sidetone generator. Useful when changing audio output device.
     /// </summary>
     public void UpdateSidetoneGenerator(ISidetoneGenerator sidetoneGenerator)
@@ -210,6 +230,12 @@ public class IambicKeyer
             if (sidetoneGenerator == null)
                 throw new ArgumentNullException(nameof(sidetoneGenerator));
 
+            int oldHash = _sidetoneGenerator?.GetHashCode() ?? 0;
+            int newHash = sidetoneGenerator.GetHashCode();
+            bool isSameInstance = (_sidetoneGenerator == sidetoneGenerator);
+
+            DebugLogger.Log("keyer", $"[IambicKeyer] UpdateSidetoneGenerator called: oldGen={oldHash}, newGen={newHash}, sameInstance={isSameInstance}");
+
             // Unsubscribe from old generator events
             if (_sidetoneGenerator != null)
             {
@@ -217,6 +243,7 @@ public class IambicKeyer
                 _sidetoneGenerator.OnToneStart -= OnToneStart;
                 _sidetoneGenerator.OnToneComplete -= OnToneComplete;
                 _sidetoneGenerator.OnBeforeSilenceEnd -= OnBeforeSilenceEnd;
+                DebugLogger.Log("keyer", $"[IambicKeyer] Unsubscribed from old generator ({oldHash})");
             }
 
             // Update to new generator
@@ -228,7 +255,7 @@ public class IambicKeyer
             _sidetoneGenerator.OnToneComplete += OnToneComplete;
             _sidetoneGenerator.OnBeforeSilenceEnd += OnBeforeSilenceEnd;
 
-            DebugLogger.Log("keyer", $"[IambicKeyer] Sidetone generator updated");
+            DebugLogger.Log("keyer", $"[IambicKeyer] Subscribed to new generator ({newHash})");
         }
     }
 
