@@ -1069,6 +1069,8 @@ public partial class MainWindowViewModel : ViewModelBase
             ConnectButtonText = "Disconnect";
 
             // Reinitialize keying controller with the correct radio client handle
+            // First dispose the old controller to unsubscribe from events
+            _keyingController?.Dispose();
             _keyingController = new KeyingController(_sidetoneGenerator);
             _keyingController.Initialize(
                 _boundGuiClientHandle,
