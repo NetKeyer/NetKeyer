@@ -33,6 +33,13 @@ public static class DebugLogger
     public static string LogFilePath => _fileLogger.Value.LogFilePath;
 
     /// <summary>
+    /// Returns true if the specified category is enabled for logging.
+    /// Use this to guard expensive string formatting in hot paths:
+    ///   if (DebugLogger.IsEnabled("sidetone")) DebugLogger.Log("sidetone", $"...");
+    /// </summary>
+    public static bool IsEnabled(string category) => _config.Value.IsEnabled(category);
+
+    /// <summary>
     /// Log a debug message if the specified category is enabled.
     /// </summary>
     /// <param name="category">The debug category (e.g., "keyer", "midi", "sidetone")</param>
