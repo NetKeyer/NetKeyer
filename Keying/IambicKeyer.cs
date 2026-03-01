@@ -28,7 +28,7 @@ public class IambicKeyer
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
     private bool _lastElementWasDit = true; // Track what was actually sent last
-    private DateTime _lastStateChange = DateTime.UtcNow;
+    private long _lastStateChangeTick = Environment.TickCount64;
 
     private static readonly bool _keyerDebug = DebugLogger.IsEnabled("keyer");
 
@@ -109,7 +109,7 @@ public class IambicKeyer
             // Safety check: if state machine has been stuck for >1 second, force reset
             if (_keyerState != KeyerState.Idle)
             {
-                var elapsed = (DateTime.UtcNow - _lastStateChange).TotalMilliseconds;
+                var elapsed = Environment.TickCount64 - _lastStateChangeTick;
                 if (elapsed > 1000)
                 {
                     if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] State timeout detected - forcing reset from {_keyerState}");
@@ -177,7 +177,7 @@ public class IambicKeyer
 
             // Reset state
             _keyerState = KeyerState.Idle;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
             _iambicDitLatched = false;
             _iambicDahLatched = false;
             _ditPaddleAtStart = false;
@@ -293,7 +293,7 @@ public class IambicKeyer
             // Send radio key-down
             SendRadioKey(true);
             _keyerState = KeyerState.TonePlaying;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
         }
     }
 
@@ -321,7 +321,7 @@ public class IambicKeyer
 
             // Set state to InterElementSpace
             _keyerState = KeyerState.InterElementSpace;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
 
             // Capture paddle states at START of silence (for repetition logic)
             _ditPaddleAtSilenceStart = _currentDitPaddleState;
@@ -392,7 +392,7 @@ public class IambicKeyer
             if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] OnSilenceComplete: Silence ended with no queued tone, going idle");
 
             _keyerState = KeyerState.Idle;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
 
             // End timed sequence when returning to idle
             _inTimedSequence = false;
