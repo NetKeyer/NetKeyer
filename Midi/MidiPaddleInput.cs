@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Commons.Music.Midi;
 using NetKeyer.Helpers;
+using NetKeyer.Midi.LibreMidi;
 using NetKeyer.Models;
 
 namespace NetKeyer.Midi
@@ -12,14 +12,11 @@ namespace NetKeyer.Midi
         private const byte NOTE_ON = 0x90;
         private const byte NOTE_OFF = 0x80;
 
-        private IMidiAccess _access;
-        private IMidiInput _inputPort;
+        private LibreMidiInput _libreMidi;
         private bool _leftPaddleState = false;
         private bool _rightPaddleState = false;
         private bool _straightKeyState = false;
         private bool _pttState = false;
-        private byte _lastStatusByte = 0; // Track last status byte for running status
-        private bool _inSysEx = false; // Track if we're in the middle of a multi-packet SysEx message
 
         private List<MidiNoteMapping> _noteMappings;
 
@@ -29,8 +26,7 @@ namespace NetKeyer.Midi
         {
             try
             {
-                var access = MidiAccessManager.Default;
-                return access.Inputs.Select(d => d.Name).ToList();
+                return LibreMidiInput.GetAvailableDevices();
             }
             catch (Exception ex)
             {
@@ -56,34 +52,29 @@ namespace NetKeyer.Midi
 
             try
             {
-                _access = MidiAccessManager.Default;
-                var device = _access.Inputs.FirstOrDefault(d => d.Name == deviceName);
-
-                if (device == null)
-                {
-                    throw new InvalidOperationException($"MIDI device '{deviceName}' not found");
-                }
-
-                _inputPort = _access.OpenInputAsync(device.Id).Result;
-                _inputPort.MessageReceived += OnMidiMessageReceived;
+                _libreMidi = new LibreMidiInput();
+                _libreMidi.MessageReceived += OnMidiMessage;
+                _libreMidi.Open(deviceName);
 
                 Console.WriteLine($"Opened MIDI device: {deviceName}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to open MIDI device: {ex.Message}");
+                _libreMidi?.Dispose();
+                _libreMidi = null;
                 throw;
             }
         }
 
         public void Close()
         {
-            if (_inputPort != null)
+            if (_libreMidi != null)
             {
                 try
                 {
-                    _inputPort.MessageReceived -= OnMidiMessageReceived;
-                    _inputPort.CloseAsync().Wait();
+                    _libreMidi.MessageReceived -= OnMidiMessage;
+                    _libreMidi.Close();
                 }
                 catch (Exception ex)
                 {
@@ -91,180 +82,30 @@ namespace NetKeyer.Midi
                 }
                 finally
                 {
-                    _inputPort = null;
+                    _libreMidi.Dispose();
+                    _libreMidi = null;
                 }
             }
 
-            // Reset all states and running status
+            // Reset all states
             _leftPaddleState = false;
             _rightPaddleState = false;
             _straightKeyState = false;
             _pttState = false;
-            _lastStatusByte = 0;
-            _inSysEx = false;
         }
 
-        private void OnMidiMessageReceived(object sender, MidiReceivedEventArgs e)
+        // libremidi delivers one complete MIDI message per callback, with SysEx,
+        // timing, and active-sensing already filtered by the shim.  No manual
+        // running-status or multi-packet parsing is needed here.
+        private void OnMidiMessage(byte[] data)
         {
-            try
-            {
-                var data = e.Data;
-                var start = e.Start;
-                var length = e.Length;
-
-                if (length == 0)
-                    return;
-
-                var relevantBytes = data.Skip(start).Take(length);
-                DebugLogger.Log("midi", $"[MIDI Raw] data.Length={data.Length} start={start} length={length} data=[{string.Join(" ", relevantBytes.Select(b => $"{b:X2}"))}]");
-
-                // Parse all MIDI messages in the buffer
-                int pos = start;
-                int end = start + length;
-
-                while (pos < end)
-                {
-                    byte statusByte;
-                    int dataStart;
-
-                    // Check if this is a status byte or running status
-                    if (data[pos] >= 0x80)
-                    {
-                        // New status byte
-                        statusByte = data[pos];
-                        dataStart = pos + 1;
-                        DebugLogger.Log("midi", $"[MIDI] Status byte 0x{statusByte:X2} at pos {pos}");
-
-                        // Check if this is a System message (0xF0-0xFF)
-                        if (statusByte >= 0xF0)
-                        {
-                            if (statusByte == 0xF0)
-                            {
-                                // System Exclusive start - enter SysEx mode
-                                DebugLogger.Log("midi", $"[MIDI] SysEx start, entering SysEx mode");
-
-                                _inSysEx = true;
-                                _lastStatusByte = 0; // Clear running status during SysEx
-
-                                // Skip until we find 0xF7 or run out of data
-                                int sysexStart = pos;
-                                pos++;
-                                while (pos < end && data[pos] != 0xF7)
-                                {
-                                    pos++;
-                                }
-
-                                if (pos < end && data[pos] == 0xF7)
-                                {
-                                    // Found end of SysEx in this packet
-                                    pos++; // Skip past 0xF7
-                                    _inSysEx = false;
-                                    DebugLogger.Log("midi", $"[MIDI] SysEx complete, skipped {pos - sysexStart} bytes, exiting SysEx mode");
-                                }
-                                else
-                                {
-                                    // SysEx continues in next packet
-                                    DebugLogger.Log("midi", $"[MIDI] SysEx incomplete, skipped {pos - sysexStart} bytes, waiting for more data");
-                                }
-                                continue;
-                            }
-                            else if (statusByte == 0xF7)
-                            {
-                                // End of SysEx
-                                DebugLogger.Log("midi", $"[MIDI] SysEx end (0xF7), exiting SysEx mode");
-                                _inSysEx = false;
-                                pos++;
-                                continue;
-                            }
-                            else
-                            {
-                                // Other system messages (timing, song position, etc.) - ignore
-                                DebugLogger.Log("midi", $"[MIDI] System message 0x{statusByte:X2}, ignoring");
-
-                                // System messages cancel SysEx mode
-                                _inSysEx = false;
-                                _lastStatusByte = 0;
-
-                                int systemDataSize = MidiEvent.FixedDataSize(statusByte);
-                                pos = dataStart + systemDataSize;
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            // Channel message - exit SysEx mode if we were in it, and save for running status
-                            _inSysEx = false;
-                            _lastStatusByte = statusByte;
-                        }
-                    }
-                    else
-                    {
-                        // Data byte (< 0x80)
-
-                        // If we're in SysEx mode, skip all data bytes until we see a status byte
-                        if (_inSysEx)
-                        {
-                            DebugLogger.Log("midi", $"[MIDI] SysEx data byte 0x{data[pos]:X2}, skipping");
-                            pos++;
-                            continue;
-                        }
-
-                        // Running status - reuse last status byte
-                        statusByte = _lastStatusByte;
-                        dataStart = pos;
-                        DebugLogger.Log("midi", $"[MIDI] Running status, reusing 0x{statusByte:X2}");
-
-                        // If we don't have a valid running status, skip this byte
-                        if (statusByte == 0)
-                        {
-                            DebugLogger.Log("midi", $"[MIDI ERROR] No valid running status, skipping byte 0x{data[pos]:X2}");
-                            pos++;
-                            continue;
-                        }
-                    }
-
-                    // Get the number of data bytes for this message type
-                    int dataSize = MidiEvent.FixedDataSize(statusByte);
-                    DebugLogger.Log("midi", $"[MIDI] Message requires {dataSize} data bytes");
-
-                    // Make sure we have enough data
-                    if (dataStart + dataSize > end)
-                    {
-                        Console.WriteLine($"[MIDI ERROR] Incomplete message: need {dataSize} bytes but only {end - dataStart} available");
-                        break;
-                    }
-
-                    // Parse the message based on type
-                    byte messageType = (byte)(statusByte & 0xF0);
-
-                    if (dataSize >= 1)
-                    {
-                        byte note = data[dataStart];
-                        byte velocity = dataSize >= 2 ? data[dataStart + 1] : (byte)0;
-
-                        DebugLogger.Log("midi", $"[MIDI Event] StatusByte=0x{statusByte:X2} Note={note} Velocity={velocity}");
-
-                        if (messageType == NOTE_ON)
-                        {
-                            HandleNoteEvent(note, true);
-                        }
-                        else if (messageType == NOTE_OFF)
-                        {
-                            HandleNoteEvent(note, false);
-                        }
-                    }
-
-                    // Move to next message
-                    pos = dataStart + dataSize;
-                }
-
-                DebugLogger.Log("midi", $"[MIDI] OnMidiMessageReceived complete");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[MIDI ERROR] Exception in OnMidiMessageReceived: {ex.Message}");
-                Console.WriteLine($"[MIDI ERROR] Stack trace: {ex.StackTrace}");
-            }
+            if (data.Length < 3) return;
+            byte messageType = (byte)(data[0] & 0xF0);
+            byte note = data[1];
+            if (messageType == NOTE_ON)
+                HandleNoteEvent(note, true);  // HaliKey quirk: velocity 0 still treated as ON
+            else if (messageType == NOTE_OFF)
+                HandleNoteEvent(note, false);
         }
 
         private void HandleNoteEvent(int noteNumber, bool isOn)
