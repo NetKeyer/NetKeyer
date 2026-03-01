@@ -130,3 +130,15 @@ Desktop.ini
 # Avalonia specific
 *.aps
 *.cache
+
+# Pre-built native MIDI shim binaries (build with: cd native && ./build.sh)
+native/linux-x64/
+native/linux-arm64/
+native/windows-x64/
+native/osx-x64/
+native/osx-arm64/
+
+# CMake build directories for the native shim
+native/build/
+native/build-windows-x64/
+native/_fetchcache/

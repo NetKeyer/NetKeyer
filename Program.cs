@@ -18,7 +18,7 @@
 // ------------------------------------------------------------
 using Avalonia;
 using System;
-using System.Reflection;
+using System.IO;
 using System.Runtime.InteropServices;
 using Velopack;
 
@@ -32,7 +32,7 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // Configure native library loading for ALSA on Linux before any libraries are loaded
+        // Configure native library loading before any P/Invoke calls occur
         ConfigureNativeLibraries();
 
         // Velopack: Handle app installation/update events before starting the main app
@@ -50,44 +50,22 @@ sealed class Program
 
     /// <summary>
     /// Configures native library loading for cross-platform compatibility.
-    /// On Linux, this sets up a resolver to redirect ALSA library loading from
-    /// "libasound.so" (dev package) to "libasound.so.2" (runtime package).
+    /// Registers a resolver for the netkeyer_midi_shim native library so that
+    /// it is found in the application's base directory regardless of platform.
     /// </summary>
     private static void ConfigureNativeLibraries()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        NativeLibrary.SetDllImportResolver(typeof(Program).Assembly, (name, asm, path) =>
         {
-            // Set up resolver for alsa-sharp's ALSA library dependency.
-            // The alsa-sharp library (used by managed-midi) uses [DllImport("asound")] which
-            // looks for "libasound.so", but this symlink is only present in the ALSA development
-            // package (libasound2-dev). On runtime-only systems, we need to load "libasound.so.2" instead.
-            AppDomain.CurrentDomain.AssemblyLoad += (sender, args) =>
-            {
-                if (args.LoadedAssembly.GetName().Name == "alsa-sharp")
-                {
-                    NativeLibrary.SetDllImportResolver(args.LoadedAssembly, AlsaLibraryResolver);
-                }
-            };
-        }
-    }
-
-    /// <summary>
-    /// Custom native library resolver for ALSA on Linux.
-    /// Redirects "asound" to "libasound.so.2" (runtime library) instead of
-    /// "libasound.so" (dev package symlink).
-    /// </summary>
-    private static IntPtr AlsaLibraryResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        if (libraryName == "asound")
-        {
-            // Try to load the runtime version of the ALSA library
-            if (NativeLibrary.TryLoad("libasound.so.2", assembly, searchPath, out var handle))
-            {
-                return handle;
-            }
-        }
-
-        // Return IntPtr.Zero to let the default loading mechanism try
-        return IntPtr.Zero;
+            if (name != "netkeyer_midi_shim") return IntPtr.Zero;
+            var dir = AppContext.BaseDirectory;
+            var libName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? "netkeyer_midi_shim.dll"
+                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                ? "libnetkeyer_midi_shim.dylib"
+                : "libnetkeyer_midi_shim.so";
+            NativeLibrary.TryLoad(Path.Combine(dir, libName), asm, null, out var handle);
+            return handle;
+        });
     }
 }

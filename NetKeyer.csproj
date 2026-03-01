@@ -33,7 +33,6 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-    <PackageReference Include="managed-midi" Version="1.10.1" />
     <PackageReference Include="MessageBox.Avalonia" Version="3.3.1.1" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="PortAudioSharp2" Version="1.0.4" />
@@ -76,5 +75,42 @@
 
   <ItemGroup>
     <Compile Remove="obj\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Pre-built native MIDI shim: copy to output directory at build time.
+       Each condition handles two cases:
+         1. Explicit publish RID  (-r linux-x64, -r linux-arm64, etc.)
+         2. "dotnet run" with no RID — falls back to checking the build machine's
+            OS and CPU architecture via RuntimeInformation so the correct shim is
+            picked on both x64 and arm64 development machines. -->
+  <ItemGroup>
+    <Content Include="native/linux-x64/libnetkeyer_midi_shim.so"
+             Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or
+                        ($([MSBuild]::IsOsPlatform('Linux')) And '$(RuntimeIdentifier)' == '' And
+                         '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>libnetkeyer_midi_shim.so</TargetPath>
+    </Content>
+    <Content Include="native/linux-arm64/libnetkeyer_midi_shim.so"
+             Condition="'$(RuntimeIdentifier)' == 'linux-arm64' Or
+                        ($([MSBuild]::IsOsPlatform('Linux')) And '$(RuntimeIdentifier)' == '' And
+                         '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>libnetkeyer_midi_shim.so</TargetPath>
+    </Content>
+    <Content Include="native/windows-x64/netkeyer_midi_shim.dll"
+             Condition="'$(RuntimeIdentifier)' == 'win-x64' Or
+                        ($([MSBuild]::IsOsPlatform('Windows')) And '$(RuntimeIdentifier)' == '' And
+                         '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>netkeyer_midi_shim.dll</TargetPath>
+    </Content>
+    <Content Include="native/osx-arm64/libnetkeyer_midi_shim.dylib"
+             Condition="'$(RuntimeIdentifier)' == 'osx-arm64' Or
+                        ($([MSBuild]::IsOsPlatform('OSX')) And '$(RuntimeIdentifier)' == '' And
+                         '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>libnetkeyer_midi_shim.dylib</TargetPath>
+    </Content>
   </ItemGroup>
 </Project>
