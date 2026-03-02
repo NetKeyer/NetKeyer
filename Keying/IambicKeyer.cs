@@ -28,7 +28,9 @@ public class IambicKeyer
     private int _ditLength = 60; // milliseconds
     private KeyerState _keyerState = KeyerState.Idle;
     private bool _lastElementWasDit = true; // Track what was actually sent last
-    private DateTime _lastStateChange = DateTime.UtcNow;
+    private long _lastStateChangeTick = Environment.TickCount64;
+
+    private static readonly bool _keyerDebug = DebugLogger.IsEnabled("keyer");
 
     // Computed timestamp tracking
     private long _sequenceStartTimestamp;      // Real timestamp when sequence started
@@ -70,7 +72,7 @@ public class IambicKeyer
         _sidetoneGenerator.OnToneStart += OnToneStart;
         _sidetoneGenerator.OnToneComplete += OnToneComplete;
         _sidetoneGenerator.OnBeforeSilenceEnd += OnBeforeSilenceEnd;
-        DebugLogger.Log("keyer", $"[IambicKeyer] Constructor: Subscribed to sidetone generator events (generator={_sidetoneGenerator.GetHashCode()})");
+        if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Constructor: Subscribed to sidetone generator events (generator={_sidetoneGenerator.GetHashCode()})");
     }
 
     /// <summary>
@@ -102,15 +104,15 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] UpdatePaddleState: L={ditPaddle} R={dahPaddle} State={_keyerState}");
+            if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] UpdatePaddleState: L={ditPaddle} R={dahPaddle} State={_keyerState}");
 
             // Safety check: if state machine has been stuck for >1 second, force reset
             if (_keyerState != KeyerState.Idle)
             {
-                var elapsed = (DateTime.UtcNow - _lastStateChange).TotalMilliseconds;
+                var elapsed = Environment.TickCount64 - _lastStateChangeTick;
                 if (elapsed > 1000)
                 {
-                    DebugLogger.Log("keyer", $"[IambicKeyer] State timeout detected - forcing reset from {_keyerState}");
+                    if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] State timeout detected - forcing reset from {_keyerState}");
                     Stop();
                 }
             }
@@ -132,12 +134,12 @@ public class IambicKeyer
                 if (_lastElementWasDit && dahPaddle && !_dahPaddleAtStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (opposite paddle during dit tone)");
+                    if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Setting DAH latch (opposite paddle during dit tone)");
                 }
                 if (!_lastElementWasDit && ditPaddle && !_ditPaddleAtStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (opposite paddle during dah tone)");
+                    if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Setting DIT latch (opposite paddle during dah tone)");
                 }
             }
             // If in inter-element space, latch either paddle if newly pressed during silence
@@ -148,13 +150,13 @@ public class IambicKeyer
                 if (ditPaddle && !_ditPaddleAtSilenceStart && !_iambicDitLatched)
                 {
                     _iambicDitLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DIT latch (newly pressed during silence)");
+                    if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Setting DIT latch (newly pressed during silence)");
                 }
                 // Latch dah paddle if newly pressed during silence
                 if (dahPaddle && !_dahPaddleAtSilenceStart && !_iambicDahLatched)
                 {
                     _iambicDahLatched = true;
-                    DebugLogger.Log("keyer", $"[IambicKeyer] Setting DAH latch (newly pressed during silence)");
+                    if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Setting DAH latch (newly pressed during silence)");
                 }
                 // Don't call Stop() here - decision happens in OnBeforeSilenceEnd
             }
@@ -168,14 +170,14 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] Stop called, going to Idle");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Stop called, going to Idle");
 
             // Send radio key-up if needed
             SendRadioKey(false);
 
             // Reset state
             _keyerState = KeyerState.Idle;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
             _iambicDitLatched = false;
             _iambicDahLatched = false;
             _ditPaddleAtStart = false;
@@ -197,7 +199,7 @@ public class IambicKeyer
         {
             _inTimedSequence = false;
             _computedElapsedMs = 0;
-            DebugLogger.Log("keyer", $"[IambicKeyer] Timed sequence reset");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Timed sequence reset");
         }
     }
 
@@ -214,7 +216,7 @@ public class IambicKeyer
                 _sidetoneGenerator.OnToneStart -= OnToneStart;
                 _sidetoneGenerator.OnToneComplete -= OnToneComplete;
                 _sidetoneGenerator.OnBeforeSilenceEnd -= OnBeforeSilenceEnd;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Disposed and unsubscribed from generator ({_sidetoneGenerator.GetHashCode()})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Disposed and unsubscribed from generator ({_sidetoneGenerator.GetHashCode()})");
                 _sidetoneGenerator = null;
             }
         }
@@ -234,7 +236,7 @@ public class IambicKeyer
             int newHash = sidetoneGenerator.GetHashCode();
             bool isSameInstance = (_sidetoneGenerator == sidetoneGenerator);
 
-            DebugLogger.Log("keyer", $"[IambicKeyer] UpdateSidetoneGenerator called: oldGen={oldHash}, newGen={newHash}, sameInstance={isSameInstance}");
+            if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] UpdateSidetoneGenerator called: oldGen={oldHash}, newGen={newHash}, sameInstance={isSameInstance}");
 
             // Unsubscribe from old generator events
             if (_sidetoneGenerator != null)
@@ -243,7 +245,7 @@ public class IambicKeyer
                 _sidetoneGenerator.OnToneStart -= OnToneStart;
                 _sidetoneGenerator.OnToneComplete -= OnToneComplete;
                 _sidetoneGenerator.OnBeforeSilenceEnd -= OnBeforeSilenceEnd;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Unsubscribed from old generator ({oldHash})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Unsubscribed from old generator ({oldHash})");
             }
 
             // Update to new generator
@@ -255,7 +257,7 @@ public class IambicKeyer
             _sidetoneGenerator.OnToneComplete += OnToneComplete;
             _sidetoneGenerator.OnBeforeSilenceEnd += OnBeforeSilenceEnd;
 
-            DebugLogger.Log("keyer", $"[IambicKeyer] Subscribed to new generator ({newHash})");
+            if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Subscribed to new generator ({newHash})");
         }
     }
 
@@ -272,16 +274,16 @@ public class IambicKeyer
                 _sequenceStartTimestamp = Environment.TickCount64;
                 _computedElapsedMs = 0;
                 _inTimedSequence = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Starting new timed sequence at {_sequenceStartTimestamp}");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Starting new timed sequence at {_sequenceStartTimestamp}");
             }
             // If transitioning from InterElementSpace to TonePlaying, advance by the space duration
             else if (_keyerState == KeyerState.InterElementSpace && _inTimedSequence)
             {
                 _computedElapsedMs += _ditLength;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by inter-element space {_ditLength}ms (total elapsed: {_computedElapsedMs}ms)");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by inter-element space {_ditLength}ms (total elapsed: {_computedElapsedMs}ms)");
             }
 
-            DebugLogger.Log("keyer", $"[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] OnToneStart: Tone starting, sending radio key-down");
 
             // Capture paddle states at ACTUAL element start time (not decision time)
             // This is critical for Mode B completion logic to work correctly
@@ -291,7 +293,7 @@ public class IambicKeyer
             // Send radio key-down
             SendRadioKey(true);
             _keyerState = KeyerState.TonePlaying;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
         }
     }
 
@@ -303,7 +305,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] OnToneComplete: Tone ended, capturing paddle states at silence start");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] OnToneComplete: Tone ended, capturing paddle states at silence start");
 
             // Advance computed time by the element duration we just completed BEFORE sending key-up
             // This ensures key-up timestamp reflects the end of the element
@@ -311,7 +313,7 @@ public class IambicKeyer
             {
                 int elementDuration = _lastElementWasDit ? _ditLength : (_ditLength * 3);
                 _computedElapsedMs += elementDuration;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by {elementDuration}ms (total elapsed: {_computedElapsedMs}ms)");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Advanced computed time by {elementDuration}ms (total elapsed: {_computedElapsedMs}ms)");
             }
 
             // Send radio key-up with the advanced timestamp
@@ -319,13 +321,13 @@ public class IambicKeyer
 
             // Set state to InterElementSpace
             _keyerState = KeyerState.InterElementSpace;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
 
             // Capture paddle states at START of silence (for repetition logic)
             _ditPaddleAtSilenceStart = _currentDitPaddleState;
             _dahPaddleAtSilenceStart = _currentDahPaddleState;
 
-            DebugLogger.Log("keyer", $"[IambicKeyer] Paddle states at silence start: dit={_ditPaddleAtSilenceStart}, dah={_dahPaddleAtSilenceStart}, ditLatch={_iambicDitLatched}, dahLatch={_iambicDahLatched}");
+            if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Paddle states at silence start: dit={_ditPaddleAtSilenceStart}, dah={_dahPaddleAtSilenceStart}, ditLatch={_iambicDitLatched}, dahLatch={_iambicDahLatched}");
 
             // Queue just the silence (decision about next element happens in OnBeforeSilenceEnd)
             // Note: Alternation latches remain set and will be checked in OnBeforeSilenceEnd
@@ -341,7 +343,7 @@ public class IambicKeyer
     {
         bool isDit = (toneDurationMs == _ditLength);
 
-        DebugLogger.Log("keyer", $"[IambicKeyer] Starting/queueing {(isDit ? "dit" : "dah")} ({toneDurationMs}ms)");
+        if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Starting/queueing {(isDit ? "dit" : "dah")} ({toneDurationMs}ms)");
 
         // Start tone (will queue if in silence, start immediately if idle)
         _sidetoneGenerator?.StartTone(toneDurationMs);
@@ -361,7 +363,7 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] OnBeforeSilenceEnd: Making decision about next element");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] OnBeforeSilenceEnd: Making decision about next element");
 
             // Decide what to send next based on current state and latches
             int? nextToneDuration = DetermineNextToneDuration();
@@ -372,7 +374,7 @@ public class IambicKeyer
             }
             else
             {
-                DebugLogger.Log("keyer", $"[IambicKeyer] No element to send, silence will complete and go idle");
+                if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] No element to send, silence will complete and go idle");
                 // If no tone, silence will complete and OnSilenceComplete will handle going idle
             }
         }
@@ -387,10 +389,10 @@ public class IambicKeyer
     {
         lock (_lock)
         {
-            DebugLogger.Log("keyer", $"[IambicKeyer] OnSilenceComplete: Silence ended with no queued tone, going idle");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] OnSilenceComplete: Silence ended with no queued tone, going idle");
 
             _keyerState = KeyerState.Idle;
-            _lastStateChange = DateTime.UtcNow;
+            _lastStateChangeTick = Environment.TickCount64;
 
             // End timed sequence when returning to idle
             _inTimedSequence = false;
@@ -442,19 +444,19 @@ public class IambicKeyer
             if (_iambicDahLatched || _currentDahPaddleState)
             {
                 sendDah = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
             }
             // Priority 2: Repetition - same paddle latched or pressed at end of silence
             else if (_iambicDitLatched || _currentDitPaddleState)
             {
                 sendDit = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
             }
             // Priority 3 (Mode B only): Squeeze - both held at tone start, both now released
             else if (IsModeB && _dahPaddleAtStart && !_currentDahPaddleState && !_currentDitPaddleState)
             {
                 sendDah = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Mode B squeeze: sending dah (both were held at tone start, both now released)");
+                if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Mode B squeeze: sending dah (both were held at tone start, both now released)");
             }
         }
         else // was sending dah
@@ -464,19 +466,19 @@ public class IambicKeyer
             if (_iambicDitLatched || _currentDitPaddleState)
             {
                 sendDit = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Alternation: sending dit (latch={_iambicDitLatched}, current={_currentDitPaddleState})");
             }
             // Priority 2: Repetition - same paddle latched or pressed at end of silence
             else if (_iambicDahLatched || _currentDahPaddleState)
             {
                 sendDah = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Repetition: sending dah (latch={_iambicDahLatched}, current={_currentDahPaddleState})");
             }
             // Priority 3 (Mode B only): Squeeze - both held at tone start, both now released
             else if (IsModeB && _ditPaddleAtStart && !_currentDitPaddleState && !_currentDahPaddleState)
             {
                 sendDit = true;
-                DebugLogger.Log("keyer", $"[IambicKeyer] Mode B squeeze: sending dit (both were held at tone start, both now released)");
+                if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Mode B squeeze: sending dit (both were held at tone start, both now released)");
             }
         }
 
@@ -485,7 +487,7 @@ public class IambicKeyer
         {
             sendDit = true;
             sendDah = false;
-            DebugLogger.Log("keyer", $"[IambicKeyer] Both paddles from idle: sending dit first");
+            if (_keyerDebug) DebugLogger.Log("keyer", "[IambicKeyer] Both paddles from idle: sending dit first");
         }
 
         if (sendDit)
@@ -512,7 +514,7 @@ public class IambicKeyer
                 long computedTimestamp = (_sequenceStartTimestamp + _computedElapsedMs) % 65536;
                 timestamp = computedTimestamp.ToString("X4");
                 timestampType = "computed";
-                DebugLogger.Log("keyer", $"[IambicKeyer] Computed timestamp details: seq_start={_sequenceStartTimestamp}, elapsed={_computedElapsedMs}ms, result={timestamp}");
+                if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Computed timestamp details: seq_start={_sequenceStartTimestamp}, elapsed={_computedElapsedMs}ms, result={timestamp}");
             }
             else
             {
@@ -522,8 +524,11 @@ public class IambicKeyer
             }
 
             // Log the actual CWKey command being sent
-            string keyState = state ? "KEY-DOWN" : "KEY-UP";
-            DebugLogger.Log("keyer", $"[IambicKeyer] >>> Sending CWKey to radio: {keyState}, timestamp={timestamp} ({timestampType}), handle={_radioClientHandle}");
+            if (_keyerDebug)
+            {
+                string keyState = state ? "KEY-DOWN" : "KEY-UP";
+                DebugLogger.Log("keyer", $"[IambicKeyer] >>> Sending CWKey to radio: {keyState}, timestamp={timestamp} ({timestampType}), handle={_radioClientHandle}");
+            }
 
             _sendRadioKey(state, timestamp, _radioClientHandle);
         }

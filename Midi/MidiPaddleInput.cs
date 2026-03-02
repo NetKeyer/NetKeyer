@@ -20,6 +20,8 @@ namespace NetKeyer.Midi
 
         private List<MidiNoteMapping> _noteMappings;
 
+        private static readonly bool _midiDebug = DebugLogger.IsEnabled("midi");
+
         public event EventHandler<PaddleStateChangedEventArgs> PaddleStateChanged;
 
         public static List<string> GetAvailableDevices()
@@ -110,13 +112,13 @@ namespace NetKeyer.Midi
 
         private void HandleNoteEvent(int noteNumber, bool isOn)
         {
-            DebugLogger.Log("midi", $"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
+            if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
 
             // Find all mappings for this note
             var mapping = _noteMappings?.FirstOrDefault(m => m.NoteNumber == noteNumber);
             if (mapping == null)
             {
-                DebugLogger.Log("midi", $"[MIDI] Ignoring unmapped note {noteNumber}");
+                if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Ignoring unmapped note {noteNumber}");
                 return;
             }
 
@@ -128,7 +130,7 @@ namespace NetKeyer.Midi
                 // Handle note OFF when we didn't see note ON
                 if (!isOn && !_leftPaddleState)
                 {
-                    DebugLogger.Log("midi", $"[MIDI] Left paddle OFF without ON - treating as brief press/release");
+                    if (_midiDebug) DebugLogger.Log("midi", "[MIDI] Left paddle OFF without ON - treating as brief press/release");
                     _leftPaddleState = true;
                     stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
@@ -144,7 +146,7 @@ namespace NetKeyer.Midi
                 {
                     _leftPaddleState = isOn;
                     stateChanged = true;
-                    DebugLogger.Log("midi", $"[MIDI] Left paddle -> {isOn}");
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Left paddle -> {isOn}");
                 }
             }
 
@@ -153,7 +155,7 @@ namespace NetKeyer.Midi
                 // Handle note OFF when we didn't see note ON
                 if (!isOn && !_rightPaddleState)
                 {
-                    DebugLogger.Log("midi", $"[MIDI] Right paddle OFF without ON - treating as brief press/release");
+                    if (_midiDebug) DebugLogger.Log("midi", "[MIDI] Right paddle OFF without ON - treating as brief press/release");
                     _rightPaddleState = true;
                     stateChanged = true;
                     PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
@@ -169,7 +171,7 @@ namespace NetKeyer.Midi
                 {
                     _rightPaddleState = isOn;
                     stateChanged = true;
-                    DebugLogger.Log("midi", $"[MIDI] Right paddle -> {isOn}");
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Right paddle -> {isOn}");
                 }
             }
 
@@ -179,7 +181,7 @@ namespace NetKeyer.Midi
                 {
                     _straightKeyState = isOn;
                     stateChanged = true;
-                    DebugLogger.Log("midi", $"[MIDI] Straight key -> {isOn}");
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Straight key -> {isOn}");
                 }
             }
 
@@ -189,14 +191,14 @@ namespace NetKeyer.Midi
                 {
                     _pttState = isOn;
                     stateChanged = true;
-                    DebugLogger.Log("midi", $"[MIDI] PTT -> {isOn}");
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] PTT -> {isOn}");
                 }
             }
 
             // Fire event if any state changed
             if (stateChanged)
             {
-                DebugLogger.Log("midi", $"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
+                if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
                 PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                 {
                     LeftPaddle = _leftPaddleState,
