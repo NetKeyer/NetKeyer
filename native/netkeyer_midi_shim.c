@@ -86,20 +86,33 @@ static int try_observer(nkm_observer_t* o, enum libremidi_api api)
 
     libremidi_observer_configuration obs_cfg;
     libremidi_midi_observer_configuration_init(&obs_cfg);
-    obs_cfg.on_error.callback     = on_error_cb;
-    obs_cfg.on_warning.callback   = on_warning_cb;
-    obs_cfg.input_added.context   = o;
-    obs_cfg.input_added.callback  = observer_port_added;
-    obs_cfg.track_hardware        = true;
-    obs_cfg.track_virtual         = true;
-    obs_cfg.notify_in_constructor = true;
+    obs_cfg.on_error.callback   = on_error_cb;
+    obs_cfg.on_warning.callback = on_warning_cb;
+    obs_cfg.track_hardware      = true;
+    obs_cfg.track_virtual       = true;
+    /* Do NOT set input_added or notify_in_constructor.
+     * When no callbacks are registered, libremidi's has_callbacks() returns
+     * false and the CoreMIDI backend skips MIDIClientCreate() in finish_init().
+     * MIDIClientCreate() can fail on macOS when called from a .NET thread
+     * that has no CFRunLoop, or in a signed/sandboxed context without MIDI
+     * entitlements.  We do NOT need a MIDIClient for enumeration: after the
+     * observer is created we call libremidi_midi_observer_enumerate_input_ports()
+     * which invokes get_input_ports() → MIDIGetNumberOfSources() directly,
+     * with no client required.  The ALSA and WinMM backends are unaffected
+     * because their get_input_ports() also operates without a client object. */
 
     libremidi_api_configuration api_cfg;
     libremidi_midi_api_configuration_init(&api_cfg);
     api_cfg.api                = api;
     api_cfg.configuration_type = Observer;
 
-    return libremidi_midi_observer_new(&obs_cfg, &api_cfg, &o->obs);
+    if (libremidi_midi_observer_new(&obs_cfg, &api_cfg, &o->obs) != 0)
+        return -1;
+
+    /* Populate the port cache via direct system query (no MIDIClient needed). */
+    libremidi_midi_observer_enumerate_input_ports(o->obs, o, observer_port_added);
+
+    return 0;
 }
 
 NKM_API void* nkm_create_observer(void)
