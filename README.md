@@ -29,7 +29,7 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
 
 ## Requirements
 
-- .NET 8.0 SDK
+- .NET 8.0 Runtime
 - FlexRadio device on the network (or use sidetone-only mode for practice)
 - Input device:
   - Serial port device (e.g., HaliKey v1/v2), OR
@@ -42,15 +42,57 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
 
 ## Building
 
+### Requirements
+
+- .NET 8.0 SDK
+- To build the native MIDI shim (required for MIDI input):
+
+  | Platform   | Tools required |
+  |------------|----------------|
+  | Linux      | `cmake`, `gcc`/`g++`, `libasound2-dev` (ALSA headers) |
+  | Windows    | `cmake`, Visual Studio 2022 (includes MSVC, nmake, rc) |
+  | macOS      | `cmake`, Xcode Command Line Tools (`xcode-select --install`) |
+
+  CMake downloads libremidi automatically on first build (requires internet access).
+
+### 1. Build the native MIDI shim
+
+**Linux / macOS:**
 ```bash
-cd NetKeyer
+cd native
+./build.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+cd native
+.\build.ps1
+```
+
+The built binary is placed in the correct directory for your platform automatically
+(e.g. `native/linux-x64/`, `native/osx-arm64/`, `native/windows-x64/`).
+
+> **Not working on the native component?** You can skip the build above by copying
+> the pre-built shim out of the [latest release](https://github.com/NetKeyer/NetKeyer/releases/latest)
+> into the appropriate directory instead:
+>
+> | Platform    | File to copy                     | Destination              |
+> |-------------|----------------------------------|--------------------------|
+> | Linux x64   | `libnetkeyer_midi_shim.so`       | `native/linux-x64/`      |
+> | Linux arm64 | `libnetkeyer_midi_shim.so`       | `native/linux-arm64/`    |
+> | Windows     | `netkeyer_midi_shim.dll`         | `native/windows-x64/`    |
+> | macOS x64   | `libnetkeyer_midi_shim.dylib`    | `native/osx-x64/`        |
+> | macOS arm64 | `libnetkeyer_midi_shim.dylib`    | `native/osx-arm64/`      |
+
+### 2. Build the application
+
+```bash
 dotnet build
 ```
 
 ## Running
 
 ```bash
-cd NetKeyer
 dotnet run
 ```
 
@@ -235,7 +277,21 @@ NetKeyer/
 │   ├── WasapiSidetoneGenerator.cs (Windows WASAPI)
 │   ├── SidetoneProvider.cs (waveform generation)
 ├── Midi/                   # MIDI input handling
-│   └── MidiPaddleInput.cs
+│   ├── MidiPaddleInput.cs
+│   └── LibreMidi/          # Native shim P/Invoke layer
+│       ├── NativeMethods.cs
+│       └── LibreMidiInput.cs
+├── native/                 # Native MIDI shim source and pre-built binaries
+│   ├── netkeyer_midi_shim.c
+│   ├── CMakeLists.txt
+│   ├── exports.map
+│   ├── build.sh            # Linux/macOS build script
+│   ├── build.ps1           # Windows build script
+│   ├── linux-x64/          # Pre-built binaries (not in git; build or copy from release)
+│   ├── linux-arm64/
+│   ├── windows-x64/
+│   ├── osx-x64/
+│   └── osx-arm64/
 ├── Keying/                 # Iambic keyer logic
 │   └── IambicKeyer.cs
 ├── SmartLink/              # SmartLink authentication
