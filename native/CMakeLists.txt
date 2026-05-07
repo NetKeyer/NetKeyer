@@ -31,6 +31,12 @@ set_target_properties(netkeyer_midi_shim PROPERTIES
     C_STANDARD 11
     POSITION_INDEPENDENT_CODE ON)
 
+if(MSVC)
+    target_compile_options(netkeyer_midi_shim PRIVATE /MT)
+    set_property(TARGET netkeyer_midi_shim PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # Platform-specific link flags to hide non-exported symbols
 if(UNIX AND NOT APPLE)
     target_link_options(netkeyer_midi_shim PRIVATE
