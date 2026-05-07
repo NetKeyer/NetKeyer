@@ -17,16 +17,12 @@ public class RadioSettingsSynchronizer
     private bool _updatingFromRadio = false;
     
     // Fix for issue where radio profile settings override user changes:
-    // When user changes a setting, store their desired value and ignore conflicting
-    // radio updates for 30 seconds. This prevents SmartSDR from resetting values
-    // when keying starts or profiles reload.
+    // When user changes a setting, store their desired value and continuously enforce it
+    // throughout the session. This prevents SmartSDR from resetting values when keying
+    // starts or profiles reload.
     private int? _userDesiredCwSpeed = null;
     private int? _userDesiredCwPitch = null;
     private int? _userDesiredSidetoneVolume = null;
-    private DateTime _lastUserCwSpeedChange = DateTime.MinValue;
-    private DateTime _lastUserCwPitchChange = DateTime.MinValue;
-    private DateTime _lastUserSidetoneVolumeChange = DateTime.MinValue;
-    private const int ENFORCE_USER_SETTING_MS = 30000;
 
     public event EventHandler<RadioSettingChangedEventArgs> SettingChangedFromRadio;
 
@@ -89,13 +85,10 @@ public class RadioSettingsSynchronizer
             _connectedRadio.CWPitch = cwPitch;
             _connectedRadio.TXCWMonitorGain = sidetoneVolume;
 
-            // Set user desired values and timestamps to prevent radio from overriding
+            // Set user desired values to continuously enforce throughout the session
             _userDesiredCwSpeed = cwSpeed;
             _userDesiredCwPitch = cwPitch;
             _userDesiredSidetoneVolume = sidetoneVolume;
-            _lastUserCwSpeedChange = DateTime.UtcNow;
-            _lastUserCwPitchChange = DateTime.UtcNow;
-            _lastUserSidetoneVolumeChange = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
@@ -110,7 +103,6 @@ public class RadioSettingsSynchronizer
             try
             {
                 _userDesiredCwSpeed = value;
-                _lastUserCwSpeedChange = DateTime.UtcNow;
                 _connectedRadio.CWSpeed = value;
             }
             catch { }
@@ -124,7 +116,6 @@ public class RadioSettingsSynchronizer
             try
             {
                 _userDesiredCwPitch = value;
-                _lastUserCwPitchChange = DateTime.UtcNow;
                 _connectedRadio.CWPitch = value;
             }
             catch { }
@@ -138,7 +129,6 @@ public class RadioSettingsSynchronizer
             try
             {
                 _userDesiredSidetoneVolume = value;
-                _lastUserSidetoneVolumeChange = DateTime.UtcNow;
                 _connectedRadio.TXCWMonitorGain = value;
             }
             catch { }
@@ -208,11 +198,10 @@ public class RadioSettingsSynchronizer
                 switch (e.PropertyName)
                 {
                     case "CWSpeed":
-                        // If user recently changed the value and radio is broadcasting a different value,
-                        // push user's value back to the radio to override SmartSDR profile reloads
-                        var timeSinceUserChange = DateTime.UtcNow - _lastUserCwSpeedChange;
+                        // If user has set a desired value and radio is broadcasting a different value,
+                        // push user's value back to the radio to override SmartSDR profile reloads.
+                        // This enforcement is continuous throughout the session.
                         if (_userDesiredCwSpeed.HasValue && 
-                            timeSinceUserChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.CWSpeed != _userDesiredCwSpeed.Value)
                         {
                             // SmartSDR is trying to override user's setting - push it back
@@ -228,9 +217,7 @@ public class RadioSettingsSynchronizer
                         break;
 
                     case "CWPitch":
-                        var timeSincePitchChange = DateTime.UtcNow - _lastUserCwPitchChange;
                         if (_userDesiredCwPitch.HasValue && 
-                            timeSincePitchChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.CWPitch != _userDesiredCwPitch.Value)
                         {
                             // SmartSDR is trying to override user's setting - push it back
@@ -245,9 +232,7 @@ public class RadioSettingsSynchronizer
                         break;
 
                     case "TXCWMonitorGain":
-                        var timeSinceVolumeChange = DateTime.UtcNow - _lastUserSidetoneVolumeChange;
                         if (_userDesiredSidetoneVolume.HasValue && 
-                            timeSinceVolumeChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.TXCWMonitorGain != _userDesiredSidetoneVolume.Value)
                         {
                             // SmartSDR is trying to override user's setting - push it back

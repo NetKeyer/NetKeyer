@@ -10,13 +10,15 @@ When the user makes changes in SmartSDR (like changing frequency), SmartSDR relo
 
 ## Solution
 
-Implemented a two-part solution:
+Implemented a two-part solution with continuous enforcement:
 
 ### 1. Persist User Preferences Across Sessions
 Store the user's CW speed, pitch, and sidetone volume preferences in the UserSettings file. When connecting to a radio, push these saved preferences TO the radio instead of loading FROM it. This ensures the user's preferences persist across sessions and take precedence over radio profile defaults.
 
-### 2. Active Enforcement During Session
-When SmartSDR tries to override user settings during an active session, actively push the user's value back to the radio. This uses a 30-second enforcement window that detects conflicting radio updates and immediately re-applies the user's desired value.
+### 2. Continuous Active Enforcement During Session
+When SmartSDR tries to override user settings during an active session, actively push the user's value back to the radio. Unlike the previous time-limited approach (30-second window), this enforcement is **continuous throughout the entire session**. Any time the radio broadcasts a different value than what the user set in NetKeyer, the user's value is immediately re-applied.
+
+This ensures that even if you wait minutes before pressing the keyer, your settings remain protected from radio profile reloads that occur when transmitting starts.
 
 ## Implementation Details
 
@@ -30,11 +32,11 @@ When SmartSDR tries to override user settings during an active session, actively
 3. **Push to radio on connect**: Call `ApplyUserSettingsToRadio()` instead of `ApplyInitialSettingsFromRadio()` to push user preferences to radio
 
 ### Modified `Services/RadioSettingsSynchronizer.cs`:
-1. **Added new method** `ApplyUserSettingsToRadio()`: Pushes user's saved preferences to the radio and sets up enforcement tracking
-2. **Enhanced conflict detection**: In `Radio_PropertyChanged()`, when a conflicting value is detected within the 30-second window:
+1. **Added new method** `ApplyUserSettingsToRadio()`: Pushes user's saved preferences to the radio and sets up continuous enforcement tracking
+2. **Enhanced conflict detection**: In `Radio_PropertyChanged()`, when a conflicting value is detected at any time during the session:
    - Push the user's desired value back to the radio immediately
    - Don't propagate the conflicting value to the UI
-3. **Enforcement window**: Still uses 30-second window for enforcement, allowing eventual synchronization if user changes settings in SmartSDR after the window expires
+3. **Continuous enforcement**: User settings are enforced for the entire session duration, not just a limited time window. This prevents issues where waiting before keying would allow radio profile settings to override user preferences.
 
 ## Files Changed
 
@@ -64,8 +66,9 @@ When SmartSDR tries to override user settings during an active session, actively
 
 ## Notes
 
-- The 30-second enforcement window provides active protection during typical operating sessions
+- User preferences are continuously enforced throughout the entire session
 - User preferences are now the source of truth, not the radio profile
 - Settings persist across NetKeyer sessions
-- If the user intentionally changes settings in SmartSDR after 30 seconds, NetKeyer will respect those changes
+- If you want to change settings, do so in NetKeyer's UI - changes made in SmartSDR while connected to NetKeyer will be overridden by NetKeyer's continuous enforcement
+- The continuous enforcement ensures that even after waiting minutes before keying, your NetKeyer settings remain protected from radio profile reloads
 - Backwards compatible with existing FlexLib integration
