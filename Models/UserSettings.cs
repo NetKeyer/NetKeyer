@@ -28,6 +28,11 @@ namespace NetKeyer.Models
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }
 
+        // CW settings - persist user preferences across sessions
+        public int? CwSpeed { get; set; }
+        public int? CwPitch { get; set; }
+        public int? SidetoneVolume { get; set; }
+
         // SmartLink settings
         public string SmartLinkClientId { get; set; }
         public bool RememberMeSmartLink { get; set; } = true;

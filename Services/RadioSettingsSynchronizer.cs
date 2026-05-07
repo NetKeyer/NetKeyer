@@ -76,6 +76,33 @@ public class RadioSettingsSynchronizer
         }
     }
 
+    public void ApplyUserSettingsToRadio(int cwSpeed, int cwPitch, int sidetoneVolume)
+    {
+        if (_connectedRadio == null)
+            return;
+
+        try
+        {
+            // Push user's saved preferences to the radio
+            // This ensures the user's preferences take precedence over radio profile defaults
+            _connectedRadio.CWSpeed = cwSpeed;
+            _connectedRadio.CWPitch = cwPitch;
+            _connectedRadio.TXCWMonitorGain = sidetoneVolume;
+
+            // Set user desired values and timestamps to prevent radio from overriding
+            _userDesiredCwSpeed = cwSpeed;
+            _userDesiredCwPitch = cwPitch;
+            _userDesiredSidetoneVolume = sidetoneVolume;
+            _lastUserCwSpeedChange = DateTime.UtcNow;
+            _lastUserCwPitchChange = DateTime.UtcNow;
+            _lastUserSidetoneVolumeChange = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Settings error: {ex.Message}", ex);
+        }
+    }
+
     public void SyncCwSpeedToRadio(int value)
     {
         if (_connectedRadio != null && !_updatingFromRadio)
@@ -181,13 +208,20 @@ public class RadioSettingsSynchronizer
                 switch (e.PropertyName)
                 {
                     case "CWSpeed":
-                        // If user recently changed the value, ignore conflicting radio updates
+                        // If user recently changed the value and radio is broadcasting a different value,
+                        // push user's value back to the radio to override SmartSDR profile reloads
                         var timeSinceUserChange = DateTime.UtcNow - _lastUserCwSpeedChange;
                         if (_userDesiredCwSpeed.HasValue && 
                             timeSinceUserChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.CWSpeed != _userDesiredCwSpeed.Value)
                         {
-                            break; // Ignore this update
+                            // SmartSDR is trying to override user's setting - push it back
+                            try
+                            {
+                                _connectedRadio.CWSpeed = _userDesiredCwSpeed.Value;
+                            }
+                            catch { }
+                            break; // Don't propagate the conflicting value to UI
                         }
                         
                         RaiseSettingChanged("CWSpeed", _connectedRadio.CWSpeed);
@@ -199,7 +233,13 @@ public class RadioSettingsSynchronizer
                             timeSincePitchChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.CWPitch != _userDesiredCwPitch.Value)
                         {
-                            break; // Ignore this update
+                            // SmartSDR is trying to override user's setting - push it back
+                            try
+                            {
+                                _connectedRadio.CWPitch = _userDesiredCwPitch.Value;
+                            }
+                            catch { }
+                            break;
                         }
                         RaiseSettingChanged("CWPitch", _connectedRadio.CWPitch);
                         break;
@@ -210,7 +250,13 @@ public class RadioSettingsSynchronizer
                             timeSinceVolumeChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
                             _connectedRadio.TXCWMonitorGain != _userDesiredSidetoneVolume.Value)
                         {
-                            break; // Ignore this update
+                            // SmartSDR is trying to override user's setting - push it back
+                            try
+                            {
+                                _connectedRadio.TXCWMonitorGain = _userDesiredSidetoneVolume.Value;
+                            }
+                            catch { }
+                            break;
                         }
                         RaiseSettingChanged("TXCWMonitorGain", _connectedRadio.TXCWMonitorGain);
                         break;

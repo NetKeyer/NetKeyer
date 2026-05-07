@@ -203,6 +203,14 @@ public partial class MainWindowViewModel : ViewModelBase
         // Load user settings
         _settings = UserSettings.Load();
 
+        // Load saved CW settings (if available)
+        if (_settings.CwSpeed.HasValue)
+            _cwSpeed = _settings.CwSpeed.Value;
+        if (_settings.CwPitch.HasValue)
+            _cwPitch = _settings.CwPitch.Value;
+        if (_settings.SidetoneVolume.HasValue)
+            _sidetoneVolume = _settings.SidetoneVolume.Value;
+
         // Initialize SmartLink support
         _smartLinkManager = new SmartLinkManager(_settings);
         _smartLinkManager.StatusChanged += SmartLinkManager_StatusChanged;
@@ -1107,7 +1115,9 @@ public partial class MainWindowViewModel : ViewModelBase
             _radioSettingsSynchronizer.AttachToRadio(_connectedRadio);
             try
             {
-                _radioSettingsSynchronizer.ApplyInitialSettingsFromRadio();
+                // Push user's saved preferences to the radio instead of loading from radio
+                // This ensures user's preferences persist across sessions
+                _radioSettingsSynchronizer.ApplyUserSettingsToRadio(CwSpeed, CwPitch, SidetoneVolume);
             }
             catch (Exception ex)
             {
@@ -1270,6 +1280,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncCwSpeedToRadio(value);
+
+        // Save to user settings
+        _settings.CwSpeed = value;
+        _settings.Save();
     }
 
     partial void OnCwPitchChanged(int value)
@@ -1279,6 +1293,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncCwPitchToRadio(value);
+
+        // Save to user settings
+        _settings.CwPitch = value;
+        _settings.Save();
     }
 
     partial void OnSidetoneVolumeChanged(int value)
@@ -1288,6 +1306,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncSidetoneVolumeToRadio(value);
+
+        // Save to user settings
+        _settings.SidetoneVolume = value;
+        _settings.Save();
     }
 
     partial void OnIsIambicModeBChanged(bool value)
