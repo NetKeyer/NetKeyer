@@ -15,6 +15,18 @@ public class RadioSettingsSynchronizer
 {
     private Radio _connectedRadio;
     private bool _updatingFromRadio = false;
+    
+    // Fix for issue where radio profile settings override user changes:
+    // When user changes a setting, store their desired value and ignore conflicting
+    // radio updates for 30 seconds. This prevents SmartSDR from resetting values
+    // when keying starts or profiles reload.
+    private int? _userDesiredCwSpeed = null;
+    private int? _userDesiredCwPitch = null;
+    private int? _userDesiredSidetoneVolume = null;
+    private DateTime _lastUserCwSpeedChange = DateTime.MinValue;
+    private DateTime _lastUserCwPitchChange = DateTime.MinValue;
+    private DateTime _lastUserSidetoneVolumeChange = DateTime.MinValue;
+    private const int ENFORCE_USER_SETTING_MS = 30000;
 
     public event EventHandler<RadioSettingChangedEventArgs> SettingChangedFromRadio;
 
@@ -70,6 +82,8 @@ public class RadioSettingsSynchronizer
         {
             try
             {
+                _userDesiredCwSpeed = value;
+                _lastUserCwSpeedChange = DateTime.UtcNow;
                 _connectedRadio.CWSpeed = value;
             }
             catch { }
@@ -82,6 +96,8 @@ public class RadioSettingsSynchronizer
         {
             try
             {
+                _userDesiredCwPitch = value;
+                _lastUserCwPitchChange = DateTime.UtcNow;
                 _connectedRadio.CWPitch = value;
             }
             catch { }
@@ -94,6 +110,8 @@ public class RadioSettingsSynchronizer
         {
             try
             {
+                _userDesiredSidetoneVolume = value;
+                _lastUserSidetoneVolumeChange = DateTime.UtcNow;
                 _connectedRadio.TXCWMonitorGain = value;
             }
             catch { }
@@ -163,14 +181,37 @@ public class RadioSettingsSynchronizer
                 switch (e.PropertyName)
                 {
                     case "CWSpeed":
+                        // If user recently changed the value, ignore conflicting radio updates
+                        var timeSinceUserChange = DateTime.UtcNow - _lastUserCwSpeedChange;
+                        if (_userDesiredCwSpeed.HasValue && 
+                            timeSinceUserChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
+                            _connectedRadio.CWSpeed != _userDesiredCwSpeed.Value)
+                        {
+                            break; // Ignore this update
+                        }
+                        
                         RaiseSettingChanged("CWSpeed", _connectedRadio.CWSpeed);
                         break;
 
                     case "CWPitch":
+                        var timeSincePitchChange = DateTime.UtcNow - _lastUserCwPitchChange;
+                        if (_userDesiredCwPitch.HasValue && 
+                            timeSincePitchChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
+                            _connectedRadio.CWPitch != _userDesiredCwPitch.Value)
+                        {
+                            break; // Ignore this update
+                        }
                         RaiseSettingChanged("CWPitch", _connectedRadio.CWPitch);
                         break;
 
                     case "TXCWMonitorGain":
+                        var timeSinceVolumeChange = DateTime.UtcNow - _lastUserSidetoneVolumeChange;
+                        if (_userDesiredSidetoneVolume.HasValue && 
+                            timeSinceVolumeChange.TotalMilliseconds < ENFORCE_USER_SETTING_MS &&
+                            _connectedRadio.TXCWMonitorGain != _userDesiredSidetoneVolume.Value)
+                        {
+                            break; // Ignore this update
+                        }
                         RaiseSettingChanged("TXCWMonitorGain", _connectedRadio.TXCWMonitorGain);
                         break;
 

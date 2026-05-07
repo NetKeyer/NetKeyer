@@ -1036,6 +1036,15 @@ public partial class MainWindowViewModel : ViewModelBase
             // the ClientID (UUID) field in the GUIClient objects. Wait a moment for these to arrive.
             Thread.Sleep(500);
 
+            // Verify radio is still connected (defensive check)
+            if (_connectedRadio == null)
+            {
+                RadioStatus = "Radio connection was lost unexpectedly";
+                RadioStatusColor = Brushes.Red;
+                HasRadioError = true;
+                return;
+            }
+
             // Look up the updated GUIClient from the connected radio's GuiClients list
             // This will now have the ClientID (UUID) populated
             GUIClient updatedGuiClient = _connectedRadio.FindGUIClientByClientHandle(targetClientHandle);
@@ -1467,7 +1476,9 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             case "CWSpeed":
                 if (e.Value is int cwSpeed && CwSpeed != cwSpeed)
+                {
                     CwSpeed = cwSpeed;
+                }
                 break;
 
             case "CWPitch":
