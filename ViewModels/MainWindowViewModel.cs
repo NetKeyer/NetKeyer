@@ -224,6 +224,9 @@ public partial class MainWindowViewModel : ViewModelBase
         API.RadioRemoved += OnRadioRemoved;
         API.Init();
 
+        if (DebugLogger.IsEnabled("flex"))
+            FlexLogger.LogCallback = (cat, msg) => DebugLogger.Log(cat, msg);
+
         // Initialize input device manager (must be done before RefreshSerialPorts/RefreshMidiDevices)
         _inputDeviceManager = new InputDeviceManager();
         _inputDeviceManager.PaddleStateChanged += InputDeviceManager_PaddleStateChanged;
