@@ -923,7 +923,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ToggleConnection()
+    private async Task ToggleConnection()
     {
         if (_connectedRadio == null && !_isSidetoneOnlyMode)
         {
@@ -1036,12 +1036,10 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             // After Connect(), the radio sends "client connected" status messages that populate
-            // the ClientID (UUID) field in the GUIClient objects. Wait a moment for these to arrive.
-            Thread.Sleep(500);
-
-            // Look up the updated GUIClient from the connected radio's GuiClients list
-            // This will now have the ClientID (UUID) populated
-            GUIClient updatedGuiClient = _connectedRadio.FindGUIClientByClientHandle(targetClientHandle);
+            // the ClientID (UUID) field in the GUIClient objects. Wait for that event rather than
+            // using a fixed delay, so proxies with higher latency also work correctly.
+            RadioStatus = "Waiting for station info...";
+            GUIClient updatedGuiClient = await WaitForGUIClientReadyAsync(_connectedRadio, targetClientHandle, TimeSpan.FromSeconds(10));
 
             if (updatedGuiClient == null)
             {
@@ -1335,6 +1333,44 @@ public partial class MainWindowViewModel : ViewModelBase
             RadioStatusColor = Brushes.Red;
             HasRadioError = true;
             ConnectButtonText = "Connect";
+        }
+    }
+
+    // Waits until the GUIClient for clientHandle has a non-empty ClientID, or the timeout elapses.
+    // Returns the client (possibly with empty ClientID on timeout) or null if not found at all.
+    private static async Task<GUIClient?> WaitForGUIClientReadyAsync(Radio radio, uint clientHandle, TimeSpan timeout)
+    {
+        var tcs = new TaskCompletionSource<GUIClient?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Radio.GUIClientUpdatedEventHandler onUpdated = g =>
+        {
+            if (g.ClientHandle == clientHandle && !string.IsNullOrEmpty(g.ClientID))
+                tcs.TrySetResult(g);
+        };
+        Radio.GUIClientAddedEventHandler onAdded = g =>
+        {
+            if (g.ClientHandle == clientHandle && !string.IsNullOrEmpty(g.ClientID))
+                tcs.TrySetResult(g);
+        };
+
+        radio.GUIClientUpdated += onUpdated;
+        radio.GUIClientAdded += onAdded;
+        try
+        {
+            // Check immediately in case the event fired before we subscribed.
+            var existing = radio.FindGUIClientByClientHandle(clientHandle);
+            if (existing != null && !string.IsNullOrEmpty(existing.ClientID))
+                tcs.TrySetResult(existing);
+
+            using var cts = new CancellationTokenSource(timeout);
+            cts.Token.Register(() => tcs.TrySetResult(radio.FindGUIClientByClientHandle(clientHandle)));
+
+            return await tcs.Task;
+        }
+        finally
+        {
+            radio.GUIClientUpdated -= onUpdated;
+            radio.GUIClientAdded -= onAdded;
         }
     }
 
