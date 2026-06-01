@@ -15,6 +15,12 @@ public class KeyingController
     private bool _isSidetoneOnlyMode = false;
     private bool _isIambicMode = true;
 
+    /// <summary>
+    /// Optional CW decoder. When non-null, straight-key key-down/key-up
+    /// transitions are forwarded so the decoder can learn timing and output text.
+    /// </summary>
+    public CWReader CwReader { get; private set; } = new CWReader();
+
     // Initialization parameters
     private Func<string> _timestampGenerator;
     private Action<bool, string, uint> _cwKeyCallback;
@@ -43,6 +49,14 @@ public class KeyingController
             timestampGenerator,
             cwKeyCallback
         );
+
+        // Wire iambic keyer's actual transmitted key state to the CW decoder.
+        // This gives the decoder the real CW waveform rather than raw paddle edges.
+        _iambicKeyer.OnCwKeyStateChanged = state =>
+        {
+            if (state) CwReader?.OnKeyDown();
+            else CwReader?.OnKeyUp();
+        };
     }
 
     public void SetRadio(Radio radio, bool isSidetoneOnly = false)
@@ -77,6 +91,14 @@ public class KeyingController
         if (!isIambic)
         {
             _iambicKeyer?.Stop();
+        }
+
+        // Tell the decoder which mode we're in so it uses the right thresholds
+        if (CwReader != null)
+        {
+            CwReader.Mode = isIambic ? CWReader.KeyingMode.Iambic : CWReader.KeyingMode.StraightKey;
+            // Reset histogram so iambic and straight key samples don't mix
+            CwReader.ResetStats();
         }
     }
 
@@ -133,6 +155,17 @@ public class KeyingController
                     SendCWKey(straightKey);
                 }
             }
+        }
+
+        // Forward key activity to the CW decoder.
+        // Iambic mode: fed via IambicKeyer.OnCwKeyStateChanged (actual transmitted waveform).
+        // Straight key mode: fed here from raw key state (1:1 correspondence).
+        if (!_isIambicMode)
+        {
+            if (straightKey && !_previousStraightKeyState)
+                CwReader?.OnKeyDown();
+            else if (!straightKey && _previousStraightKeyState)
+                CwReader?.OnKeyUp();
         }
 
         // Update previous states

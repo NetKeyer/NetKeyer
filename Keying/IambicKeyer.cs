@@ -50,6 +50,14 @@ public class IambicKeyer
     public bool IsModeB { get; set; } = true;
 
     /// <summary>
+    /// Optional callback invoked whenever the transmitted CW key state changes.
+    /// <c>true</c> = key down, <c>false</c> = key up.
+    /// Used by the CW decoder to observe the actual transmitted waveform
+    /// regardless of paddle squeeze patterns.
+    /// </summary>
+    public Action<bool> OnCwKeyStateChanged { get; set; }
+
+    /// <summary>
     /// Creates a new iambic keyer instance.
     /// </summary>
     /// <param name="sidetoneGenerator">Sidetone generator for local audio feedback</param>
@@ -532,5 +540,9 @@ public class IambicKeyer
 
             _sendRadioKey(state, timestamp, _radioClientHandle);
         }
+
+        // Notify the CW decoder of the actual transmitted key state,
+        // regardless of whether a radio is connected.
+        OnCwKeyStateChanged?.Invoke(state);
     }
 }

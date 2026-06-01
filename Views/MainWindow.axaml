@@ -282,6 +282,72 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- CW Decoder Section -->
+                    <Border BorderBrush="Gray" BorderThickness="1" Padding="8" CornerRadius="3"
+                            IsVisible="{Binding CwSettingsVisible}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="CW Decoder" FontWeight="Bold" FontSize="14"/>
+
+                            <!-- Controls row -->
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <CheckBox Grid.Column="0"
+                                          Content="Enable"
+                                          IsChecked="{Binding CwReaderEnabled}"
+                                          VerticalAlignment="Center"
+                                          Padding="2"
+                                          ToolTip.Tip="Start the adaptive Morse decoder"/>
+                                <Button Grid.Column="2"
+                                        Content="Reset Stats"
+                                        Command="{Binding CwReaderResetStatsCommand}"
+                                        IsEnabled="{Binding CwReaderEnabled}"
+                                        ToolTip.Tip="Clear timing histogram — decoder re-learns speed from next keystrokes"
+                                        Width="90"
+                                        HorizontalContentAlignment="Center"
+                                        Margin="0,0,6,0"
+                                        Padding="4"/>
+                                <Button Grid.Column="3"
+                                        Content="Clear Text"
+                                        Command="{Binding CwReaderClearBufferCommand}"
+                                        IsEnabled="{Binding CwReaderEnabled}"
+                                        ToolTip.Tip="Erase the decoded text display"
+                                        Width="80"
+                                        HorizontalContentAlignment="Center"
+                                        Padding="4"/>
+                            </Grid>
+
+                            <!-- Decoded text -->
+                            <TextBox IsReadOnly="True"
+                                     Text="{Binding CwReaderBuffer}"
+                                     IsEnabled="{Binding CwReaderEnabled}"
+                                     FontWeight="Bold"
+                                     FontSize="13"
+                                     Watermark="Decoded text will appear here..."
+                                     TextWrapping="Wrap"
+                                     Height="60"
+                                     AcceptsReturn="False"/>
+
+                            <!-- Keying Stats -->
+                            <StackPanel IsVisible="{Binding CwReaderEnabled}" Spacing="2">
+                                <TextBlock Text="Keying Stats"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding CwReaderStats}"
+                                           FontSize="11"
+                                           Foreground="Gray"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"/>
+                                <TextBlock Text="{Binding CwReaderStats2}"
+                                           FontSize="11"
+                                           Foreground="Gray"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           IsVisible="{Binding CwReaderStats2, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </Border>
+
                     <!-- Disconnect and Exit Buttons -->
                     <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Button Content="Disconnect"

@@ -168,6 +168,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private KeyingController _keyingController;
 
     [ObservableProperty]
+    private string _cwReaderBuffer = "";
+
+    [ObservableProperty]
+    private bool _cwReaderEnabled = true;
+
+    [ObservableProperty]
+    private string _cwReaderStats = "";
+
+    [ObservableProperty]
+    private string _cwReaderStats2 = "";
+
+    [ObservableProperty]
     private bool _smartLinkAvailable = false;
 
     [ObservableProperty]
@@ -1094,6 +1106,15 @@ public partial class MainWindowViewModel : ViewModelBase
             _keyingController?.SetRadio(_connectedRadio, isSidetoneOnly: false);
             _keyingController?.SetTransmitMode(_transmitSliceMonitor.IsTransmitModeCW);
 
+            // If CW decoder was already enabled (e.g. default=true), start it now
+            // that the keying controller exists. OnCwReaderEnabledChanged fires at
+            // init time before _keyingController is created so we must kick it here.
+            if (CwReaderEnabled && _keyingController?.CwReader != null)
+            {
+                _keyingController.CwReader.PropertyChanged += CwReader_PropertyChanged;
+                _keyingController.CwReader.Start();
+            }
+
             // Attach radio settings synchronizer and apply initial settings
             _radioSettingsSynchronizer.AttachToRadio(_connectedRadio);
             try
@@ -1130,6 +1151,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Stop keying controller (sends key-up if active)
             _keyingController?.Stop();
+
+            // Stop CW decoder and unsubscribe if it was running
+            if (_keyingController?.CwReader != null)
+            {
+                _keyingController.CwReader.PropertyChanged -= CwReader_PropertyChanged;
+                _keyingController.CwReader.Stop();
+            }
+            CwReaderEnabled = false;
+            CwReaderBuffer = "";
+            CwReaderStats = "";
+            CwReaderStats2 = "";
 
             // Ensure sidetone is stopped
             _sidetoneGenerator?.Stop();
@@ -1300,6 +1332,86 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Sync to radio
         _radioSettingsSynchronizer?.SyncSwapPaddlesToRadio(value);
+    }
+
+    partial void OnCwReaderEnabledChanged(bool value)
+    {
+        if (_keyingController?.CwReader == null) return;
+
+        if (value)
+        {
+            _keyingController.CwReader.PropertyChanged += CwReader_PropertyChanged;
+            _keyingController.CwReader.Start();
+        }
+        else
+        {
+            _keyingController.CwReader.PropertyChanged -= CwReader_PropertyChanged;
+            _keyingController.CwReader.Stop();
+        }
+    }
+
+    [RelayCommand]
+    private void CwReaderResetStats()
+    {
+        _keyingController?.CwReader?.ResetStats();
+        CwReaderStats  = "Decoder learning... (send a few characters to calibrate)";
+        CwReaderStats2 = "";
+    }
+
+    [RelayCommand]
+    private void CwReaderClearBuffer()
+    {
+        if (_keyingController?.CwReader == null) return;
+        _keyingController.CwReader.ClearBuffer();
+        CwReaderBuffer = "";
+    }
+
+    private void CwReader_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(NetKeyer.Keying.CWReader.Buffer) ||
+            e.PropertyName == nameof(NetKeyer.Keying.CWReader.Modes))
+        {
+            var reader = sender as NetKeyer.Keying.CWReader;
+            if (reader == null) return;
+
+            var text   = reader.Buffer;
+            var modes  = reader.Modes;
+            var stats1 = BuildStatsLine1(modes);
+            var stats2 = BuildStatsLine2(modes);
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                CwReaderBuffer = text;
+                CwReaderStats  = stats1;
+                CwReaderStats2 = stats2;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Row 1 — timing and inferred WPM.
+    /// </summary>
+    private static string BuildStatsLine1(NetKeyer.Keying.KeyingStats modes)
+    {
+        if (modes.DitLength <= 0)
+            return "Decoder learning... (send a few characters to calibrate)";
+
+        int inferredWpm = (int)Math.Round(1200.0 / modes.DitLength);
+        return $"Dit: {modes.DitLength} ms  |  Dah: {modes.DahLength} ms  |  ~{inferredWpm} WPM";
+    }
+
+    /// <summary>
+    /// Row 2 — sample confidence, dit/dah ratio, and live character-in-progress.
+    /// </summary>
+    private static string BuildStatsLine2(NetKeyer.Keying.KeyingStats modes)
+    {
+        if (modes.DitLength <= 0) return "";
+
+        string inProgress = string.IsNullOrEmpty(modes.CharInProgress)
+            ? "—"
+            : modes.CharInProgress;
+
+        return $"Samples: {modes.TotalSamples}  |  Ratio: {modes.DahDitRatio:F2}  |  In progress: {inProgress}";
     }
 
     private void OnRadioAdded(Radio radio)
