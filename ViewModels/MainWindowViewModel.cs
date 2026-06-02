@@ -1032,13 +1032,22 @@ public partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            // After Connect(), the radio sends "client connected" status messages that populate
-            // the ClientID (UUID) field in the GUIClient objects. Wait a moment for these to arrive.
-            Thread.Sleep(500);
-
-            // Look up the updated GUIClient from the connected radio's GuiClients list
-            // This will now have the ClientID (UUID) populated
-            GUIClient updatedGuiClient = _connectedRadio.FindGUIClientByClientHandle(targetClientHandle);
+            // After Connect(), the radio asynchronously populates each GUIClient's ClientID (UUID).
+            // Binding before it arrives sends an empty client_id, which leaves this client unbound
+            // while the radio serves a default keyer context (issue #48). Over SmartLink the UUID can
+            // take ~1s, so wait for it instead of a fixed delay, and never bind with an empty UUID.
+            GUIClient updatedGuiClient = null;
+            string clientId = null;
+            var uuidWait = System.Diagnostics.Stopwatch.StartNew();
+            const int uuidTimeoutMs = 5000;
+            while (uuidWait.ElapsedMilliseconds < uuidTimeoutMs)
+            {
+                updatedGuiClient = _connectedRadio.FindGUIClientByClientHandle(targetClientHandle);
+                clientId = updatedGuiClient?.ClientID;
+                if (!string.IsNullOrEmpty(clientId))
+                    break;
+                Thread.Sleep(50);
+            }
 
             if (updatedGuiClient == null)
             {
@@ -1050,18 +1059,20 @@ public partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            string clientId = updatedGuiClient.ClientID;
             if (string.IsNullOrEmpty(clientId))
             {
-                RadioStatus = "Client UUID not available - binding may fail";
-                RadioStatusColor = Brushes.Orange;
+                // UUID never arrived: an empty bind would leave the keyer on the radio default.
+                // Fail cleanly and let the user retry rather than connecting in a broken state.
+                RadioStatus = "Station UUID not received - could not bind. Please retry.";
+                RadioStatusColor = Brushes.Red;
                 HasRadioError = true;
+                _connectedRadio.Disconnect();
+                _connectedRadio = null;
+                return;
             }
-            else
-            {
-                // Clear any previous errors on successful connection
-                HasRadioError = false;
-            }
+
+            // Clear any previous errors on successful connection
+            HasRadioError = false;
 
             // Bind to the selected station using its UUID
             _connectedRadio.BindGUIClient(clientId);
