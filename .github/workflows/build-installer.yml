@@ -320,8 +320,12 @@ jobs:
         security import $CERT_INSTALLER_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
         security list-keychain -d user -s $KEYCHAIN_PATH
 
-        # create notarytool profile
-        xcrun notarytool store-credentials velopack-profile --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" --password "$APPLE_PASSWORD"
+        # create notarytool profile in the same keychain we pass to vpk
+        xcrun notarytool store-credentials velopack-profile \
+          --apple-id "$APPLE_ID" \
+          --team-id "$APPLE_TEAM" \
+          --password "$APPLE_PASSWORD" \
+          --keychain $KEYCHAIN_PATH
 
     - name: Build and publish
       run: |
