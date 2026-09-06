@@ -4,6 +4,29 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
 
 ## Recent Changes
 
+- **Revision 2.1.41 (2026-09-06)**
+  - Completed the Phase 5 security implementation and operations baseline for remote+rendezvous.
+  - Added staged rendezvous auth/security controls with `/health` security telemetry counters:
+    - `auth_failures`, `handshake_failures`, `replay_rejects`, `decrypt_failures`
+  - Fixed compatibility-mode connection regression introduced during the security rollout and improved always-on trace logging for auth and connection diagnostics.
+  - Added app-side rendezvous auth management in Settings -> Access Token, including:
+    - manual JWT entry mode
+    - local JWT generation mode (RustDesk-style) with configurable `kid`/secret/issuer/audience/TTL
+    - in-app rendezvous auth test action with success/failure status coloring
+  - Added server-side JWT keyring support with strict `kid` validation when keyring entries are loaded:
+    - file-based keyring via `RENDEZVOUS_JWT_KEYS_FILE` (preferred)
+    - env fallback via `RENDEZVOUS_JWT_KEYS_JSON`
+    - startup logging of keyring source and loaded key count for ops traceability
+  - Added deployment and operations helpers:
+    - read-only mounted default `jwt_keys.json` in compose
+    - interactive keyring manager `rendezvous_services/scripts/manage-jwt-keyring.py` (list/add/change/delete + generated secrets + `.bak1`/`.bak2`/`.bak3` rotation)
+    - release packaging updates so rendezvous service artifacts include the keyring manager script
+  - Updated Client Status telemetry UI field order to: `last`, `p50`, `p95`, `max`, `accepted 60s`, `stale`.
+    Handshake duration remains in telemetry payloads and logs.
+  - Release tags for this set:
+    - Client: `v2.1.41`
+    - Rendezvous services: `rs-v0.1.7`
+
 - **Revision 2.1.35 (2026-08-25)**
   - Added relay-only experiment mode for controlled latency testing:
     - Server flag: `RENDEZVOUS_FORCE_RELAY=true`
@@ -110,16 +133,16 @@ A cross-platform GUI application for CW (Morse code) keying with FlexRadio devic
 
 ## Building
 
-### Requirements
+### Build Requirements
 
 - .NET 8.0 SDK
 - To build the native MIDI shim (required for MIDI input):
 
-  | Platform   | Tools required |
-  |------------|----------------|
-  | Linux      | `cmake`, `gcc`/`g++`, `libasound2-dev` (ALSA headers) |
-  | Windows    | `cmake`, Visual Studio 2022 (includes MSVC, nmake, rc) |
-  | macOS      | `cmake`, Xcode Command Line Tools (`xcode-select --install`) |
+|Platform|Tools required|
+|---|---|
+|Linux|`cmake`, `gcc`/`g++`, `libasound2-dev` (ALSA headers)|
+|Windows|`cmake`, Visual Studio 2022 (includes MSVC, nmake, rc)|
+|macOS|`cmake`, Xcode Command Line Tools (`xcode-select --install`)|
 
   CMake downloads libremidi automatically on first build (requires internet access).
 
@@ -212,6 +235,7 @@ Use the **Connection Mode** section on the setup page to select one of these mod
   - Drops stale remote frames before they reach keying
 
 Rendezvous setup inputs:
+
 - **Redezvous Server**: enter only host name or IP (for example, `netkeyer.ddns.net`).
 - **Port**: default `49920`.
 - The app generates the control URL in code as `http://<server>:<port>`.
@@ -223,15 +247,16 @@ Remote host setup options include:
 
 Operating-page telemetry:
 
-- **Host Status** and **Client Status** blocks include: 
+- **Host Status** and **Client Status** blocks include:
 
 - Host and Client connection list and status
 - compact two-line telemetry display.
 - Telemetry fields:
-  - Line 1: secure handshake duration, last lag, keying p50 lag, keying p95 lag
-  - Line 2: accepted frames in last 60 seconds, stale drops, max lag (last 60 seconds)
+  - Line 1: last lag, keying p50 lag, keying p95 lag
+  - Line 2: max lag (last 60 seconds), accepted frames in last 60 seconds, stale drops
 - 60-second window metrics age out during idle periods (for example accepted 60s returns to 0 if no frames are received in the last 60 seconds).
 - Telemetry text is rendered with high-contrast styling for readability in operating view.
+- Handshake duration is retained in telemetry payloads/logs for diagnostics but is no longer shown in the Client Status telemetry UI line.
 
 Defaults:
 
@@ -285,9 +310,9 @@ Runtime metadata is exposed via rendezvous `/health` (`version` block) and relay
 
 Compatibility matrix (maintain this table as releases evolve):
 
-| NetKeyer Desktop Revision | Supported Services Version | Protocol Version |
+|NetKeyer Desktop Revision|Supported Services Version|Protocol Version|
 |---|---|---|
-| 2.1.35+ | 0.1.2+ | 1 |
+|2.1.35+|0.1.2+|1|
 
 Release tag conventions:
 
@@ -299,21 +324,12 @@ Release tag conventions:
 Use this order to avoid cross-trigger confusion between desktop and services release flows.
 
 1. Validate clean working tree and tests.
-2. Create and push services tag first:
-  - `git tag rs-0.1.2`
-  - `git push origin rs-0.1.2`
-3. Build/publish rendezvous services artifact from current commit:
-  - `./build-rendezvous-release.ps1` (Windows PowerShell), or
-  - `./build-rendezvous-release.sh` (Linux/macOS)
-4. Publish services release notes/artifact labeled `rs-0.1.2`.
-5. Create and push desktop client tag:
-  - `git tag v2.1.35`
-  - `git push origin v2.1.35`
-6. Publish desktop client release notes/artifacts labeled `v2.1.35`.
-7. Post-publish verification:
-  - confirm desktop updater target/version is correct.
-  - confirm rendezvous package metadata reports `services_version=0.1.2`.
-  - confirm `/health` `version` block matches expected build tag/commit/date.
+1. Create and push services tag first: run `git tag rs-0.1.2` and `git push origin rs-0.1.2`.
+1. Build/publish rendezvous services artifact from current commit: run `./build-rendezvous-release.ps1` (Windows PowerShell) or `./build-rendezvous-release.sh` (Linux/macOS).
+1. Publish services release notes/artifact labeled `rs-0.1.2`.
+1. Create and push desktop client tag: run `git tag v2.1.35` and `git push origin v2.1.35`.
+1. Publish desktop client release notes/artifacts labeled `v2.1.35`.
+1. Post-publish verification: confirm desktop updater target/version is correct; confirm rendezvous package metadata reports `services_version=0.1.2`; confirm `/health` `version` block matches expected build tag/commit/date.
 
 ### Service Overview
 
@@ -333,11 +349,11 @@ This keeps the keying data path as close to direct as possible while still provi
 
 ### Container Summary
 
-| Container | Purpose | Internal Port | Host Port (default) |
-|----------|---------|---------------|---------------------|
-| `netkeyer-rendezvous` | HTTP/WebSocket control-plane (`/health`, `/ws/host`, `/ws/client`) | `49920` | `49920` |
-| `netkeyer-relay` | Raw TCP relay service | `49921` | `49921` |
-| `netkeyer-rendezvous-nginx` (optional) | Reverse proxy for rendezvous + optional TCP stream proxy for relay | `80` + `49922` | `8080` + `49922` |
+|Container|Purpose|Internal Port|Host Port (default)|
+|---|---|---|---|
+|`netkeyer-rendezvous`|HTTP/WebSocket control-plane (`/health`, `/ws/host`, `/ws/client`)|`49920`|`49920`|
+|`netkeyer-relay`|Raw TCP relay service|`49921`|`49921`|
+|`netkeyer-rendezvous-nginx` (optional)|Reverse proxy for rendezvous + optional TCP stream proxy for relay|`80` + `49922`|`8080` + `49922`|
 
 ## Docker Deployment (Rendezvous Services)
 
@@ -688,10 +704,7 @@ Use this quick checklist before WAN testing:
 4. On Windows host, ensure the firewall rule covers the active profile (Private/Public).
 5. Optional: Port forwarding, confirm router/NAT forwards the same port to the host.
 6. Start host first, then connect client.
-7. Verify expected logs:
-  - Host success: `Session <id> authenticated ...`
-  - Host refusal: `Connection refused ... shared token mismatch` or `missing shared token`
-  - Client refusal: `Host error payload: Connection refused: ...`
+7. Verify expected logs: Host success `Session <id> authenticated ...`; host refusal `Connection refused ... shared token mismatch` or `missing shared token`; client refusal `Host error payload: Connection refused: ...`.
 8. If direct fails but relay succeeds, treat this as a network path issue (firewall/NAT), not a protocol failure.
 
 ### Audio Issues
@@ -746,16 +759,16 @@ You can easily access the log folder via **Help → View Debug Log...** in the a
 
 **Available Debug Categories**:
 
-| Category | Description |
-|----------|-------------|
-| `keyer` | Iambic keyer state machine (paddle state, element timing, mode transitions) |
-| `midi` | MIDI input parsing and raw event processing |
-| `input` | Input abstraction layer (paddle state changes, indicator updates) |
-| `slice` | Transmit slice mode monitoring (CW vs PTT mode detection) |
-| `sidetone` | Audio sidetone provider (tone/silence state machine, timing) |
-| `audio` | Audio device management (initialization, enumeration, selection) |
-| `remote` | Remote TCP client/host transport, framing, and session status |
-| `remote-telemetry` | Always-on remote telemetry summaries (raw/baseline/normalized lag, jitter, accepted/stale counters) |
+|Category|Description|
+|---|---|
+|`keyer`|Iambic keyer state machine (paddle state, element timing, mode transitions)|
+|`midi`|MIDI input parsing and raw event processing|
+|`input`|Input abstraction layer (paddle state changes, indicator updates)|
+|`slice`|Transmit slice mode monitoring (CW vs PTT mode detection)|
+|`sidetone`|Audio sidetone provider (tone/silence state machine, timing)|
+|`audio`|Audio device management (initialization, enumeration, selection)|
+|`remote`|Remote TCP client/host transport, framing, and session status|
+|`remote-telemetry`|Always-on remote telemetry summaries (raw/baseline/normalized lag, jitter, accepted/stale counters)|
 
 **Usage Examples**:
 
@@ -809,7 +822,7 @@ dotnet run
 
 ### Project Structure
 
-```
+```text
 NetKeyer/
 ├── Views/                  # XAML UI layouts
 ├── ViewModels/             # Application logic and data binding
@@ -880,9 +893,11 @@ NetKeyer/
 ### Audio Sidetone
 
 **WASAPI Backend** (Windows preferred):
+
 - Lowest latency
 
 **PortAudio Backend**:
+
 - Cross-platform compatibility for Linux and macOS
 - Supports Windows DirectSound and ASIO in case WASAPI doesn't work for some reason
 

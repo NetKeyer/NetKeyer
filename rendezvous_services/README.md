@@ -1,5 +1,7 @@
 # NetKeyer Rendezvous Services
 
+<!-- markdownlint-disable MD007 MD029 MD032 -->
+
 This package provides the network services used by NetKeyer remote mode.
 
 It includes two containers:

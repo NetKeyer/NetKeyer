@@ -1,5 +1,41 @@
 # Remote Keying Feature changes
 
+<!-- markdownlint-disable MD022 MD024 MD032 -->
+
+## 2026-09-06 (Revision 2.1.41, Services 0.1.7)
+
+### Added
+- App-side rendezvous auth configuration UX in Settings -> Access Token:
+  - Manual JWT entry mode.
+  - Local JWT generation mode (RustDesk-style) with configurable `kid`, key secret, issuer, audience, and token TTL.
+  - In-app rendezvous auth test action with pass/fail status coloring for quick validation.
+- JWT keyring operations support for deployment:
+  - `rendezvous_services/scripts/manage-jwt-keyring.py` interactive keyring manager (list/add/change/delete).
+  - Automatic 32-byte secret generation for add/change operations.
+  - Rotating backups on write (`.bak1`, `.bak2`, `.bak3`).
+- Release automation updates so rendezvous release bundles include the keyring manager script.
+
+### Changed
+- Completed Phase 5 security rollout baseline for rendezvous services and client integration.
+- Added staged security/auth controls with `/health`-visible security telemetry counters:
+  - `auth_failures`, `handshake_failures`, `replay_rejects`, `decrypt_failures`.
+- Rendezvous JWT validation now supports keyring sources:
+  - Preferred read-only file source: `RENDEZVOUS_JWT_KEYS_FILE`.
+  - Fallback JSON source: `RENDEZVOUS_JWT_KEYS_JSON`.
+  - When keyring entries are loaded, token `kid` must be present and map to a configured key.
+- Docker Compose deployment defaults now include a read-only mounted keyring file (`jwt_keys.json`) and associated environment defaults.
+- Client Status telemetry UI was simplified and reordered to:
+  - `last`, `p50`, `p95`, `max`, `accepted 60s`, `stale`.
+  - Handshake duration remains available in telemetry payloads and logs.
+
+### Fixed
+- Resolved compatibility-mode connection regression introduced during security hardening.
+- Improved auth/connect traceability with additional always-on diagnostics for operator troubleshooting.
+
+### Release Tags
+- Client release tag: `v2.1.41`
+- Rendezvous services release tag: `rs-v0.1.7`
+
 ## 2026-08-25 (Revision 2.1.35, Services 0.1.2)
 
 ### Added

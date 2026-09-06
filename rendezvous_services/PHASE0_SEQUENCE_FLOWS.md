@@ -1,5 +1,7 @@
 # Phase 0 Sequence Flows
 
+<!-- markdownlint-disable MD022 MD031 -->
+
 ## 1. Host Register and Stay Online
 ```mermaid
 sequenceDiagram

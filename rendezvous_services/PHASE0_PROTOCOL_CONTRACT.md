@@ -1,5 +1,7 @@
 # Phase 0 Protocol Contract
 
+<!-- markdownlint-disable MD022 MD032 -->
+
 ## Purpose
 This document freezes the control-plane contract for NetKeyer rendezvous signaling before Phase 1 implementation.
 
