@@ -37,7 +37,7 @@ from .models import (
     validate_client_inbound,
     validate_host_inbound,
 )
-from .state import RendezvousState
+from .state import DuplicateRegistrationError, RendezvousState
 
 
 PUNCH_TIMEOUT_SECONDS = 2
@@ -297,14 +297,20 @@ async def handle_host_ws(state: RendezvousState, websocket: WebSocket, relay_hos
                     continue
 
                 ip, port = _peer_endpoint(websocket)
-                await state.register_host(
-                    host_id=msg.host_id,
-                    ws=websocket,
-                    public_ip=ip,
-                    public_port=port,
-                    max_clients=msg.max_clients,
-                    metadata=msg.metadata,
-                )
+                try:
+                    await state.register_host(
+                        host_id=msg.host_id,
+                        ws=websocket,
+                        public_ip=ip,
+                        public_port=port,
+                        max_clients=msg.max_clients,
+                        metadata=msg.metadata,
+                    )
+                except DuplicateRegistrationError:
+                    await _send_error(websocket, "duplicate_host_id", f"Host ID '{msg.host_id}' is already registered")
+                    LOGGER.warning("host_registration_rejected_duplicate host_id=%s peer=%s:%s", msg.host_id, ip, port)
+                    await websocket.close(code=1008, reason="duplicate host_id")
+                    return
                 host_id = msg.host_id
                 LOGGER.info("host_registered host_id=%s peer=%s:%s max_clients=%s", host_id, ip, port, msg.max_clients)
                 continue
@@ -423,12 +429,18 @@ async def handle_client_ws(
                     continue
 
                 ip, port = _peer_endpoint(websocket)
-                await state.register_client(
-                    client_id=msg.client_id,
-                    ws=websocket,
-                    public_ip=ip,
-                    public_port=port,
-                )
+                try:
+                    await state.register_client(
+                        client_id=msg.client_id,
+                        ws=websocket,
+                        public_ip=ip,
+                        public_port=port,
+                    )
+                except DuplicateRegistrationError:
+                    await _send_error(websocket, "duplicate_client_id", f"Client ID '{msg.client_id}' is already registered")
+                    LOGGER.warning("client_registration_rejected_duplicate client_id=%s peer=%s:%s", msg.client_id, ip, port)
+                    await websocket.close(code=1008, reason="duplicate client_id")
+                    return
                 client_id = msg.client_id
                 LOGGER.info("client_registered client_id=%s peer=%s:%s", client_id, ip, port)
                 continue

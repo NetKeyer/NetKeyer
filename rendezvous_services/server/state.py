@@ -12,6 +12,10 @@ from fastapi import WebSocket
 UTC = timezone.utc
 
 
+class DuplicateRegistrationError(ValueError):
+    pass
+
+
 @dataclass
 class HostConnection:
     host_id: str
@@ -108,6 +112,10 @@ class RendezvousState:
         metadata: dict[str, Any],
     ) -> HostConnection:
         async with self._lock:
+            existing = self.hosts.get(host_id)
+            if existing and existing.ws is not ws:
+                raise DuplicateRegistrationError(f"duplicate host_id: {host_id}")
+
             conn = HostConnection(
                 host_id=host_id,
                 ws=ws,
@@ -137,6 +145,10 @@ class RendezvousState:
         public_port: int,
     ) -> ClientConnection:
         async with self._lock:
+            existing = self.clients.get(client_id)
+            if existing and existing.ws is not ws:
+                raise DuplicateRegistrationError(f"duplicate client_id: {client_id}")
+
             conn = ClientConnection(
                 client_id=client_id,
                 ws=ws,

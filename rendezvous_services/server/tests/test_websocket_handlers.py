@@ -19,6 +19,9 @@ class FakeWebSocket:
         self._incoming: asyncio.Queue = asyncio.Queue()
         self.sent: list[dict] = []
         self.accepted = False
+        self.closed = False
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
 
     async def accept(self) -> None:
         self.accepted = True
@@ -31,6 +34,12 @@ class FakeWebSocket:
 
     async def send_json(self, payload: dict) -> None:
         self.sent.append(payload)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        self.closed = True
+        self.close_code = code
+        self.close_reason = reason
+        await self._incoming.put(_DISCONNECT)
 
     async def push(self, payload: dict) -> None:
         await self._incoming.put(payload)
@@ -765,7 +774,7 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             handlers.PUNCH_TIMEOUT_SECONDS = previous_timeout
             await self._stop_handlers(host_task, client_task)
 
-    async def test_duplicate_host_registration_replaces_connection(self) -> None:
+    async def test_duplicate_host_registration_rejected(self) -> None:
         first_ws = FakeWebSocket("203.0.113.10", 51000)
         second_ws = FakeWebSocket("203.0.113.11", 51001)
 
@@ -798,15 +807,19 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             host = await self.state.get_host("host-dup")
             self.assertIsNotNone(host)
             assert host is not None
-            self.assertIs(host.ws, second_ws)
-            self.assertEqual(host.max_clients, 3)
-            self.assertEqual(host.metadata.get("name"), "second")
+            self.assertIs(host.ws, first_ws)
+            self.assertEqual(host.max_clients, 5)
+            self.assertEqual(host.metadata.get("name"), "first")
+
+            self.assertTrue(second_ws.sent)
+            self.assertEqual(second_ws.sent[-1].get("type"), "error")
+            self.assertEqual(second_ws.sent[-1].get("code"), "duplicate_host_id")
         finally:
             await first_ws.disconnect()
             await second_ws.disconnect()
             await asyncio.wait_for(asyncio.gather(first_task, second_task), timeout=2)
 
-    async def test_duplicate_client_registration_replaces_connection(self) -> None:
+    async def test_duplicate_client_registration_rejected(self) -> None:
         first_ws = FakeWebSocket("198.51.100.22", 52000)
         second_ws = FakeWebSocket("198.51.100.23", 52001)
 
@@ -835,15 +848,19 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             client = await self.state.get_client("client-dup")
             self.assertIsNotNone(client)
             assert client is not None
-            self.assertIs(client.ws, second_ws)
-            self.assertEqual(client.public_ip, "198.51.100.23")
-            self.assertEqual(client.public_port, 52001)
+            self.assertIs(client.ws, first_ws)
+            self.assertEqual(client.public_ip, "198.51.100.22")
+            self.assertEqual(client.public_port, 52000)
+
+            self.assertTrue(second_ws.sent)
+            self.assertEqual(second_ws.sent[-1].get("type"), "error")
+            self.assertEqual(second_ws.sent[-1].get("code"), "duplicate_client_id")
         finally:
             await first_ws.disconnect()
             await second_ws.disconnect()
             await asyncio.wait_for(asyncio.gather(first_task, second_task), timeout=2)
 
-    async def test_stale_duplicate_client_disconnect_does_not_remove_active_client_or_session(self) -> None:
+    async def test_duplicate_client_disconnect_does_not_remove_active_client_or_session(self) -> None:
         host_task = asyncio.create_task(
             handlers.handle_host_ws(self.state, self.host_ws, relay_host="relay.test", relay_port=49921)
         )
@@ -879,7 +896,7 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
                 }
             )
 
-            await second_ws.push(
+            await first_ws.push(
                 {
                     "type": "connect_request",
                     "client_id": "client-dup",
@@ -889,17 +906,21 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
 
             await asyncio.sleep(0.1)
 
-            endpoint_msgs = [m for m in second_ws.sent if m.get("type") == "host_endpoint"]
+            self.assertTrue(second_ws.sent)
+            self.assertEqual(second_ws.sent[-1].get("type"), "error")
+            self.assertEqual(second_ws.sent[-1].get("code"), "duplicate_client_id")
+
+            endpoint_msgs = [m for m in first_ws.sent if m.get("type") == "host_endpoint"]
             self.assertTrue(endpoint_msgs)
             session_id = endpoint_msgs[-1]["session_id"]
 
-            await first_ws.disconnect()
-            await asyncio.wait_for(first_task, timeout=2)
+            await second_ws.disconnect()
+            await asyncio.wait_for(second_task, timeout=2)
 
             client = await self.state.get_client("client-dup")
             self.assertIsNotNone(client)
             assert client is not None
-            self.assertIs(client.ws, second_ws)
+            self.assertIs(client.ws, first_ws)
 
             host = await self.state.get_host("host-1")
             self.assertIsNotNone(host)
@@ -910,8 +931,8 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(session)
         finally:
             await self.host_ws.disconnect()
-            await second_ws.disconnect()
-            await asyncio.wait_for(asyncio.gather(host_task, second_task), timeout=2)
+            await first_ws.disconnect()
+            await asyncio.wait_for(asyncio.gather(host_task, first_task), timeout=2)
 
 
 if __name__ == "__main__":
