@@ -106,8 +106,7 @@ jobs:
           $env:AZURE_CODE_SIGNING_NAME,
           $env:AZURE_CERT_PROFILE_NAME
         )
-        $missing = @($required | Where-Object { [string]::IsNullOrWhiteSpace($_) })
-        $enabled = $missing.Count -eq 0
+        $enabled = @($required | ForEach-Object { -not [string]::IsNullOrWhiteSpace($_) }) -notcontains $false
         $value = if ($enabled) { "true" } else { "false" }
         "ENABLED=$value" >> $env:GITHUB_OUTPUT
         Write-Host "Azure signing enabled: $value"
