@@ -20,13 +20,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      shell: pwsh
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        $enabled = -not [string]::IsNullOrWhiteSpace($env:SECRET_PROVIDER_PAT)
+        $value = if ($enabled) { "true" } else { "false" }
+        "ENABLED=$value" >> $env:GITHUB_OUTPUT
+        Write-Host "Secret provider available: $value"
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       shell: pwsh
@@ -85,34 +96,81 @@ jobs:
           -p:Version=${{ steps.version.outputs.VERSION }} `
           -o publish
 
-    - name: Create Azure Trusted Signing metadata file
+    - name: Determine whether Azure signing is available
+      id: signing
       shell: pwsh
+      env:
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
+        AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+        AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
+      run: |
+        $required = @(
+          $env:AZURE_CLIENT_ID,
+          $env:AZURE_CLIENT_SECRET,
+          $env:AZURE_TENANT_ID,
+          $env:AZURE_SUBSCRIPTION_ID,
+          $env:AZURE_ENDPOINT,
+          $env:AZURE_CODE_SIGNING_NAME,
+          $env:AZURE_CERT_PROFILE_NAME
+        )
+        $enabled = @($required | ForEach-Object { -not [string]::IsNullOrWhiteSpace($_) }) -notcontains $false
+        $value = if ($enabled) { "true" } else { "false" }
+        "ENABLED=$value" >> $env:GITHUB_OUTPUT
+        Write-Host "Azure signing enabled: $value"
+
+    - name: Create Azure Trusted Signing metadata file
+      if: steps.signing.outputs.ENABLED == 'true'
+      shell: pwsh
+      env:
+        AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
+        AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_CODE_SIGNING_NAME }}
+        AZURE_CERT_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE_NAME }}
       run: |
         $metadata = @{
-          Endpoint = "${{ secrets.AZURE_ENDPOINT }}"
-          CodeSigningAccountName = "${{ secrets.AZURE_CODE_SIGNING_NAME }}"
-          CertificateProfileName = "${{ secrets.AZURE_CERT_PROFILE_NAME }}"
+          Endpoint = $env:AZURE_ENDPOINT
+          CodeSigningAccountName = $env:AZURE_CODE_SIGNING_NAME
+          CertificateProfileName = $env:AZURE_CERT_PROFILE_NAME
         }
         $metadata | ConvertTo-Json | Set-Content -Path "azure-signing.json"
         Write-Host "Created Azure signing metadata file"
 
     - name: Azure CLI Login
+      if: steps.signing.outputs.ENABLED == 'true'
       uses: azure/login@v2
       with:
         creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}"}'
 
-    - name: Package with Velopack (with Azure signing)
+    - name: Package with Velopack
+      shell: pwsh
+      env:
+        SIGNING_ENABLED: ${{ steps.signing.outputs.ENABLED }}
+        PACK_VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
-        vpk pack `
-          --packId "NetKeyer" `
-          --packVersion ${{ steps.version.outputs.VERSION }} `
-          --packDir publish `
-          --mainExe NetKeyer.exe `
-          --packTitle "NetKeyer" `
-          --packAuthors "NetKeyer Contributors" `
-          --runtime win-x64 `
-          --channel win-x64 `
-          --azureTrustedSignFile azure-signing.json
+        $vpkArgs = @(
+          "pack",
+          "--packId", "NetKeyer",
+          "--packVersion", $env:PACK_VERSION,
+          "--packDir", "publish",
+          "--mainExe", "NetKeyer.exe",
+          "--packTitle", "NetKeyer",
+          "--packAuthors", "NetKeyer Contributors",
+          "--runtime", "win-x64",
+          "--channel", "win-x64"
+        )
+
+        if ($env:SIGNING_ENABLED -eq "true") {
+          $vpkArgs += "--azureTrustedSignFile"
+          $vpkArgs += "azure-signing.json"
+          Write-Host "Packaging with Azure Trusted Signing"
+        } else {
+          Write-Host "Packaging without signing"
+        }
+
+        vpk @vpkArgs
 
     - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
@@ -136,13 +194,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        if [ -n "$SECRET_PROVIDER_PAT" ]; then
+          echo "ENABLED=true" >> $GITHUB_OUTPUT
+          echo "Secret provider available: true"
+        else
+          echo "ENABLED=false" >> $GITHUB_OUTPUT
+          echo "Secret provider available: false"
+        fi
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       run: |
@@ -237,13 +308,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        if [ -n "$SECRET_PROVIDER_PAT" ]; then
+          echo "ENABLED=true" >> $GITHUB_OUTPUT
+          echo "Secret provider available: true"
+        else
+          echo "ENABLED=false" >> $GITHUB_OUTPUT
+          echo "Secret provider available: false"
+        fi
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       run: |
