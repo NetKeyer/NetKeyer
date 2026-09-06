@@ -79,6 +79,7 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             connection_grant_secret="",
             require_protocol_version_claim=False,
             expected_protocol_version=1,
+            jwt_keyring={},
         )
 
     @staticmethod
@@ -99,6 +100,7 @@ class TestWebSocketHandlers(unittest.IsolatedAsyncioTestCase):
             connection_grant_secret="",
             require_protocol_version_claim=False,
             expected_protocol_version=1,
+            jwt_keyring={},
         )
 
     async def _stop_handlers(self, host_task: asyncio.Task, client_task: asyncio.Task) -> None:

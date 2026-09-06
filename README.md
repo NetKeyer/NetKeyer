@@ -252,6 +252,15 @@ Remote security defaults:
 - Security policy failures are surfaced as actionable, non-sensitive UI status messages; detailed failure internals remain in debug logs.
 - Security operations runbook (Phase 5): `docs/security/phase5-operations-runbook.md`
 
+Rendezvous token options:
+
+- Manual mode: set a pre-issued JWT under Settings -> Access Token.
+- Local ID-key mode (RustDesk-style):
+  - Enable `Generate JWT locally from ID key (RustDesk-style)` in Settings -> Access Token.
+  - Configure `kid`, key secret, issuer, audience, and token TTL.
+  - NetKeyer mints short-lived HS256 JWTs automatically for host registration, client host-discovery, and client connect requests.
+  - For server-side key rotation/revocation, configure `RENDEZVOUS_JWT_KEYS_JSON` with per-user/per-device `kid` secrets.
+
 ## Rendezvous and Relay Services
 
 NetKeyer now includes deployment artifacts for standalone rendezvous control-plane and relay data-plane services under [rendezvous_services](rendezvous_services).

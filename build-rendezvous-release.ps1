@@ -64,7 +64,8 @@ $Args = @(
     "--protocol-version", $ProtocolVersion,
     "--tag", $Tag,
     "--commit", $Commit,
-    "--build-date", $BuildDate
+    "--build-date", $BuildDate,
+    "--include-path", "scripts/manage-jwt-keyring.py"
 )
 
 if (-not [string]::IsNullOrWhiteSpace($ResolvedVersion)) {

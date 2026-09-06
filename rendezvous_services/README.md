@@ -13,6 +13,10 @@ Phase 1 security work has started with an nginx TLS ingress overlay for controll
 
 Security runbooks are documented in `../docs/security/phase5-operations-runbook.md`.
 
+## Release Note
+
+- Rendezvous release artifacts now include `scripts/manage-jwt-keyring.py` so operators can manage JWT keyring entries directly from the extracted deployment bundle.
+
 ## Prerequisites
 
 - Python 3.11+
@@ -185,8 +189,30 @@ The repository includes ready-to-use automation assets:
 
 - `scripts/renew-certs.sh`
 - `scripts/reload-nginx-certs.sh`
+- `scripts/manage-jwt-keyring.py`
 - `systemd/netkeyer-certbot-renew.service`
 - `systemd/netkeyer-certbot-renew.timer`
+
+JWT keyring management helper:
+
+- Interactive keyring editor with menu options to list, add, change, and delete key entries.
+- Automatically generates a new 32-byte hex secret when adding or changing entries.
+- Saves rotating backups before each write:
+  - `jwt_keys.json.bak1` (most recent previous)
+  - `jwt_keys.json.bak2`
+  - `jwt_keys.json.bak3`
+
+Run it from the `rendezvous_services` directory:
+
+```bash
+python3 scripts/manage-jwt-keyring.py
+```
+
+Optional custom keyring path:
+
+```bash
+python3 scripts/manage-jwt-keyring.py --file /path/to/jwt_keys.json
+```
 
 Install and enable automation:
 
@@ -262,6 +288,14 @@ Phase 2 auth controls (JWT rollout):
   - Compatibility toggle for staged rollout; tokenless clients can still connect when enforcement is off.
 - `RENDEZVOUS_JWT_SECRET=<secret>`
   - Shared secret used for `HS256` signature validation.
+- `RENDEZVOUS_JWT_KEYS_FILE=/app/jwt_keys.json` (recommended)
+  - Preferred keyring source loaded at startup from a read-only mounted JSON file.
+  - Default compose mapping mounts `./jwt_keys.json` from the `rendezvous_services` directory to `/app/jwt_keys.json` in the container.
+  - File format must be a JSON object of `{ "kid": "secret" }` pairs.
+- `RENDEZVOUS_JWT_KEYS_JSON={"kid-a":"secret-a","kid-b":"secret-b"}` (optional)
+  - Fallback keyring source used only when `RENDEZVOUS_JWT_KEYS_FILE` is missing, unreadable, or invalid.
+  - When keyring entries are loaded, access tokens must include a JWT header `kid` that maps to one of these secrets.
+  - Allows per-user/per-device key distribution and selective key revocation without rotating every client at once.
 - `RENDEZVOUS_JWT_ISSUER=<issuer>` (optional)
   - If set, token `iss` must match.
 - `RENDEZVOUS_JWT_AUDIENCE=<audience>` (optional)
@@ -343,6 +377,10 @@ App token forwarding:
 
 - `NETKEYER_RENDEZVOUS_ACCESS_TOKEN`
   - When set, NetKeyer app sends `Authorization: Bearer <token>` on websocket rendezvous requests.
+- NetKeyer Settings -> Access Token supports local JWT generation from an ID key:
+  - Enable `Generate JWT locally from ID key (RustDesk-style)`.
+  - Configure `kid`, key secret, issuer, audience, and token TTL.
+  - App mints short-lived role/scoped JWTs automatically for host register, client list-hosts, and client connect flows.
 
 Rendezvous service health exposure defaults:
 

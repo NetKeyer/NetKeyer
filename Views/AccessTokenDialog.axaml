@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NetKeyer.ViewModels"
+        x:Class="NetKeyer.Views.AccessTokenDialog"
+        x:DataType="vm:AccessTokenDialogViewModel"
+        Title="NetKeyer+Remote - Rendezvous Access Token"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        CanResize="false">
+
+    <Grid Margin="15" RowDefinitions="Auto,Auto,Auto">
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,12">
+            <TextBlock Text="Rendezvous Authentication"
+                       FontSize="18"
+                       FontWeight="Bold"/>
+            <TextBlock Text="Choose manual bearer token mode or local token generation from an ID key."
+                       FontSize="12"
+                       Foreground="Gray"
+                       TextWrapping="Wrap"
+                       Width="620"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" CornerRadius="3" Padding="12">
+            <StackPanel Spacing="10" Width="620">
+                <CheckBox Content="Generate JWT locally from ID key (RustDesk-style)"
+                          IsChecked="{Binding UseLocalJwtMinting}"/>
+
+                <TextBlock Text="Local JWT Generation Settings"
+                           FontWeight="SemiBold"/>
+
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Key ID (kid):"/>
+                    <TextBox Grid.Row="0" Grid.Column="1"
+                             Text="{Binding JwtKeyId}"
+                             Watermark="trusted-user-01"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="ID Key Secret:"/>
+                    <TextBox Grid.Row="1" Grid.Column="1"
+                             Text="{Binding JwtKeySecret}"
+                             PasswordChar="*"
+                             Watermark="HS256 signing secret for this user/client"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Issuer (iss):"/>
+                    <TextBox Grid.Row="2" Grid.Column="1"
+                             Text="{Binding JwtIssuer}"
+                             Watermark="netkeyer-auth"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Audience (aud):"/>
+                    <TextBox Grid.Row="3" Grid.Column="1"
+                             Text="{Binding JwtAudience}"
+                             Watermark="netkeyer"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Token TTL (minutes):"/>
+                    <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                   Value="{Binding JwtTokenLifetimeMinutes}"
+                                   Minimum="1"
+                                   Maximum="1440"
+                                   Increment="1"
+                                   FormatString="N0"/>
+                </Grid>
+
+                <TextBlock Text="Security note: distribute unique key IDs and secrets per trusted user/device so keys can be revoked individually."
+                           FontSize="11"
+                           Foreground="Gray"
+                           TextWrapping="Wrap"/>
+
+                <Separator Margin="0,4,0,4"/>
+
+                <TextBlock Text="Manual Access Token (used when local generation is disabled):"
+                           FontWeight="SemiBold"/>
+                <TextBox Text="{Binding AccessToken}"
+                         MinHeight="86"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         Watermark="Paste JWT access token here"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10"
+                    Margin="0,15,0,0">
+            <Button Content="Cancel"
+                    Width="90"
+                    HorizontalContentAlignment="Center"
+                    Padding="6"
+                    Click="CancelButton_Click"/>
+            <Button Content="Save"
+                    Width="90"
+                    HorizontalContentAlignment="Center"
+                    Padding="6"
+                    IsDefault="True"
+                    Click="SaveButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

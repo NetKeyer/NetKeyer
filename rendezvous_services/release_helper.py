@@ -76,6 +76,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-date", default="", help="Build date override in UTC ISO-8601 format.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Output directory for artifact.")
     parser.add_argument("--keep-staging", action="store_true", help="Keep the staging folder after zip is created.")
+    parser.add_argument(
+        "--include-path",
+        action="append",
+        default=[],
+        help=(
+            "Additional file or directory (relative to rendezvous_services/) to include in the bundle. "
+            "Can be provided multiple times."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -229,7 +238,12 @@ def zip_directory(source_dir: Path, zip_path: Path) -> None:
                 zf.write(path, arcname)
 
 
-def build_artifact(build_info: BuildInfo, output_dir: Path, keep_staging: bool) -> Path:
+def build_artifact(
+    build_info: BuildInfo,
+    output_dir: Path,
+    keep_staging: bool,
+    extra_include_paths: list[str] | None = None,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     bundle_name = f"netkeyer-rendezvous-services-{build_info.services_version}"
@@ -239,7 +253,13 @@ def build_artifact(build_info: BuildInfo, output_dir: Path, keep_staging: bool) 
         shutil.rmtree(staging_root)
     staging_root.mkdir(parents=True, exist_ok=True)
 
-    for rel in INCLUDE_PATHS:
+    include_paths = list(INCLUDE_PATHS)
+    for rel in extra_include_paths or []:
+        value = (rel or "").strip().replace("\\", "/")
+        if value and value not in include_paths:
+            include_paths.append(value)
+
+    for rel in include_paths:
         src = SCRIPT_DIR / rel
         if not src.exists():
             continue
@@ -268,7 +288,12 @@ def main() -> int:
     build_info = detect_build_info(args)
     output_dir = Path(args.output_dir).resolve()
 
-    artifact = build_artifact(build_info, output_dir, keep_staging=args.keep_staging)
+    artifact = build_artifact(
+        build_info,
+        output_dir,
+        keep_staging=args.keep_staging,
+        extra_include_paths=args.include_path,
+    )
 
     print(f"Created artifact: {artifact}")
     print(f"Services version: {build_info.services_version}")

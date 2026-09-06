@@ -80,6 +80,7 @@ ARGS=(
   "--tag" "$TAG"
   "--commit" "$COMMIT"
   "--build-date" "$BUILD_DATE"
+  "--include-path" "scripts/manage-jwt-keyring.py"
 )
 
 if [[ -n "$VERSION" ]]; then

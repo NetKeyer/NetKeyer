@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import ipaddress
+import json
 import logging
 import os
 
@@ -57,6 +58,54 @@ def _stage_default_require_connection_grant(stage: str) -> bool:
 def _stage_default_require_protocol_version(stage: str) -> bool:
     return stage == "strict"
 
+
+def _parse_jwt_keyring(raw_value: str, source_name: str) -> dict[str, str] | None:
+    raw = (raw_value or "").strip()
+    if not raw:
+        return {}
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        LOGGER.warning("Invalid %s; expected JSON object of {kid: secret}", source_name)
+        return None
+
+    if not isinstance(parsed, dict):
+        LOGGER.warning("Invalid %s; expected JSON object of {kid: secret}", source_name)
+        return None
+
+    keyring: dict[str, str] = {}
+    for key, value in parsed.items():
+        kid = str(key).strip()
+        secret = str(value).strip() if value is not None else ""
+        if kid and secret:
+            keyring[kid] = secret
+
+    return keyring
+
+
+def _load_jwt_keyring(file_path: str, raw_json_value: str) -> tuple[dict[str, str], str]:
+    candidate_path = (file_path or "").strip()
+    if candidate_path:
+        try:
+            with open(candidate_path, "r", encoding="utf-8") as handle:
+                file_contents = handle.read()
+        except FileNotFoundError:
+            LOGGER.info("JWT keyring file not found at %s; falling back to RENDEZVOUS_JWT_KEYS_JSON", candidate_path)
+        except OSError as ex:
+            LOGGER.warning("Failed to read JWT keyring file at %s: %s", candidate_path, ex)
+        else:
+            parsed_file_keyring = _parse_jwt_keyring(file_contents, f"JWT keyring file '{candidate_path}'")
+            if parsed_file_keyring is not None:
+                return parsed_file_keyring, f"file:{candidate_path}"
+            LOGGER.warning("Ignoring invalid JWT keyring file at %s; falling back to RENDEZVOUS_JWT_KEYS_JSON", candidate_path)
+
+    parsed_env_keyring = _parse_jwt_keyring(raw_json_value, "RENDEZVOUS_JWT_KEYS_JSON")
+    if parsed_env_keyring is not None:
+        return parsed_env_keyring, "env:RENDEZVOUS_JWT_KEYS_JSON"
+
+    return {}, "none"
+
 RELAY_HOST = os.getenv("RENDEZVOUS_RELAY_HOST", "relay")
 RELAY_PORT = int(os.getenv("RENDEZVOUS_RELAY_PORT", "49921"))
 SWEEP_INTERVAL_SECONDS = int(os.getenv("RENDEZVOUS_SWEEP_INTERVAL_SECONDS", "5"))
@@ -79,6 +128,9 @@ ALLOW_LEGACY_NO_TOKEN = _env_bool(
     _stage_default_allow_legacy(SECURITY_STAGE),
 )
 JWT_SECRET = os.getenv("RENDEZVOUS_JWT_SECRET", "")
+JWT_KEYS_FILE = os.getenv("RENDEZVOUS_JWT_KEYS_FILE", "/app/jwt_keys.json")
+JWT_KEYS_JSON = os.getenv("RENDEZVOUS_JWT_KEYS_JSON", "")
+JWT_KEYRING, JWT_KEYRING_SOURCE = _load_jwt_keyring(JWT_KEYS_FILE, JWT_KEYS_JSON)
 JWT_ISSUER = os.getenv("RENDEZVOUS_JWT_ISSUER", "").strip()
 JWT_AUDIENCE = os.getenv("RENDEZVOUS_JWT_AUDIENCE", "").strip()
 JWT_REQUIRED_SCOPE_HOST = os.getenv("RENDEZVOUS_JWT_REQUIRED_SCOPE_HOST", "").strip()
@@ -137,6 +189,7 @@ AUTH_CONFIG = AuthConfig(
     connection_grant_secret=CONNECTION_GRANT_SECRET,
     require_protocol_version_claim=JWT_REQUIRE_PROTOCOL_VERSION,
     expected_protocol_version=int(VERSION_INFO.get("protocol_version", "1") or "1"),
+    jwt_keyring=JWT_KEYRING,
 )
 
 
@@ -192,7 +245,7 @@ async def _session_sweeper() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
     LOGGER.info(
-        "rendezvous starting services_version=%s protocol=%s tag=%s commit=%s built_at=%s force_relay=%s security_stage=%s require_signed_tokens=%s legacy_no_token=%s require_connection_grant=%s require_jti=%s require_protocol_claim=%s",
+        "rendezvous starting services_version=%s protocol=%s tag=%s commit=%s built_at=%s force_relay=%s security_stage=%s require_signed_tokens=%s legacy_no_token=%s require_connection_grant=%s require_jti=%s require_protocol_claim=%s jwt_keyring_entries=%s jwt_keyring_source=%s",
         VERSION_INFO.get("services_version", ""),
         VERSION_INFO.get("protocol_version", ""),
         VERSION_INFO.get("build", {}).get("tag", ""),
@@ -205,6 +258,8 @@ async def lifespan(_: FastAPI):
         REQUIRE_CONNECTION_GRANT,
         JWT_REQUIRE_JTI,
         JWT_REQUIRE_PROTOCOL_VERSION,
+        len(JWT_KEYRING),
+        JWT_KEYRING_SOURCE,
     )
     await asyncio.to_thread(PORT_MAPPER.run_mapping)
     sweeper = asyncio.create_task(_session_sweeper())

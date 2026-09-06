@@ -51,6 +51,13 @@ namespace NetKeyer.Models
         public bool RemoteUseRendezvous { get; set; } = false;
         public string RemoteRendezvousServerUrl { get; set; } = "";
         public string RemoteRendezvousHostId { get; set; } = "";
+        public string RendezvousAccessToken { get; set; } = "";
+        public bool RendezvousUseLocalJwtMinting { get; set; } = true;
+        public string RendezvousJwtKeyId { get; set; } = "";
+        public string RendezvousJwtKeySecret { get; set; } = "";
+        public string RendezvousJwtIssuer { get; set; } = "";
+        public string RendezvousJwtAudience { get; set; } = "";
+        public int RendezvousJwtTokenLifetimeMinutes { get; set; } = 30;
         public int RemoteClientCwSpeed { get; set; } = 20;
         public int RemoteClientSidetoneVolume { get; set; } = 50;
         public int RemoteClientCwPitch { get; set; } = 600;

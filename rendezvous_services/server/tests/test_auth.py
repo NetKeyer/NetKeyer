@@ -50,6 +50,7 @@ class AuthTests(unittest.TestCase):
             connection_grant_secret="",
             require_protocol_version_claim=False,
             expected_protocol_version=1,
+            jwt_keyring={},
         )
 
     def _token(
@@ -58,6 +59,8 @@ class AuthTests(unittest.TestCase):
         subject: str = "user-1",
         jti: str = "jti-1",
         scope: str = "rendezvous:client",
+        signing_secret: str | None = None,
+        kid: str = "",
     ) -> str:
         now = int(time.time())
         payload = {
@@ -71,7 +74,8 @@ class AuthTests(unittest.TestCase):
             "jti": jti,
             "protocol_version": 1,
         }
-        return jwt.encode(payload, self.secret, algorithm="HS256")
+        headers = {"kid": kid} if kid else None
+        return jwt.encode(payload, signing_secret or self.secret, algorithm="HS256", headers=headers)
 
     def test_parse_bearer_token(self) -> None:
         self.assertEqual(parse_bearer_token("Bearer abc"), "abc")
@@ -120,6 +124,52 @@ class AuthTests(unittest.TestCase):
         with self.assertRaises(AuthError):
             validate_access_token(token, self.config, required_role="client")
 
+    def test_validate_access_token_accepts_keyring_secret_by_kid(self) -> None:
+        config = AuthConfig(
+            require_signed_tokens=True,
+            allow_legacy_no_token=False,
+            jwt_secret="",
+            jwt_issuer="issuer-a",
+            jwt_audience="netkeyer",
+            required_scope_host="rendezvous:host",
+            required_scope_client="rendezvous:client",
+            jti_replay_ttl_seconds=60,
+            jti_replay_cache_max_entries=1000,
+            require_jti=True,
+            require_connection_grant=False,
+            connection_grant_ttl_seconds=30,
+            connection_grant_secret="",
+            require_protocol_version_claim=False,
+            expected_protocol_version=1,
+            jwt_keyring={"host-a": "alt-secret"},
+        )
+        token = self._token(role="client", scope="rendezvous:client", jti="jti-kid-ok", signing_secret="alt-secret", kid="host-a")
+        claims = validate_access_token(token, config, required_role="client")
+        self.assertEqual(claims.get("sub"), "user-1")
+
+    def test_validate_access_token_rejects_missing_kid_when_keyring_configured(self) -> None:
+        config = AuthConfig(
+            require_signed_tokens=True,
+            allow_legacy_no_token=False,
+            jwt_secret="",
+            jwt_issuer="issuer-a",
+            jwt_audience="netkeyer",
+            required_scope_host="rendezvous:host",
+            required_scope_client="rendezvous:client",
+            jti_replay_ttl_seconds=60,
+            jti_replay_cache_max_entries=1000,
+            require_jti=True,
+            require_connection_grant=False,
+            connection_grant_ttl_seconds=30,
+            connection_grant_secret="",
+            require_protocol_version_claim=False,
+            expected_protocol_version=1,
+            jwt_keyring={"host-a": "alt-secret"},
+        )
+        token = self._token(role="client", scope="rendezvous:client", jti="jti-kid-missing", signing_secret="alt-secret")
+        with self.assertRaises(AuthError):
+            validate_access_token(token, config, required_role="client")
+
     def test_issue_and_validate_connection_grant(self) -> None:
         token = issue_connection_grant_token(self.config, client_id="client-1", host_id="host-1", grant_session_id="sess-1")
         claims = validate_connection_grant_token(token, self.config, client_id="client-1", host_id="host-1")
@@ -156,6 +206,7 @@ class AuthTests(unittest.TestCase):
             connection_grant_secret="",
             require_protocol_version_claim=True,
             expected_protocol_version=2,
+            jwt_keyring={},
         )
         token = self._token(role="client", scope="rendezvous:client", jti="jti-proto")
         with self.assertRaises(AuthError):
@@ -185,6 +236,7 @@ class AuthTests(unittest.TestCase):
             connection_grant_secret="",
             require_protocol_version_claim=False,
             expected_protocol_version=1,
+            jwt_keyring={},
         )
         ws = _FakeWebSocket()
         allowed, _, _, claims = authorize_websocket(ws, config, required_role="client")

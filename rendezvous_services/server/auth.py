@@ -30,6 +30,7 @@ class AuthConfig:
     connection_grant_secret: str
     require_protocol_version_claim: bool
     expected_protocol_version: int
+    jwt_keyring: dict[str, str]
 
 
 class _ReplayCache:
@@ -200,7 +201,24 @@ def validate_access_token(token: str, config: AuthConfig, required_role: str | N
     if not token:
         raise AuthError("missing access token")
 
-    if not config.jwt_secret.strip():
+    secret = (config.jwt_secret or "").strip()
+    if config.jwt_keyring:
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+        except jwt.PyJWTError as ex:
+            raise AuthError(f"invalid access token header: {ex}") from ex
+
+        kid = str(unverified_header.get("kid", "")).strip()
+        if not kid:
+            raise AuthError("access token missing required 'kid' header")
+
+        mapped_secret = (config.jwt_keyring.get(kid) or "").strip()
+        if not mapped_secret:
+            raise AuthError(f"unknown access token kid '{kid}'")
+
+        secret = mapped_secret
+
+    if not secret:
         raise AuthError("jwt secret is not configured")
 
     decode_kwargs: dict[str, Any] = {
@@ -215,7 +233,7 @@ def validate_access_token(token: str, config: AuthConfig, required_role: str | N
         decode_kwargs["audience"] = config.jwt_audience
 
     try:
-        claims = jwt.decode(token, config.jwt_secret, **decode_kwargs)
+        claims = jwt.decode(token, secret, **decode_kwargs)
     except jwt.PyJWTError as ex:
         raise AuthError(f"invalid access token: {ex}") from ex
 

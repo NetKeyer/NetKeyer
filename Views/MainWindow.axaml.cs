@@ -126,6 +126,16 @@ public partial class MainWindow : Window
         };
         settingsSubMenu.Add(midiNoteMappingItem);
 
+        var accessTokenItem = new NativeMenuItem("Access Token...");
+        accessTokenItem.Click += (s, e) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+            {
+                vm.ConfigureAccessTokenCommand?.Execute(null);
+            }
+        };
+        settingsSubMenu.Add(accessTokenItem);
+
         settingsMenu.Menu = settingsSubMenu;
 
         // Help menu

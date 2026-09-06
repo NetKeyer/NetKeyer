@@ -21,6 +21,7 @@
             <MenuItem Header="_Settings">
                 <MenuItem Header="_Audio Output Device..." Command="{Binding SelectAudioDeviceCommand}"/>
                 <MenuItem Header="_MIDI Note Mapping..." Command="{Binding ConfigureMidiNotesCommand}"/>
+                <MenuItem Header="_Access Token..." Command="{Binding ConfigureAccessTokenCommand}"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Documentation" Command="{Binding OpenDocumentationCommand}"/>
@@ -161,6 +162,13 @@
                                 <CheckBox Content="Use Rendezvous"
                                           IsChecked="{Binding RemoteUseRendezvous}"
                                           VerticalAlignment="Center"/>
+                                <Button Content="Test Rendezvous Auth"
+                                        Command="{Binding TestRendezvousConnectionCommand}"
+                                        Foreground="{Binding RendezvousAuthTestButtonBrush}"
+                                        Width="170"
+                                        HorizontalContentAlignment="Center"
+                                        Padding="4"
+                                        IsVisible="{Binding RemoteUseRendezvous}"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding RemoteUseRendezvous}">

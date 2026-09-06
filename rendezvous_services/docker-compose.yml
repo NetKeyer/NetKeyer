@@ -48,8 +48,15 @@ services:
       # Migration toggle: allow existing clients without tokens while Phase 2 rolls out.
       RENDEZVOUS_AUTH_ALLOW_LEGACY_NO_TOKEN: "true"
       RENDEZVOUS_JWT_SECRET: ""
-      RENDEZVOUS_JWT_ISSUER: ""
-      RENDEZVOUS_JWT_AUDIENCE: ""
+      # Preferred keyring source: read-only mounted JSON file.
+      # Host default is ./jwt_keys.json under rendezvous_services.
+      # Change this path if you mount the file elsewhere in the container.
+      RENDEZVOUS_JWT_KEYS_FILE: "/app/jwt_keys.json"
+      # Optional JSON keyring for per-client/device keys: {"kid-1":"secret-1","kid-2":"secret-2"}
+      # Fallback only: used if the mounted file is missing/unreadable/invalid.
+      RENDEZVOUS_JWT_KEYS_JSON: ""
+      RENDEZVOUS_JWT_ISSUER: "netkeyer-auth"
+      RENDEZVOUS_JWT_AUDIENCE: "netkeyer"
       # Optional endpoint scope checks (space-delimited scope claim values)
       RENDEZVOUS_JWT_REQUIRED_SCOPE_HOST: ""
       RENDEZVOUS_JWT_REQUIRED_SCOPE_CLIENT: ""
@@ -87,4 +94,6 @@ services:
       RENDEZVOUS_HEALTH_ALLOWED_CIDRS: "127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     ports:
       - "49920:49920"
+    volumes:
+      - ./jwt_keys.json:/app/jwt_keys.json:ro
     restart: unless-stopped

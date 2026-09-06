@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Net;
+using System.Net.WebSockets;
 using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
@@ -203,6 +204,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly bool _enableSecureRemoteTransport;
     private readonly bool _requireSecureRemoteTransport;
     private readonly bool _validateRelayCiphertext;
+    private string _rendezvousAccessToken = string.Empty;
+    private bool _rendezvousUseLocalJwtMinting;
+    private string _rendezvousJwtKeyId = string.Empty;
+    private string _rendezvousJwtKeySecret = string.Empty;
+    private string _rendezvousJwtIssuer = string.Empty;
+    private string _rendezvousJwtAudience = string.Empty;
+    private int _rendezvousJwtTokenLifetimeMinutes = 30;
     private bool _isSyncingRendezvousEndpoint;
     private bool _isExiting;
     private bool _remoteHostTransmitModeCW = true;
@@ -319,6 +327,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _remoteStatus = "Remote mode off";
 
     [ObservableProperty]
+    private IBrush _rendezvousAuthTestButtonBrush = Brushes.Black;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsWaitingForClientConnection), nameof(RemoteHostConnectionStateText), nameof(RemoteHostWaitingLineText))]
     private int _remoteConnectedClients = 0;
 
@@ -340,10 +351,10 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _remoteTelemetryLabel = "Telemetry (host):";
 
     [ObservableProperty]
-    private string _remoteTelemetryLine1 = "hs --.- ms | last --.- ms | p50 --.- ms | p95 --.- ms";
+    private string _remoteTelemetryLine1 = "last --.- ms | p50 --.- ms | p95 --.- ms";
 
     [ObservableProperty]
-    private string _remoteTelemetryLine2 = "accepted 60s 0 | stale 0 | max --.- ms";
+    private string _remoteTelemetryLine2 = "max --.- ms | accepted 60s 0 | stale 0";
 
     public string RemoteConnectedHostIpDisplay
     {
@@ -627,6 +638,16 @@ public partial class MainWindowViewModel : ViewModelBase
         RemoteRendezvousPort = rendezvousPort;
         RemoteRendezvousServerUrl = BuildRendezvousServerUrl();
         RemoteRendezvousHostId = _settings.RemoteRendezvousHostId ?? "";
+        _rendezvousAccessToken = _settings.RendezvousAccessToken ?? string.Empty;
+        _rendezvousUseLocalJwtMinting = _settings.RendezvousUseLocalJwtMinting;
+        _rendezvousJwtKeyId = _settings.RendezvousJwtKeyId ?? string.Empty;
+        _rendezvousJwtKeySecret = _settings.RendezvousJwtKeySecret ?? string.Empty;
+        _rendezvousJwtIssuer = _settings.RendezvousJwtIssuer ?? string.Empty;
+        _rendezvousJwtAudience = _settings.RendezvousJwtAudience ?? string.Empty;
+        _rendezvousJwtTokenLifetimeMinutes = _settings.RendezvousJwtTokenLifetimeMinutes > 0
+            ? _settings.RendezvousJwtTokenLifetimeMinutes
+            : 30;
+        ApplyConfiguredRendezvousAccessTokenEnvironment();
         RemoteClientHoldSeconds = ConvertHoldMsToSeconds(_settings.RemoteHostClientHoldMs);
 
         if (RemoteMode == RemoteConnectionMode.Client)
@@ -991,6 +1012,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task<IReadOnlyList<RendezvousHostSummary>> FetchRendezvousHostsAsync(string rendezvousUrl, CancellationToken ct)
     {
         string clientId = BuildRendezvousClientId();
+        PrepareRendezvousAccessTokenForClient(clientId, null);
         return await _rendezvousControlService.ListHostsAsync(new RendezvousHostListRequestOptions
         {
             ServerUrl = rendezvousUrl,
@@ -1545,6 +1567,328 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private async Task ConfigureAccessToken()
+    {
+        var dialog = new Views.AccessTokenDialog();
+        dialog.SetCurrentSettings(
+            _rendezvousAccessToken,
+            _rendezvousUseLocalJwtMinting,
+            _rendezvousJwtKeyId,
+            _rendezvousJwtKeySecret,
+            _rendezvousJwtIssuer,
+            _rendezvousJwtAudience,
+            _rendezvousJwtTokenLifetimeMinutes);
+
+        var mainWindow = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (mainWindow == null)
+        {
+            return;
+        }
+
+        await dialog.ShowDialog(mainWindow);
+
+        if (!dialog.TokenSaved)
+        {
+            return;
+        }
+
+        _rendezvousAccessToken = dialog.AccessToken ?? string.Empty;
+        _rendezvousUseLocalJwtMinting = dialog.UseLocalJwtMinting;
+        _rendezvousJwtKeyId = dialog.JwtKeyId ?? string.Empty;
+        _rendezvousJwtKeySecret = dialog.JwtKeySecret ?? string.Empty;
+        _rendezvousJwtIssuer = dialog.JwtIssuer ?? string.Empty;
+        _rendezvousJwtAudience = dialog.JwtAudience ?? string.Empty;
+        _rendezvousJwtTokenLifetimeMinutes = dialog.JwtTokenLifetimeMinutes;
+
+        if (_settings != null)
+        {
+            _settings.RendezvousAccessToken = _rendezvousAccessToken;
+            _settings.RendezvousUseLocalJwtMinting = _rendezvousUseLocalJwtMinting;
+            _settings.RendezvousJwtKeyId = _rendezvousJwtKeyId;
+            _settings.RendezvousJwtKeySecret = _rendezvousJwtKeySecret;
+            _settings.RendezvousJwtIssuer = _rendezvousJwtIssuer;
+            _settings.RendezvousJwtAudience = _rendezvousJwtAudience;
+            _settings.RendezvousJwtTokenLifetimeMinutes = _rendezvousJwtTokenLifetimeMinutes;
+            _settings.Save();
+        }
+
+        ApplyConfiguredRendezvousAccessTokenEnvironment();
+        if (_rendezvousUseLocalJwtMinting)
+        {
+            DebugLogger.LogAlways("rendezvous", "Rendezvous local JWT minting settings updated.");
+        }
+        else
+        {
+            DebugLogger.LogAlways("rendezvous", string.IsNullOrWhiteSpace(_rendezvousAccessToken)
+                ? "Rendezvous access token cleared from settings."
+                : "Rendezvous access token updated from settings.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestRendezvousConnectionAsync()
+    {
+        if (!RemoteUseRendezvous)
+        {
+            RemoteStatus = "Enable Use Rendezvous before running auth test";
+            RendezvousAuthTestButtonBrush = Brushes.Red;
+            return;
+        }
+
+        string rendezvousUrl = BuildRendezvousServerUrl();
+        if (string.IsNullOrWhiteSpace(rendezvousUrl))
+        {
+            RemoteStatus = "Rendezvous server is required for auth test";
+            RendezvousAuthTestButtonBrush = Brushes.Red;
+            return;
+        }
+
+        string role;
+        if (RemoteMode == RemoteConnectionMode.Host)
+        {
+            string hostId = GetRendezvousHostId();
+            PrepareRendezvousAccessTokenForHost(hostId);
+            role = "host";
+        }
+        else
+        {
+            string clientId = BuildRendezvousClientId();
+            string targetHostId = (SelectedRendezvousHost?.HostId ?? RemoteRendezvousHostId ?? string.Empty).Trim();
+            PrepareRendezvousAccessTokenForClient(clientId, string.IsNullOrWhiteSpace(targetHostId) ? null : targetHostId);
+            role = "client";
+        }
+
+        try
+        {
+            Uri endpoint = BuildRendezvousWebSocketEndpoint(rendezvousUrl, role);
+
+            using var ws = new ClientWebSocket();
+            ApplyRendezvousAccessTokenHeader(ws);
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            await ws.ConnectAsync(endpoint, timeout.Token);
+
+            RemoteStatus = $"Rendezvous auth test passed ({role})";
+            RendezvousAuthTestButtonBrush = Brushes.Green;
+            DebugLogger.LogAlways("rendezvous", $"Auth test passed role={role} endpoint={endpoint}");
+
+            if (ws.State == WebSocketState.Open)
+            {
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "auth_test_complete", CancellationToken.None);
+            }
+        }
+        catch (Exception ex)
+        {
+            string message = NormalizeRendezvousAuthTestError(ex);
+            RemoteStatus = $"Rendezvous auth test failed ({role}): {message}";
+            RendezvousAuthTestButtonBrush = Brushes.Red;
+            DebugLogger.LogAlways("rendezvous", $"Auth test failed role={role}: {message}");
+        }
+    }
+
+    private static void ApplyRendezvousAccessTokenHeader(ClientWebSocket ws)
+    {
+        string token = Environment.GetEnvironmentVariable("NETKEYER_RENDEZVOUS_ACCESS_TOKEN") ?? string.Empty;
+        token = token.Trim();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            ws.Options.SetRequestHeader("Authorization", $"Bearer {token}");
+        }
+    }
+
+    private static Uri BuildRendezvousWebSocketEndpoint(string rendezvousUrl, string role)
+    {
+        if (!Uri.TryCreate(rendezvousUrl, UriKind.Absolute, out Uri uri))
+        {
+            throw new InvalidOperationException("Rendezvous URL is invalid.");
+        }
+
+        string scheme = string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase)
+            ? "wss"
+            : "ws";
+
+        var builder = new UriBuilder(uri)
+        {
+            Scheme = scheme,
+            Path = $"/ws/{role.Trim().ToLowerInvariant()}",
+            Query = string.Empty,
+            Fragment = string.Empty
+        };
+
+        return builder.Uri;
+    }
+
+    private static string NormalizeRendezvousAuthTestError(Exception ex)
+    {
+        if (ex is OperationCanceledException)
+        {
+            return "request timed out";
+        }
+
+        if (ex is WebSocketException wsEx)
+        {
+            return wsEx.Message;
+        }
+
+        return ex.Message;
+    }
+
+    private void PrepareRendezvousAccessTokenForHost(string hostId)
+    {
+        if (IsLocalRendezvousJwtMintingEnabled())
+        {
+            string token = GenerateRendezvousAccessToken(
+                subject: hostId,
+                role: "host",
+                scopes: new[] { $"host:{hostId}", "rendezvous:host" });
+            ApplyRendezvousAccessTokenEnvironment(token);
+            return;
+        }
+
+        EnsureManualAccessTokenLooksLikeJwt("host");
+
+        ApplyConfiguredRendezvousAccessTokenEnvironment();
+    }
+
+    private void PrepareRendezvousAccessTokenForClient(string clientId, string hostId)
+    {
+        if (IsLocalRendezvousJwtMintingEnabled())
+        {
+            var scopes = new List<string>
+            {
+                $"client:{clientId}",
+                "rendezvous:client"
+            };
+
+            if (!string.IsNullOrWhiteSpace(hostId))
+            {
+                scopes.Add($"target_host:{hostId}");
+                scopes.Add("rendezvous:connect");
+            }
+
+            string token = GenerateRendezvousAccessToken(
+                subject: clientId,
+                role: "client",
+                scopes: scopes);
+            ApplyRendezvousAccessTokenEnvironment(token);
+            return;
+        }
+
+        EnsureManualAccessTokenLooksLikeJwt("client");
+
+        ApplyConfiguredRendezvousAccessTokenEnvironment();
+    }
+
+    private void EnsureManualAccessTokenLooksLikeJwt(string role)
+    {
+        if (_rendezvousUseLocalJwtMinting)
+        {
+            return;
+        }
+
+        string token = (_rendezvousAccessToken ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException($"Manual access token is empty for {role} mode. Enter a JWT access token or enable local JWT minting.");
+        }
+
+        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Manual access token should be the raw JWT only. Do not include the 'Bearer ' prefix.");
+        }
+
+        if (!LooksLikeJwt(token))
+        {
+            throw new InvalidOperationException("Manual access token is not a JWT (expected 3 segments: header.payload.signature). Do not paste RENDEZVOUS_JWT_SECRET into the app token field.");
+        }
+    }
+
+    private static bool LooksLikeJwt(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        int dotCount = token.Count(ch => ch == '.');
+        return dotCount == 2;
+    }
+
+    private bool IsLocalRendezvousJwtMintingEnabled()
+    {
+        return _rendezvousUseLocalJwtMinting && !string.IsNullOrWhiteSpace(_rendezvousJwtKeySecret);
+    }
+
+    private void ApplyConfiguredRendezvousAccessTokenEnvironment()
+    {
+        if (_rendezvousUseLocalJwtMinting)
+        {
+            if (string.IsNullOrWhiteSpace(_rendezvousJwtKeySecret))
+            {
+                DebugLogger.LogAlways("rendezvous", "Local JWT minting is enabled but no ID key secret is configured; falling back to manual access token mode.");
+                ApplyRendezvousAccessTokenEnvironment(_rendezvousAccessToken);
+                return;
+            }
+
+            // Generated tokens are operation-specific (host/client and target scope), so clear static token value.
+            ApplyRendezvousAccessTokenEnvironment(string.Empty);
+            return;
+        }
+
+        ApplyRendezvousAccessTokenEnvironment(_rendezvousAccessToken);
+    }
+
+    private string GenerateRendezvousAccessToken(string subject, string role, IEnumerable<string> scopes)
+    {
+        string normalizedSubject = (subject ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedSubject))
+        {
+            throw new InvalidOperationException("Cannot mint rendezvous token because subject is empty.");
+        }
+
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        int ttlMinutes = Math.Max(1, Math.Min(1440, _rendezvousJwtTokenLifetimeMinutes));
+        long exp = now + (ttlMinutes * 60L);
+
+        string scopeValue = string.Join(" ", (scopes ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        var claims = new Dictionary<string, object>
+        {
+            ["sub"] = normalizedSubject,
+            ["role"] = role,
+            ["scope"] = scopeValue,
+            ["iat"] = now,
+            ["exp"] = exp,
+            ["jti"] = Guid.NewGuid().ToString("N"),
+            ["protocol_version"] = 1
+        };
+
+        if (!string.IsNullOrWhiteSpace(_rendezvousJwtIssuer))
+        {
+            claims["iss"] = _rendezvousJwtIssuer.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_rendezvousJwtAudience))
+        {
+            claims["aud"] = _rendezvousJwtAudience.Trim();
+        }
+
+        return RendezvousJwtTokenFactory.CreateHs256Token(
+            _rendezvousJwtKeySecret,
+            claims,
+            _rendezvousJwtKeyId);
+    }
+
+    private static void ApplyRendezvousAccessTokenEnvironment(string token)
+    {
+        string normalized = (token ?? string.Empty).Trim();
+        Environment.SetEnvironmentVariable("NETKEYER_RENDEZVOUS_ACCESS_TOKEN", string.IsNullOrWhiteSpace(normalized) ? null : normalized);
+    }
+
     private void CloseInputDevice()
     {
         // Stop keying controller
@@ -1705,6 +2049,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             string hostId = await ResolveRendezvousHostIdForConnectAsync(rendezvousUrl, _remoteCts.Token);
+            string clientId = BuildRendezvousClientId();
+            PrepareRendezvousAccessTokenForClient(clientId, hostId);
 
             DebugLogger.LogAlways("rendezvous", $"Attempting client rendezvous connect: url={rendezvousUrl}, hostId={hostId}");
 
@@ -1713,7 +2059,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _rendezvousClientSession = await _rendezvousControlService.ConnectClientAsync(new RendezvousClientConnectOptions
                 {
                     ServerUrl = rendezvousUrl,
-                    ClientId = BuildRendezvousClientId(),
+                    ClientId = clientId,
                     HostId = hostId
                 }, _remoteCts.Token);
             }
@@ -2047,6 +2393,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             string hostId = GetRendezvousHostId();
+            PrepareRendezvousAccessTokenForHost(hostId);
             DebugLogger.LogAlways("rendezvous", $"Attempting host rendezvous registration: url={rendezvousUrl}, hostId={hostId}");
 
             try
@@ -2391,7 +2738,6 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             UpdateTelemetryDisplay(
-                e?.HandshakeDurationMs ?? 0,
                 e?.LastLagMs ?? 0,
                 e?.P50LagMs ?? 0,
                 e?.P95LagMs ?? 0,
@@ -2476,7 +2822,6 @@ public partial class MainWindowViewModel : ViewModelBase
             : (selected.RemoteIp ?? "client");
 
         UpdateTelemetryDisplay(
-            selected.HandshakeDurationMs,
             selected.LastLagMs,
             selected.P50LagMs,
             selected.P95LagMs,
@@ -2490,12 +2835,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         string who = string.IsNullOrWhiteSpace(identity) ? "host" : identity;
         RemoteTelemetryLabel = $"Telemetry ({who}):";
-        RemoteTelemetryLine1 = "hs --.- ms | last --.- ms | p50 --.- ms | p95 --.- ms";
-        RemoteTelemetryLine2 = "accepted 60s 0 | stale 0 | max --.- ms";
+        RemoteTelemetryLine1 = "last --.- ms | p50 --.- ms | p95 --.- ms";
+        RemoteTelemetryLine2 = "max --.- ms | accepted 60s 0 | stale 0";
     }
 
     private void UpdateTelemetryDisplay(
-        double handshakeDurationMs,
         double lastLagMs,
         double p50LagMs,
         double p95LagMs,
@@ -2506,8 +2850,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         string who = string.IsNullOrWhiteSpace(identity) ? "host" : identity;
         RemoteTelemetryLabel = $"Telemetry ({who}):";
-        RemoteTelemetryLine1 = $"hs {handshakeDurationMs:F1} ms | last {lastLagMs:F1} ms | p50 {p50LagMs:F1} ms | p95 {p95LagMs:F1} ms";
-        RemoteTelemetryLine2 = $"accepted 60s {acceptedFramesLast60s} | stale {droppedStaleFrames} | max {maxLagMs:F1} ms";
+        RemoteTelemetryLine1 = $"last {lastLagMs:F1} ms | p50 {p50LagMs:F1} ms | p95 {p95LagMs:F1} ms";
+        RemoteTelemetryLine2 = $"max {maxLagMs:F1} ms | accepted 60s {acceptedFramesLast60s} | stale {droppedStaleFrames}";
     }
 
     private void RemoteHostService_PaddleStateReceived(object sender, RemotePaddleStateEventArgs e)
