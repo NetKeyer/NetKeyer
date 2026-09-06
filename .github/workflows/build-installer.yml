@@ -20,13 +20,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      shell: pwsh
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        $enabled = -not [string]::IsNullOrWhiteSpace($env:SECRET_PROVIDER_PAT)
+        $value = if ($enabled) { "true" } else { "false" }
+        "ENABLED=$value" >> $env:GITHUB_OUTPUT
+        Write-Host "Secret provider available: $value"
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       shell: pwsh
@@ -183,13 +194,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        if [ -n "$SECRET_PROVIDER_PAT" ]; then
+          echo "ENABLED=true" >> $GITHUB_OUTPUT
+          echo "Secret provider available: true"
+        else
+          echo "ENABLED=false" >> $GITHUB_OUTPUT
+          echo "Secret provider available: false"
+        fi
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       run: |
@@ -284,13 +308,26 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Determine whether secret provider is available
+      id: secret_provider
+      env:
+        SECRET_PROVIDER_PAT: ${{ secrets.SECRET_PROVIDER_PAT }}
+      run: |
+        if [ -n "$SECRET_PROVIDER_PAT" ]; then
+          echo "ENABLED=true" >> $GITHUB_OUTPUT
+          echo "Secret provider available: true"
+        else
+          echo "ENABLED=false" >> $GITHUB_OUTPUT
+          echo "Secret provider available: false"
+        fi
+
     - name: Checkout secret provider
+      if: steps.secret_provider.outputs.ENABLED == 'true'
       uses: actions/checkout@v4
       with:
         repository: NetKeyer/NetKeyer-Credentials
         token: ${{ secrets.SECRET_PROVIDER_PAT }}
         path: secret-provider
-      continue-on-error: true
 
     - name: Include secret provider in build
       run: |
