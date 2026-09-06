@@ -1,6 +1,6 @@
 [project]
 name = "netkeyer-rendezvous-services"
-version = "0.1.1"
+version = "0.1.7"
 description = "Rendezvous and relay services for NetKeyer"
 requires-python = ">=3.11,<3.12"
 dependencies = [
