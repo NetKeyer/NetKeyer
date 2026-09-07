@@ -47,8 +47,9 @@ public sealed class RendezvousHostSummary
 
     public override string ToString()
     {
-        string displayName = string.IsNullOrWhiteSpace(Name) ? HostId : Name;
-        return $"{displayName} ({CurrentClients}/{MaxClients})";
+        string displayHostId = string.IsNullOrWhiteSpace(HostId) ? "unknown" : HostId.Trim();
+        string displayName = string.IsNullOrWhiteSpace(Name) ? displayHostId : Name.Trim();
+        return $"'{displayHostId}' - {displayName} ({CurrentClients}/{MaxClients})";
     }
 }
 

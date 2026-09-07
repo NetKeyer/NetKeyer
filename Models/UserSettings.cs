@@ -57,6 +57,7 @@ namespace NetKeyer.Models
         public string RemoteSharedToken { get; set; } = "";
         public bool RemoteUseRendezvous { get; set; } = false;
         public string RemoteRendezvousServerUrl { get; set; } = "";
+        public string RemoteHostId { get; set; } = "";
         public string RemoteRendezvousHostId { get; set; } = "";
         public string RendezvousAccessToken { get; set; } = "";
         public bool RendezvousUseLocalJwtMinting { get; set; } = true;

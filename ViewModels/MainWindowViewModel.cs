@@ -638,7 +638,12 @@ public partial class MainWindowViewModel : ViewModelBase
         RemoteRendezvousServer = rendezvousServer;
         RemoteRendezvousPort = rendezvousPort;
         RemoteRendezvousServerUrl = BuildRendezvousServerUrl();
-        RemoteRendezvousHostId = _settings.RemoteRendezvousHostId ?? "";
+        if (string.IsNullOrWhiteSpace(_settings.RemoteHostId) && RemoteMode == RemoteConnectionMode.Host)
+        {
+            _settings.RemoteHostId = _settings.RemoteRendezvousHostId ?? "";
+            _settings.Save();
+        }
+        ApplyDisplayedRemoteHostIdForMode(RemoteMode);
         _rendezvousAccessToken = _settings.RendezvousAccessToken ?? string.Empty;
         _rendezvousUseLocalJwtMinting = _settings.RendezvousUseLocalJwtMinting;
         _rendezvousJwtKeyId = _settings.RendezvousJwtKeyId ?? string.Empty;
@@ -790,6 +795,8 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.Save();
         }
 
+        ApplyDisplayedRemoteHostIdForMode(value);
+
         if (value == RemoteConnectionMode.Client && _settings != null)
         {
             CwSpeed = _settings.RemoteClientCwSpeed > 0 ? _settings.RemoteClientCwSpeed : CwSpeed;
@@ -939,8 +946,50 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!_loadingSettings && _settings != null)
         {
-            _settings.RemoteRendezvousHostId = value ?? "";
+            if (RemoteMode == RemoteConnectionMode.Host)
+            {
+                _settings.RemoteHostId = value ?? "";
+            }
+            else
+            {
+                _settings.RemoteRendezvousHostId = value ?? "";
+            }
             _settings.Save();
+        }
+    }
+
+    private void ApplyDisplayedRemoteHostIdForMode(RemoteConnectionMode mode)
+    {
+        if (_settings == null)
+        {
+            return;
+        }
+
+        string modeSpecificHostId;
+        if (mode == RemoteConnectionMode.Host)
+        {
+            modeSpecificHostId = (_settings.RemoteHostId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(modeSpecificHostId))
+            {
+                modeSpecificHostId = string.IsNullOrWhiteSpace(_settings.RemoteHostName)
+                    ? Environment.MachineName
+                    : _settings.RemoteHostName;
+            }
+        }
+        else
+        {
+            modeSpecificHostId = _settings.RemoteRendezvousHostId ?? string.Empty;
+        }
+
+        bool previousLoadingState = _loadingSettings;
+        _loadingSettings = true;
+        try
+        {
+            RemoteRendezvousHostId = modeSpecificHostId;
+        }
+        finally
+        {
+            _loadingSettings = previousLoadingState;
         }
     }
 
@@ -2522,7 +2571,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private string GetRendezvousHostId()
     {
-        string configured = (RemoteRendezvousHostId ?? string.Empty).Trim();
+        string configured = (_settings?.RemoteHostId ?? RemoteRendezvousHostId ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return configured;
