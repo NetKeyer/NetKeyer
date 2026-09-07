@@ -24,7 +24,14 @@ namespace NetKeyer.Models
         public bool WasapiAggressiveLowLatency { get; set; } = true;
 
         // Keep audio device awake by playing near-silent audio
-        public bool KeepAudioDeviceAwake { get; set; } = false;
+        public bool KeepAudioDeviceAwake { get; set; } = true;
+
+        // One-shot startup migration toggle: when true, startup force-enables KeepAudioDeviceAwake,
+        // then clears this flag and persists it.
+        public bool ForceEnableKeepAudioDeviceAwakeAtStartup { get; set; } = true;
+
+        // Enables detailed sidetone timing probe logs. Disabled by default to avoid extra hot-path work.
+        public bool EnableDetailedTimingAnalysisLogging { get; set; } = false;
 
         // MIDI note mappings
         public List<MidiNoteMapping> MidiNoteMappings { get; set; }

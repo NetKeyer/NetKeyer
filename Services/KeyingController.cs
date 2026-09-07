@@ -1,6 +1,7 @@
 using System;
 using Flex.Smoothlake.FlexLib;
 using NetKeyer.Audio;
+using NetKeyer.Helpers;
 using NetKeyer.Keying;
 
 namespace NetKeyer.Services;
@@ -110,8 +111,20 @@ public class KeyingController
         _iambicKeyer?.SetWpm(wpm);
     }
 
+    public string GetKeyingStateForProbe()
+    {
+        if (!_isIambicMode)
+        {
+            return "StraightKey";
+        }
+
+        return _iambicKeyer?.GetStateForProbe() ?? "IambicUnavailable";
+    }
+
     public void HandlePaddleStateChange(bool leftPaddle, bool rightPaddle, bool straightKey, bool ptt)
     {
+        SidetoneLatencyProbe.MarkControllerEntry("keying:HandlePaddleStateChange");
+
         // Handle keying based on mode and transmit slice mode
         if (_connectedRadio != null && _boundGuiClientHandle != 0)
         {
@@ -177,6 +190,7 @@ public class KeyingController
         // Control sidetone
         if (_isSidetoneEnabled && state)
         {
+            SidetoneLatencyProbe.MarkSidetoneStartCall("keying:SendCWKey(true)");
             _sidetoneGenerator?.Start();
         }
         else

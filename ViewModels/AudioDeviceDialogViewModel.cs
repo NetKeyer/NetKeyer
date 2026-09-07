@@ -24,6 +24,9 @@ namespace NetKeyer.ViewModels
         private bool _keepAudioDeviceAwake = false;
 
         [ObservableProperty]
+        private bool _enableDetailedTimingAnalysisLogging = false;
+
+        [ObservableProperty]
         private bool _isWindowsOnly = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
         public AudioDeviceDialogViewModel()
@@ -31,6 +34,7 @@ namespace NetKeyer.ViewModels
             var settings = UserSettings.Load();
             AggressiveLowLatency = settings.WasapiAggressiveLowLatency;
             KeepAudioDeviceAwake = settings.KeepAudioDeviceAwake;
+            EnableDetailedTimingAnalysisLogging = settings.EnableDetailedTimingAnalysisLogging;
 
             RefreshAudioDevices();
         }
@@ -54,6 +58,11 @@ namespace NetKeyer.ViewModels
         public bool GetKeepAudioDeviceAwake()
         {
             return KeepAudioDeviceAwake;
+        }
+
+        public bool GetEnableDetailedTimingAnalysisLogging()
+        {
+            return EnableDetailedTimingAnalysisLogging;
         }
 
         [RelayCommand]

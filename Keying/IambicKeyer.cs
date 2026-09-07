@@ -97,6 +97,17 @@ public class IambicKeyer
     }
 
     /// <summary>
+    /// Returns the current iambic state name for latency probe correlation.
+    /// </summary>
+    public string GetStateForProbe()
+    {
+        lock (_lock)
+        {
+            return _keyerState.ToString();
+        }
+    }
+
+    /// <summary>
     /// Updates the keyer with current paddle states.
     /// Call this whenever paddle state changes.
     /// </summary>
@@ -279,6 +290,8 @@ public class IambicKeyer
     {
         lock (_lock)
         {
+            SidetoneLatencyProbe.MarkToneStartCallback("keyer:OnToneStart");
+
             // If transitioning from Idle to TonePlaying, start a new timed sequence
             if (_keyerState == KeyerState.Idle)
             {
@@ -355,6 +368,8 @@ public class IambicKeyer
         bool isDit = (toneDurationMs == _ditLength);
 
         if (_keyerDebug) DebugLogger.Log("keyer", $"[IambicKeyer] Starting/queueing {(isDit ? "dit" : "dah")} ({toneDurationMs}ms)");
+
+        SidetoneLatencyProbe.MarkSidetoneStartCall("keying:StartOrQueueTone");
 
         // Start tone (will queue if in silence, start immediately if idle)
         // Tone events drive iambic radio key-down/key-up timing.

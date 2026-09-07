@@ -31,6 +31,7 @@ namespace NetKeyer.Audio
         private int? _queuedSilenceDurationMs = null;
 
         private readonly object _lockObject = new object();
+        private const float AUDIBLE_SAMPLE_THRESHOLD = 0.02f;
 
         // Cached once at startup — IsEnabled() is cheap but string interpolation before Log() is not.
         // Using a cached bool ensures the hot path (Read()) pays zero allocation cost when disabled.
@@ -264,6 +265,45 @@ namespace NetKeyer.Audio
 
         private int _readCallCount = 0;
 
+        private void MarkAudioMilestonesInBuffer(float[] buffer, int offset, int sampleCount)
+        {
+            if (sampleCount <= 0)
+            {
+                return;
+            }
+
+            bool needFirstNonSilent = SidetoneLatencyProbe.ShouldCheckForFirstNonSilentSample();
+            bool needFirstAudible = SidetoneLatencyProbe.ShouldCheckForFirstAudibleSample();
+
+            if (!needFirstNonSilent && !needFirstAudible)
+            {
+                return;
+            }
+
+            int end = offset + sampleCount;
+            for (int i = offset; i < end; i++)
+            {
+                float absolute = Math.Abs(buffer[i]);
+
+                if (needFirstNonSilent && absolute > 1e-9f)
+                {
+                    SidetoneLatencyProbe.MarkFirstNonSilentSample("audio:SidetoneProvider.Read");
+                    needFirstNonSilent = false;
+                }
+
+                if (needFirstAudible && absolute >= AUDIBLE_SAMPLE_THRESHOLD)
+                {
+                    SidetoneLatencyProbe.MarkFirstAudibleSample("audio:SidetoneProvider.Read");
+                    needFirstAudible = false;
+                }
+
+                if (!needFirstNonSilent && !needFirstAudible)
+                {
+                    return;
+                }
+            }
+        }
+
         public int Read(float[] buffer, int offset, int count)
         {
             lock (_lockObject)
@@ -295,7 +335,9 @@ namespace NetKeyer.Audio
                             break;
 
                         case PlaybackState.RampUp:
+                            int rampUpStart = samplesWritten;
                             samplesWritten += CopyFromPatch(_rampUpPatch, buffer, offset + samplesWritten, count - samplesWritten);
+                            MarkAudioMilestonesInBuffer(buffer, offset + rampUpStart, samplesWritten - rampUpStart);
                             if (_patchPosition >= _rampUpPatch.Length)
                             {
                                 if (_sidetoneDebug) DebugLogger.Log("sidetone", "[SidetoneProvider] RampUp complete, transitioning to Sustain");
@@ -308,7 +350,9 @@ namespace NetKeyer.Audio
                             if (_indefiniteTone)
                             {
                                 // Keep playing single cycles indefinitely
+                                int sustainStart = samplesWritten;
                                 samplesWritten += CopyFromPatch(_singleCyclePatch, buffer, offset + samplesWritten, count - samplesWritten);
+                                MarkAudioMilestonesInBuffer(buffer, offset + sustainStart, samplesWritten - sustainStart);
                                 if (_patchPosition >= _singleCyclePatch.Length)
                                 {
                                     _patchPosition = 0; // Loop the single cycle
@@ -316,7 +360,9 @@ namespace NetKeyer.Audio
                             }
                             else if (_remainingCycles > 0)
                             {
+                                int sustainStart = samplesWritten;
                                 samplesWritten += CopyFromPatch(_singleCyclePatch, buffer, offset + samplesWritten, count - samplesWritten);
+                                MarkAudioMilestonesInBuffer(buffer, offset + sustainStart, samplesWritten - sustainStart);
                                 if (_patchPosition >= _singleCyclePatch.Length)
                                 {
                                     _patchPosition = 0;
@@ -338,7 +384,9 @@ namespace NetKeyer.Audio
                             break;
 
                         case PlaybackState.RampDown:
+                            int rampDownStart = samplesWritten;
                             samplesWritten += CopyFromPatch(_rampDownPatch, buffer, offset + samplesWritten, count - samplesWritten);
+                            MarkAudioMilestonesInBuffer(buffer, offset + rampDownStart, samplesWritten - rampDownStart);
                             if (_patchPosition >= _rampDownPatch.Length)
                             {
                                 _patchPosition = 0;
@@ -464,6 +512,7 @@ namespace NetKeyer.Audio
                                     {
                                         try
                                         {
+                                            SidetoneLatencyProbe.MarkAudioIdle("audio:SidetoneProvider.OnBecomeIdle");
                                             OnBecomeIdle.Invoke();
                                         }
                                         catch (Exception ex)

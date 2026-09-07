@@ -68,6 +68,17 @@
                           FontSize="11"
                           Foreground="Gray"
                           Margin="0,10,0,0"/>
+
+                <CheckBox Content="Enable detailed timing analysis logging"
+                          IsChecked="{Binding EnableDetailedTimingAnalysisLogging}"
+                          FontSize="11"
+                          Foreground="Gray"
+                          Margin="0,8,0,0"/>
+                <TextBlock Text="Disabled by default. Enable only while collecting latency diagnostics."
+                           FontSize="10"
+                           Foreground="DarkGray"
+                           TextWrapping="Wrap"
+                           Margin="20,2,0,0"/>
             </StackPanel>
         </Border>
 

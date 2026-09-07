@@ -213,6 +213,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _rendezvousJwtTokenLifetimeMinutes = 30;
     private bool _isSyncingRendezvousEndpoint;
     private bool _isExiting;
+    private bool _latencyProbeKeyClosed;
     private bool _remoteHostTransmitModeCW = true;
     private string _remoteHostTransmitMode = "CW";
     private bool? _hostSidetoneEnabledForLocalSource;
@@ -655,6 +656,21 @@ public partial class MainWindowViewModel : ViewModelBase
             CwSpeed = _settings.RemoteClientCwSpeed > 0 ? _settings.RemoteClientCwSpeed : 20;
             SidetoneVolume = Math.Max(0, Math.Min(100, _settings.RemoteClientSidetoneVolume));
             CwPitch = _settings.RemoteClientCwPitch > 0 ? _settings.RemoteClientCwPitch : 600;
+        }
+
+        SidetoneLatencyProbe.Configure(_settings.EnableDetailedTimingAnalysisLogging);
+
+        if (_settings.ForceEnableKeepAudioDeviceAwakeAtStartup)
+        {
+            if (!_settings.KeepAudioDeviceAwake)
+            {
+                _settings.KeepAudioDeviceAwake = true;
+                DebugLogger.LogAlways("audio", "[LatencyTest] KeepAudioDeviceAwake was disabled; force-enabled by startup setting.");
+            }
+
+            _settings.ForceEnableKeepAudioDeviceAwakeAtStartup = false;
+            _settings.Save();
+            DebugLogger.LogAlways("audio", "[LatencyTest] ForceEnableKeepAudioDeviceAwakeAtStartup applied and cleared.");
         }
 
         _loadingSettings = false;
@@ -1534,9 +1550,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Save the keep-awake setting and update the stream
             bool keepAwakeChanged = _settings.KeepAudioDeviceAwake != dialog.KeepAudioDeviceAwake;
+            bool timingLogChanged = _settings.EnableDetailedTimingAnalysisLogging != dialog.EnableDetailedTimingAnalysisLogging;
             _settings.KeepAudioDeviceAwake = dialog.KeepAudioDeviceAwake;
+            _settings.EnableDetailedTimingAnalysisLogging = dialog.EnableDetailedTimingAnalysisLogging;
             _settings.Save();
             DebugLogger.Log("audio", $"[SelectAudioDevice] Saved KeepAudioDeviceAwake={dialog.KeepAudioDeviceAwake}");
+
+            if (timingLogChanged)
+            {
+                SidetoneLatencyProbe.Configure(_settings.EnableDetailedTimingAnalysisLogging);
+                DebugLogger.LogAlways("audio", $"[LatencyProbe] EnableDetailedTimingAnalysisLogging={_settings.EnableDetailedTimingAnalysisLogging}");
+            }
 
             // Update the selected device - this will trigger OnSelectedAudioDeviceChanged
             // which handles saving settings and reinitializing the sidetone generator
@@ -1941,6 +1965,21 @@ public partial class MainWindowViewModel : ViewModelBase
         bool remoteClientPttOnlyMode = ShouldUseRemoteClientPttBehavior();
         bool effectiveTransmitModeCW = IsEffectiveTransmitModeCW();
 
+        bool closureForProbe = effectiveTransmitModeCW && !remoteClientPttOnlyMode &&
+            (IsIambicMode ? (leftPaddleState || rightPaddleState) : straightKeyState);
+
+        if (closureForProbe && !_latencyProbeKeyClosed)
+        {
+            bool likelyIdle = !_settings.KeepAudioDeviceAwake && _settings.WasapiAggressiveLowLatency;
+            string keyerStateAtClosure = _keyingController?.GetKeyingStateForProbe() ?? "KeyerUnavailable";
+            SidetoneLatencyProbe.MarkInputClosure("input:paddle_state_changed", likelyIdle, keyerStateAtClosure);
+            _latencyProbeKeyClosed = true;
+        }
+        else if (!closureForProbe)
+        {
+            _latencyProbeKeyClosed = false;
+        }
+
         DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
 
         // Update indicators
@@ -1978,6 +2017,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // When remote host is non-CW, suppress local keyer/sidetone and send PTT-only intent remotely.
         if (!remoteClientPttOnlyMode)
         {
+            SidetoneLatencyProbe.MarkBeforeControllerDispatch("input:before_keying_controller_call");
             _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
         }
         else
