@@ -19,7 +19,9 @@
 using Avalonia;
 using System;
 using System.IO;
+using System.Runtime;
 using System.Runtime.InteropServices;
+using NetKeyer.Helpers;
 using Velopack;
 
 namespace NetKeyer;
@@ -34,6 +36,17 @@ sealed class Program
     {
         // Configure native library loading before any P/Invoke calls occur
         ConfigureNativeLibraries();
+
+        // Sidetone latency: ask PipeWire/PulseAudio for small buffers (Linux only)
+        // before any audio library connects to the sound server.
+        LatencyOptions.ApplySoundServerEnvironment();
+
+        // Avoid blocking gen2 collections that would stall the audio callback
+        // and the MIDI callback thread.
+        if (LatencyOptions.GcSustainedLowLatency)
+            GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+
+        LatencyOptions.LogEffectiveOptions();
 
         // Velopack: Handle app installation/update events before starting the main app
         VelopackApp.Build().Run();

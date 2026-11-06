@@ -18,10 +18,17 @@ namespace NetKeyer.Midi.LibreMidi
         private NativeMethods.MessageCallback _callback;
 
         /// <summary>
-        /// Fired for each complete MIDI message received from the open port.
-        /// SysEx, timing, and active sensing are pre-filtered by the shim.
+        /// Handler for a channel-voice MIDI message (status byte plus two data bytes).
         /// </summary>
-        public event Action<byte[]> MessageReceived;
+        public delegate void ChannelMessageHandler(byte status, byte data1, byte data2);
+
+        /// <summary>
+        /// Fired for each complete 3-byte MIDI message received from the open port
+        /// (note on/off etc.); shorter messages are ignored. SysEx, timing, and active
+        /// sensing are pre-filtered by the shim. Runs on the MIDI backend's thread and
+        /// does not allocate.
+        /// </summary>
+        public event ChannelMessageHandler MessageReceived;
 
         /// <summary>
         /// Returns the names of all currently available MIDI input ports.
@@ -149,10 +156,12 @@ namespace NetKeyer.Midi.LibreMidi
 
         private void OnNativeMessage(IntPtr ctx, IntPtr data, int len)
         {
-            if (len <= 0 || data == IntPtr.Zero) return;
-            var bytes = new byte[len];
-            Marshal.Copy(data, bytes, 0, len);
-            MessageReceived?.Invoke(bytes);
+            // Latency-critical path: read the three bytes directly, no allocation.
+            if (len < 3 || data == IntPtr.Zero) return;
+            MessageReceived?.Invoke(
+                Marshal.ReadByte(data, 0),
+                Marshal.ReadByte(data, 1),
+                Marshal.ReadByte(data, 2));
         }
     }
 }

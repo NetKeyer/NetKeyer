@@ -21,6 +21,21 @@ namespace NetKeyer.Audio
             // On Windows, prefer WASAPI for lowest latency
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
+                // Default: custom low-latency WASAPI renderer. NETKEYER_WASAPI=naudio selects
+                // the previous NAudio WasapiOut-based generator (and its aggressive/always-on setting).
+                if (LatencyOptions.WasapiMode != "naudio")
+                {
+                    try
+                    {
+                        DebugLogger.Log("audio", $"Initializing low-latency WASAPI sidetone generator with device: {deviceId ?? "default"}");
+                        return new WasapiLowLatencySidetoneGenerator(deviceId);
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Log("audio", $"Low-latency WASAPI initialization failed, falling back to NAudio WASAPI: {ex.Message}");
+                    }
+                }
+
                 try
                 {
                     DebugLogger.Log("audio", $"Initializing WASAPI sidetone generator with device: {deviceId ?? "default"}, aggressiveLowLatency={wasapiAggressiveLowLatency}");
