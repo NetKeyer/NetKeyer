@@ -23,6 +23,7 @@ public class KeyingController
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
     private bool _previousStraightKeyState = false;
+    private bool _previousDedicatedStraightKeyState = false;
     private bool _previousPttState = false;
 
     public KeyingController(ISidetoneGenerator sidetoneGenerator)
@@ -85,7 +86,12 @@ public class KeyingController
         _iambicKeyer?.SetWpm(wpm);
     }
 
-    public void HandlePaddleStateChange(bool leftPaddle, bool rightPaddle, bool straightKey, bool ptt)
+    /// <param name="straightKey">Straight key state used in Straight Key mode (for serial
+    /// input this is the OR of both paddles).</param>
+    /// <param name="dedicatedStraightKey">State of a straight key input that is not also a
+    /// paddle (e.g. MoMIDI note 30). This keys straight-key even in Iambic mode, since the
+    /// Iambic setting only governs how the paddles are treated.</param>
+    public void HandlePaddleStateChange(bool leftPaddle, bool rightPaddle, bool straightKey, bool dedicatedStraightKey, bool ptt)
     {
         // Handle keying based on mode and transmit slice mode
         if (_connectedRadio != null && _boundGuiClientHandle != 0)
@@ -97,6 +103,12 @@ public class KeyingController
                 {
                     // Iambic mode - use paddle inputs
                     _iambicKeyer?.UpdatePaddleState(leftPaddle, rightPaddle);
+
+                    // A dedicated straight key still keys directly in iambic mode
+                    if (dedicatedStraightKey != _previousDedicatedStraightKeyState)
+                    {
+                        SendCWKey(dedicatedStraightKey);
+                    }
                 }
                 else
                 {
@@ -123,6 +135,12 @@ public class KeyingController
             if (_isIambicMode)
             {
                 _iambicKeyer?.UpdatePaddleState(leftPaddle, rightPaddle);
+
+                // A dedicated straight key still keys directly in iambic mode
+                if (dedicatedStraightKey != _previousDedicatedStraightKeyState)
+                {
+                    SendCWKey(dedicatedStraightKey);
+                }
             }
             else
             {
@@ -139,6 +157,7 @@ public class KeyingController
         _previousLeftPaddleState = leftPaddle;
         _previousRightPaddleState = rightPaddle;
         _previousStraightKeyState = straightKey;
+        _previousDedicatedStraightKeyState = dedicatedStraightKey;
         _previousPttState = ptt;
     }
 
@@ -191,6 +210,7 @@ public class KeyingController
         _previousLeftPaddleState = false;
         _previousRightPaddleState = false;
         _previousStraightKeyState = false;
+        _previousDedicatedStraightKeyState = false;
         _previousPttState = false;
     }
 

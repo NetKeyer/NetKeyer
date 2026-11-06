@@ -16,7 +16,16 @@ namespace NetKeyer.Midi
         private bool _leftPaddleState = false;
         private bool _rightPaddleState = false;
         private bool _straightKeyState = false;
+        private bool _dedicatedStraightKeyState = false;
         private bool _pttState = false;
+
+        // Notes currently held that carry the StraightKey function.  Tracked per
+        // note so that releasing one straight-key note doesn't drop the key while
+        // another is still held.  "Dedicated" notes are those mapped to StraightKey
+        // without any paddle function (e.g. MoMIDI note 30); they key straight-key
+        // regardless of the Iambic/Straight Key mode setting.
+        private readonly HashSet<int> _heldStraightKeyNotes = new HashSet<int>();
+        private readonly HashSet<int> _heldDedicatedStraightKeyNotes = new HashSet<int>();
 
         private List<MidiNoteMapping> _noteMappings;
 
@@ -93,6 +102,9 @@ namespace NetKeyer.Midi
             _leftPaddleState = false;
             _rightPaddleState = false;
             _straightKeyState = false;
+            _dedicatedStraightKeyState = false;
+            _heldStraightKeyNotes.Clear();
+            _heldDedicatedStraightKeyNotes.Clear();
             _pttState = false;
         }
 
@@ -138,6 +150,7 @@ namespace NetKeyer.Midi
                         LeftPaddle = _leftPaddleState,
                         RightPaddle = _rightPaddleState,
                         StraightKey = _straightKeyState,
+                        DedicatedStraightKey = _dedicatedStraightKeyState,
                         PTT = _pttState
                     });
                 }
@@ -163,6 +176,7 @@ namespace NetKeyer.Midi
                         LeftPaddle = _leftPaddleState,
                         RightPaddle = _rightPaddleState,
                         StraightKey = _straightKeyState,
+                        DedicatedStraightKey = _dedicatedStraightKeyState,
                         PTT = _pttState
                     });
                 }
@@ -177,11 +191,34 @@ namespace NetKeyer.Midi
 
             if (mapping.HasFunction(MidiNoteFunction.StraightKey))
             {
-                if (_straightKeyState != isOn)
+                bool isDedicated = !mapping.HasFunction(MidiNoteFunction.LeftPaddle)
+                                && !mapping.HasFunction(MidiNoteFunction.RightPaddle);
+
+                if (isOn)
                 {
-                    _straightKeyState = isOn;
+                    _heldStraightKeyNotes.Add(noteNumber);
+                    if (isDedicated) _heldDedicatedStraightKeyNotes.Add(noteNumber);
+                }
+                else
+                {
+                    _heldStraightKeyNotes.Remove(noteNumber);
+                    _heldDedicatedStraightKeyNotes.Remove(noteNumber);
+                }
+
+                bool newStraightKeyState = _heldStraightKeyNotes.Count > 0;
+                if (_straightKeyState != newStraightKeyState)
+                {
+                    _straightKeyState = newStraightKeyState;
                     stateChanged = true;
-                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Straight key -> {isOn}");
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Straight key -> {newStraightKeyState}");
+                }
+
+                bool newDedicatedState = _heldDedicatedStraightKeyNotes.Count > 0;
+                if (_dedicatedStraightKeyState != newDedicatedState)
+                {
+                    _dedicatedStraightKeyState = newDedicatedState;
+                    stateChanged = true;
+                    if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Dedicated straight key -> {newDedicatedState}");
                 }
             }
 
@@ -198,12 +235,13 @@ namespace NetKeyer.Midi
             // Fire event if any state changed
             if (stateChanged)
             {
-                if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} PTT={_pttState}");
+                if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Firing event: L={_leftPaddleState} R={_rightPaddleState} SK={_straightKeyState} DSK={_dedicatedStraightKeyState} PTT={_pttState}");
                 PaddleStateChanged?.Invoke(this, new PaddleStateChangedEventArgs
                 {
                     LeftPaddle = _leftPaddleState,
                     RightPaddle = _rightPaddleState,
                     StraightKey = _straightKeyState,
+                    DedicatedStraightKey = _dedicatedStraightKeyState,
                     PTT = _pttState
                 });
             }
@@ -220,6 +258,14 @@ namespace NetKeyer.Midi
         public bool LeftPaddle { get; set; }
         public bool RightPaddle { get; set; }
         public bool StraightKey { get; set; }
+
+        /// <summary>
+        /// True while a straight key input that is not also a paddle is held
+        /// (e.g. MoMIDI note 30).  Unlike <see cref="StraightKey"/>, this keys
+        /// the transmitter even when the keyer is in Iambic mode.
+        /// </summary>
+        public bool DedicatedStraightKey { get; set; }
+
         public bool PTT { get; set; }
     }
 }

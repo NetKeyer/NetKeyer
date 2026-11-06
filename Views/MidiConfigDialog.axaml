@@ -139,7 +139,7 @@
                 <TextBlock FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3">Function Descriptions:</TextBlock>
                 <TextBlock FontSize="10" Foreground="#444">• Left Paddle: Used as dit paddle in iambic mode</TextBlock>
                 <TextBlock FontSize="10" Foreground="#444">• Right Paddle: Used as dah paddle in iambic mode</TextBlock>
-                <TextBlock FontSize="10" Foreground="#444">• Straight Key: Key down/up in straight key mode</TextBlock>
+                <TextBlock FontSize="10" Foreground="#444">• Straight Key: Key down/up in straight key mode (notes with no paddle function also key in iambic mode)</TextBlock>
                 <TextBlock FontSize="10" Foreground="#444">• PTT: Push-to-talk for non-CW modes</TextBlock>
             </StackPanel>
         </Border>
