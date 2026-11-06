@@ -13,8 +13,10 @@ namespace NetKeyer.Audio
     public class SidetoneGenerator : ISidetoneGenerator
     {
         private Stream _stream;
-        private const int SAMPLE_RATE = 48000;
-        private const int BUFFER_SAMPLES = 256; // ~5.3 ms buffer at 48 kHz for low latency
+        private const int DEFAULT_SAMPLE_RATE = 48000;
+        private int _sampleRate = DEFAULT_SAMPLE_RATE;
+        // Frames per callback (NETKEYER_PA_FRAMES, default 128 = 2.7 ms at 48 kHz; 0 = PortAudio's choice)
+        private readonly uint _framesPerBuffer = LatencyOptions.PortAudioFramesPerBuffer;
         private bool _disposed;
         private SidetoneProvider _sidetoneProvider;
         private float[] _readBuffer;
@@ -37,8 +39,12 @@ namespace NetKeyer.Audio
                 // Store device name (null/empty means use default)
                 _selectedDeviceName = deviceId;
 
+                // Pick the stream sample rate before creating the provider so that
+                // patches are generated at the rate the device actually runs at.
+                _sampleRate = ChooseSampleRate(FindPortAudioDeviceIndex(_selectedDeviceName));
+
                 // Create the sidetone provider
-                _sidetoneProvider = new SidetoneProvider();
+                _sidetoneProvider = new SidetoneProvider(_sampleRate);
 
                 // Forward events
                 _sidetoneProvider.OnSilenceComplete += () => OnSilenceComplete?.Invoke();
@@ -47,8 +53,8 @@ namespace NetKeyer.Audio
                 _sidetoneProvider.OnBeforeSilenceEnd += () => OnBeforeSilenceEnd?.Invoke();
                 _sidetoneProvider.OnBecomeIdle += () => OnBecomeIdle?.Invoke();
 
-                // Allocate read buffer for callback
-                _readBuffer = new float[BUFFER_SAMPLES];
+                // Allocate read buffer for callback (grown in the callback if PortAudio asks for more)
+                _readBuffer = new float[Math.Max(_framesPerBuffer, 1024u)];
 
                 // Initialize the audio stream
                 InitializeStream();
@@ -67,13 +73,31 @@ namespace NetKeyer.Audio
             int device = FindPortAudioDeviceIndex(_selectedDeviceName);
             var deviceInfo = PortAudio.GetDeviceInfo(device);
 
+            double suggestedLatency = LatencyOptions.PortAudioSuggestedLatencyMs is double ms
+                ? ms / 1000.0
+                : deviceInfo.defaultLowOutputLatency;
+
+            // Fewer ALSA periods = less queued audio (Linux ALSA host API only)
+            if (LatencyOptions.PortAudioAlsaPeriods is int periods && RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                try
+                {
+                    PaAlsa_SetNumPeriods(periods);
+                    DebugLogger.Log("audio", $"PortAudio: PaAlsa_SetNumPeriods({periods})");
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("audio", $"PortAudio: PaAlsa_SetNumPeriods failed: {ex.Message}");
+                }
+            }
+
             // Configure stream parameters for output
             var streamParams = new StreamParameters
             {
                 device = device,
                 channelCount = 1, // Mono
                 sampleFormat = SampleFormat.Float32,
-                suggestedLatency = deviceInfo.defaultLowOutputLatency,
+                suggestedLatency = suggestedLatency,
                 hostApiSpecificStreamInfo = IntPtr.Zero
             };
 
@@ -81,8 +105,8 @@ namespace NetKeyer.Audio
             _stream = new Stream(
                 inParams: null,
                 outParams: streamParams,
-                sampleRate: SAMPLE_RATE,
-                framesPerBuffer: BUFFER_SAMPLES,
+                sampleRate: _sampleRate,
+                framesPerBuffer: _framesPerBuffer,
                 streamFlags: StreamFlags.ClipOff,
                 callback: StreamCallback,
                 userData: null
@@ -91,8 +115,100 @@ namespace NetKeyer.Audio
             // Start the stream
             _stream.Start();
 
-            DebugLogger.Log("audio", $"PortAudio initialized: device={deviceInfo.name}, " +
-                              $"latency={deviceInfo.defaultLowOutputLatency * 1000:F1}ms, bufferSize={BUFFER_SAMPLES}");
+            DebugLogger.Log("audio", $"PortAudio initialized: device={deviceInfo.name}, hostApi={GetHostApiName(deviceInfo.hostApi)}, " +
+                              $"sampleRate={_sampleRate} (device default {deviceInfo.defaultSampleRate}), " +
+                              $"framesPerBuffer={(_framesPerBuffer == 0 ? "unspecified" : _framesPerBuffer.ToString())}, " +
+                              $"suggestedLatency={suggestedLatency * 1000:F1}ms (device low {deviceInfo.defaultLowOutputLatency * 1000:F1}ms), " +
+                              $"actual outputLatency={GetActualOutputLatencyMs(_stream)}");
+        }
+
+        private int ChooseSampleRate(int device)
+        {
+            string setting = LatencyOptions.PortAudioSampleRate;
+            if (setting == "device")
+            {
+                try
+                {
+                    double rate = PortAudio.GetDeviceInfo(device).defaultSampleRate;
+                    if (rate >= 8000 && rate <= 384000)
+                        return (int)Math.Round(rate);
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Log("audio", $"PortAudio: could not read device sample rate: {ex.Message}");
+                }
+                return DEFAULT_SAMPLE_RATE;
+            }
+
+            return int.TryParse(setting, out int fixedRate) && fixedRate >= 8000 && fixedRate <= 384000
+                ? fixedRate
+                : DEFAULT_SAMPLE_RATE;
+        }
+
+        // ---- Native PortAudio calls not exposed by PortAudioSharp (diagnostics / tuning) ----
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PaStreamInfo
+        {
+            public int structVersion;
+            public double inputLatency;
+            public double outputLatency;
+            public double sampleRate;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PaHostApiInfo
+        {
+            public int structVersion;
+            public int type;
+            public IntPtr name;
+            public int deviceCount;
+            public int defaultInputDevice;
+            public int defaultOutputDevice;
+        }
+
+        [DllImport("portaudio")]
+        private static extern IntPtr Pa_GetStreamInfo(IntPtr stream);
+
+        [DllImport("portaudio")]
+        private static extern IntPtr Pa_GetHostApiInfo(int hostApi);
+
+        [DllImport("portaudio")]
+        private static extern void PaAlsa_SetNumPeriods(int numPeriods);
+
+        private static string GetActualOutputLatencyMs(Stream stream)
+        {
+            try
+            {
+                var field = typeof(Stream).GetField("streamPtr",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (field?.GetValue(stream) is IntPtr ptr && ptr != IntPtr.Zero)
+                {
+                    IntPtr infoPtr = Pa_GetStreamInfo(ptr);
+                    if (infoPtr != IntPtr.Zero)
+                    {
+                        var info = Marshal.PtrToStructure<PaStreamInfo>(infoPtr);
+                        return $"{info.outputLatency * 1000:F1}ms @ {info.sampleRate}Hz";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return $"unknown ({ex.GetType().Name})";
+            }
+            return "unknown";
+        }
+
+        private static string GetHostApiName(int hostApi)
+        {
+            try
+            {
+                IntPtr p = Pa_GetHostApiInfo(hostApi);
+                if (p != IntPtr.Zero)
+                    return Marshal.PtrToStringUTF8(Marshal.PtrToStructure<PaHostApiInfo>(p).name) ?? hostApi.ToString();
+            }
+            catch { }
+            return hostApi.ToString();
         }
 
         private int FindPortAudioDeviceIndex(string deviceName)

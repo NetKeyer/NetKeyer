@@ -20,6 +20,10 @@ namespace NetKeyer.Midi
 
         private List<MidiNoteMapping> _noteMappings;
 
+        // Note number -> mapping, for an allocation-free O(1) lookup on the MIDI thread.
+        // Replaced atomically when mappings change.
+        private MidiNoteMapping[] _mappingByNote = new MidiNoteMapping[128];
+
         private static readonly bool _midiDebug = DebugLogger.IsEnabled("midi");
 
         public event EventHandler<PaddleStateChangedEventArgs> PaddleStateChanged;
@@ -40,6 +44,22 @@ namespace NetKeyer.Midi
         public void SetNoteMappings(List<MidiNoteMapping> mappings)
         {
             _noteMappings = mappings ?? MidiNoteMapping.GetDefaultMappings();
+            RebuildNoteLookup();
+        }
+
+        private void RebuildNoteLookup()
+        {
+            var table = new MidiNoteMapping[128];
+            if (_noteMappings != null)
+            {
+                foreach (var m in _noteMappings)
+                {
+                    // First mapping for a note wins (matches the previous FirstOrDefault lookup)
+                    if (m != null && m.NoteNumber >= 0 && m.NoteNumber < 128 && table[m.NoteNumber] == null)
+                        table[m.NoteNumber] = m;
+                }
+            }
+            _mappingByNote = table;
         }
 
         public void Open(string deviceName)
@@ -50,6 +70,7 @@ namespace NetKeyer.Midi
             if (_noteMappings == null)
             {
                 _noteMappings = MidiNoteMapping.GetDefaultMappings();
+                RebuildNoteLookup();
             }
 
             try
@@ -99,11 +120,9 @@ namespace NetKeyer.Midi
         // libremidi delivers one complete MIDI message per callback, with SysEx,
         // timing, and active-sensing already filtered by the shim.  No manual
         // running-status or multi-packet parsing is needed here.
-        private void OnMidiMessage(byte[] data)
+        private void OnMidiMessage(byte status, byte note, byte velocity)
         {
-            if (data.Length < 3) return;
-            byte messageType = (byte)(data[0] & 0xF0);
-            byte note = data[1];
+            byte messageType = (byte)(status & 0xF0);
             if (messageType == NOTE_ON)
                 HandleNoteEvent(note, true);  // HaliKey quirk: velocity 0 still treated as ON
             else if (messageType == NOTE_OFF)
@@ -115,7 +134,8 @@ namespace NetKeyer.Midi
             if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Note {noteNumber} {(isOn ? "ON" : "OFF")}");
 
             // Find all mappings for this note
-            var mapping = _noteMappings?.FirstOrDefault(m => m.NoteNumber == noteNumber);
+            var table = _mappingByNote;
+            var mapping = (uint)noteNumber < (uint)table.Length ? table[noteNumber] : null;
             if (mapping == null)
             {
                 if (_midiDebug) DebugLogger.Log("midi", $"[MIDI] Ignoring unmapped note {noteNumber}");

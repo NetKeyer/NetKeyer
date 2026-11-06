@@ -19,6 +19,10 @@ public class KeyingController
     private Func<string> _timestampGenerator;
     private Action<bool, string, uint> _cwKeyCallback;
 
+    // Sends radio key commands off the MIDI / audio threads so network I/O
+    // never delays the sidetone (see RadioKeySender).
+    private RadioKeySender _radioSender;
+
     // Track previous paddle states for edge detection
     private bool _previousLeftPaddleState = false;
     private bool _previousRightPaddleState = false;
@@ -36,12 +40,17 @@ public class KeyingController
         _timestampGenerator = timestampGenerator;
         _cwKeyCallback = cwKeyCallback;
 
-        // Initialize iambic keyer
+        _radioSender?.Dispose();
+        _radioSender = new RadioKeySender();
+        var sender = _radioSender;
+
+        // Initialize iambic keyer. Its key callback is invoked from the audio
+        // callback (and inside the sidetone lock), so it only enqueues.
         _iambicKeyer = new IambicKeyer(
             _sidetoneGenerator,
             _boundGuiClientHandle,
             timestampGenerator,
-            cwKeyCallback
+            cwKeyCallback == null ? null : (state, timestamp, handle) => sender.Enqueue(cwKeyCallback, state, timestamp, handle)
         );
     }
 
@@ -160,17 +169,20 @@ public class KeyingController
         }
 
         // Send to radio if connected (not in sidetone-only mode)
-        if (_connectedRadio != null && _boundGuiClientHandle != 0)
+        var radio = _connectedRadio;
+        if (radio != null && _boundGuiClientHandle != 0)
         {
-            try
-            {
-                // Generate timestamp
-                long timestamp = Environment.TickCount64 % 65536;
-                string timestampStr = timestamp.ToString("X4");
+            // Timestamp is taken now (at the key event), not when the command is sent.
+            long timestamp = Environment.TickCount64 % 65536;
+            string timestampStr = timestamp.ToString("X4");
 
-                _connectedRadio.CWKey(state, timestampStr, _boundGuiClientHandle);
+            if (_radioSender != null)
+                _radioSender.Enqueue(radio.CWKey, state, timestampStr, _boundGuiClientHandle);
+            else
+            {
+                try { radio.CWKey(state, timestampStr, _boundGuiClientHandle); }
+                catch { }
             }
-            catch { }
         }
     }
 
@@ -198,5 +210,9 @@ public class KeyingController
     {
         _iambicKeyer?.Dispose();
         _iambicKeyer = null;
+
+        // Flushes any queued commands (e.g. a final key-up) before stopping.
+        _radioSender?.Dispose();
+        _radioSender = null;
     }
 }

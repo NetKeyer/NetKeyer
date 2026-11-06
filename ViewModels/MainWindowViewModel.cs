@@ -874,7 +874,11 @@ public partial class MainWindowViewModel : ViewModelBase
         bool straightKeyState = e.StraightKey;
         bool pttState = e.PTT;
 
-        DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
+        if (_inputDebug) DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
+
+        // Keying first: this is the latency-critical path (we are on the MIDI/serial thread).
+        // The indicator update below is posted to the UI thread and is not time-critical.
+        _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
 
         // Update indicators
         Dispatcher.UIThread.Post(() =>
@@ -907,10 +911,9 @@ public partial class MainWindowViewModel : ViewModelBase
             RightPaddleIndicatorColor = rightPaddleState ? Brushes.LimeGreen : Brushes.Black;
             RightPaddleStateText = rightPaddleState ? "ON" : "OFF";
         });
-
-        // Delegate keying logic to KeyingController
-        _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
     }
+
+    private static readonly bool _inputDebug = DebugLogger.IsEnabled("input");
 
     private string GetTimestamp()
     {

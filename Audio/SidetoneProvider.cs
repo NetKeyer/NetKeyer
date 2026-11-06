@@ -10,7 +10,7 @@ namespace NetKeyer.Audio
     /// </summary>
     public class SidetoneProvider : ISampleProvider
     {
-        private const int SAMPLE_RATE = 48000;
+        private readonly int SAMPLE_RATE;
 
         private float[] _rampUpPatch;
         private float[] _singleCyclePatch;
@@ -32,11 +32,32 @@ namespace NetKeyer.Audio
 
         private readonly object _lockObject = new object();
 
+        // Maximum rise/fall time (NETKEYER_SIDETONE_RAMP_MS, default 5 ms)
+        private readonly double _maxRampMs = LatencyOptions.SidetoneMaxRampMs;
+
         // Cached once at startup — IsEnabled() is cheap but string interpolation before Log() is not.
         // Using a cached bool ensures the hot path (Read()) pays zero allocation cost when disabled.
         private static readonly bool _sidetoneDebug = DebugLogger.IsEnabled("sidetone");
 
         public bool IsSilent => _state == PlaybackState.Silent || _state == PlaybackState.TimedSilence;
+
+        /// <summary>
+        /// True when fully idle: no tone, no timed silence (nothing for the keyer to wait on).
+        /// </summary>
+        public bool IsIdle
+        {
+            get { lock (_lockObject) return _state == PlaybackState.Silent; }
+        }
+
+        /// <summary>
+        /// True while a tone is ramping up or sustaining (i.e. the key is effectively down).
+        /// </summary>
+        public bool IsToneActive
+        {
+            get { lock (_lockObject) return _state == PlaybackState.RampUp || _state == PlaybackState.Sustain; }
+        }
+
+        public int SampleRate => SAMPLE_RATE;
 
         // Event fired when a timed silence completes and no next tone was queued
         public event Action OnSilenceComplete;
@@ -54,7 +75,7 @@ namespace NetKeyer.Audio
         // Event fired when entering non-timed Silent state (fully idle)
         public event Action OnBecomeIdle;
 
-        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SAMPLE_RATE, 1);
+        public WaveFormat WaveFormat { get; }
 
         private enum PlaybackState
         {
@@ -65,8 +86,10 @@ namespace NetKeyer.Audio
             TimedSilence
         }
 
-        public SidetoneProvider()
+        public SidetoneProvider(int sampleRate = 48000)
         {
+            SAMPLE_RATE = sampleRate > 0 ? sampleRate : 48000;
+            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(SAMPLE_RATE, 1);
             RegeneratePatches();
         }
 
@@ -497,16 +520,10 @@ namespace NetKeyer.Audio
             // Calculate dit length in milliseconds: dit_length = 1200 / WPM
             double ditLengthMs = 1200.0 / _wpm;
 
-            // Determine ramp duration
-            double rampDurationMs;
-            if (ditLengthMs >= 50.0) // <= 24 WPM
-            {
-                rampDurationMs = 5.0;
-            }
-            else
-            {
-                rampDurationMs = ditLengthMs * 0.1;
-            }
+            // Determine ramp duration: the configured maximum (default 5 ms),
+            // capped at 10% of a dit at high speeds. This only shapes the local
+            // sidetone; a shorter attack makes the tone audible sooner.
+            double rampDurationMs = Math.Min(_maxRampMs, ditLengthMs * 0.1);
 
             // Convert ramp duration to samples
             int rampSamples = (int)Math.Round(rampDurationMs * SAMPLE_RATE / 1000.0);
