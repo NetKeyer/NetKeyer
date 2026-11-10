@@ -297,6 +297,7 @@ public class InputDeviceManager : IDisposable
             LeftPaddle = leftPaddle,
             RightPaddle = rightPaddle,
             StraightKey = e.StraightKey,
+            DedicatedStraightKey = e.DedicatedStraightKey,
             PTT = e.PTT
         });
     }

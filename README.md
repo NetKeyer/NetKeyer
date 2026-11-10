@@ -131,7 +131,7 @@ dotnet run
 The MIDI note configuration dialog allows you to assign any MIDI note (0-127) to one or more functions:
 - **Left Paddle**: Generates dits in iambic mode
 - **Right Paddle**: Generates dahs in iambic mode
-- **Straight Key**: Direct key on/off control
+- **Straight Key**: Direct key on/off control in straight key mode. A note mapped to Straight Key with no paddle function (e.g. note 30) keys directly in iambic mode too
 - **PTT**: Push-to-talk for non-CW modes
 
 Default mappings (compatible with HaliKey MIDI and CTR2):

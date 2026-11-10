@@ -872,9 +872,10 @@ public partial class MainWindowViewModel : ViewModelBase
         bool leftPaddleState = e.LeftPaddle;
         bool rightPaddleState = e.RightPaddle;
         bool straightKeyState = e.StraightKey;
+        bool dedicatedStraightKeyState = e.DedicatedStraightKey;
         bool pttState = e.PTT;
 
-        DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} PTT={pttState}");
+        DebugLogger.Log("input", $"[InputDeviceManager_PaddleStateChanged] Received event: L={leftPaddleState} R={rightPaddleState} SK={straightKeyState} DSK={dedicatedStraightKeyState} PTT={pttState}");
 
         // Update indicators
         Dispatcher.UIThread.Post(() =>
@@ -890,8 +891,9 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             else if (IsIambicMode)
             {
-                // CW iambic mode - left paddle indicator
-                leftIndicatorState = leftPaddleState;
+                // CW iambic mode - left paddle indicator, also lit by a
+                // dedicated straight key (which keys even in iambic mode)
+                leftIndicatorState = leftPaddleState || dedicatedStraightKeyState;
             }
             else
             {
@@ -909,7 +911,7 @@ public partial class MainWindowViewModel : ViewModelBase
         });
 
         // Delegate keying logic to KeyingController
-        _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, pttState);
+        _keyingController?.HandlePaddleStateChange(leftPaddleState, rightPaddleState, straightKeyState, dedicatedStraightKeyState, pttState);
     }
 
     private string GetTimestamp()
